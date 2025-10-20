@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { Settings, Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, XCircle, AlertTriangle, CheckCircle, MessageSquare, Send, FolderOpen, FileText } from 'lucide-react';
+import { Settings, Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, XCircle, AlertTriangle, CheckCircle, MessageSquare, Send, FolderOpen, FileText, Eye, EyeOff, User, Bot, ChevronDown, Sparkles, Zap, Target } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -30,10 +30,17 @@ interface ChatMessage {
 function App() {
   const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands' | 'chat'>('mcp');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
-  const [envVars, setEnvVars] = useState({ baseUrl: '', authToken: '' });
+  const [envVars, setEnvVars] = useState({ 
+    baseUrl: '', 
+    authToken: '', 
+    haikuModel: '', 
+    opusModel: '', 
+    sonnetModel: '' 
+  });
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [loading, setLoading] = useState(false);
   const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'success' | 'error'>('idle');
+  const [showApiKey, setShowApiKey] = useState(false);
   
   // Global notification state
   const [notification, setNotification] = useState<{
@@ -73,10 +80,16 @@ function App() {
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [chatWorkingDir, setChatWorkingDir] = useState('~');
   const [chatContextFiles, setChatContextFiles] = useState<string[]>([]);
+  const [selectedModel, setSelectedModel] = useState<string>('auto'); // 'auto', 'haiku', 'opus', 'sonnet'
+  const [showModelSelector, setShowModelSelector] = useState(false);
   const [showDirectoryBrowser, setShowDirectoryBrowser] = useState(false);
   const [directoryFiles, setDirectoryFiles] = useState<Array<{name: string; isDirectory: boolean; path: string}>>([]);
   const [currentBrowsingPath, setCurrentBrowsingPath] = useState('~');
   const [pathInputValue, setPathInputValue] = useState('~');
+  const [platformInfo, setPlatformInfo] = useState<{platform: string; quickPaths: any; drives?: string[]}>({
+    platform: 'unix',
+    quickPaths: { home: '~', desktop: '~/Desktop', documents: '~/Documents', downloads: '~/Downloads', root: '/' }
+  });
   const [fileSearchQuery, setFileSearchQuery] = useState('');
   const [autocompleteSearchQuery, setAutocompleteSearchQuery] = useState('');
   const [showFileAutocomplete, setShowFileAutocomplete] = useState(false);
@@ -92,9 +105,35 @@ function App() {
   const fileSearchRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
+    loadDefaultPaths();
     loadConfig();
     loadSlashCommands();
   }, []);
+
+  const loadDefaultPaths = async () => {
+    try {
+      const response = await fetch('/api/default-paths');
+      if (response.ok) {
+        const data = await response.json();
+        
+        // Save platform info
+        setPlatformInfo({
+          platform: data.platform || 'unix',
+          quickPaths: data.quickPaths || { home: '~', desktop: '~/Desktop', documents: '~/Documents', downloads: '~/Downloads', root: '/' },
+          drives: data.drives || []
+        });
+        
+        // Set default working directory
+        const defaultDir = data.quickPaths?.home || data.homeDirSymbol || '~';
+        setChatWorkingDir(defaultDir);
+        setCurrentBrowsingPath(defaultDir);
+        setPathInputValue(defaultDir);
+      }
+    } catch (error) {
+      console.error('Failed to load default paths:', error);
+      // Keep default values (~) if API call fails
+    }
+  };
 
   const loadSlashCommands = async () => {
     try {
@@ -123,9 +162,14 @@ function App() {
   // Auto-hide notification after 3 seconds
   useEffect(() => {
     if (notification.show) {
+      // Auto-adjust duration based on message length (min 3s, max 8s)
+      const baseDuration = 3000;
+      const extraDuration = Math.min(notification.message.length * 30, 5000);
+      const duration = baseDuration + extraDuration;
+      
       const timer = setTimeout(() => {
         setNotification({ ...notification, show: false });
-      }, 3000);
+      }, duration);
       return () => clearTimeout(timer);
     }
   }, [notification.show]);
@@ -221,8 +265,20 @@ function App() {
         body: JSON.stringify(envVars),
       });
       if (response.ok) {
+        const data = await response.json();
         setSaveStatus('success');
-        showNotification('Environment variables saved successfully! Remember to run "source ~/.zshrc"');
+        
+        // Show hot reload status
+        let message = 'Environment variables saved successfully! ';
+        if (data.hotReloaded) {
+          message += '✨ Changes applied immediately - no restart needed!';
+        } else if (data.platform === 'windows') {
+          message += data.instructions || 'Restart your terminals or applications to use the new environment variables.';
+        } else {
+          message += data.instructions || 'Run "source ~/.zshrc" or restart your terminal.';
+        }
+        
+        showNotification(message);
         setTimeout(() => setSaveStatus('idle'), 2000);
       } else {
         setSaveStatus('error');
@@ -232,6 +288,32 @@ function App() {
       console.error('Failed to save env vars:', error);
       setSaveStatus('error');
       showNotification('Failed to save environment variables', 'error');
+    }
+  };
+
+  const reloadEnvVars = async () => {
+    try {
+      const response = await fetch('/api/reload-env', {
+        method: 'POST',
+      });
+      if (response.ok) {
+        const data = await response.json();
+        if (data.success) {
+          const source = data.platform === 'windows' 
+            ? 'PowerShell Profile' 
+            : 'shell config (.zshrc or .bashrc)';
+          showNotification(`🔄 Environment variables reloaded from ${source}!`);
+          // Refresh the env vars display
+          loadConfig();
+        } else {
+          showNotification('Failed to reload: ' + data.message, 'error');
+        }
+      } else {
+        showNotification('Failed to reload environment variables', 'error');
+      }
+    } catch (error) {
+      console.error('Failed to reload env vars:', error);
+      showNotification('Failed to reload environment variables', 'error');
     }
   };
 
@@ -445,7 +527,8 @@ function App() {
           message: messageToSend,
           isCommand: messageToSend.startsWith('/'),
           workingDirectory: chatWorkingDir,
-          contextFiles: chatContextFiles
+          contextFiles: chatContextFiles,
+          selectedModel: selectedModel
         }),
       });
 
@@ -1549,7 +1632,48 @@ echo "Deployment completed!"`}
         {/* Environment Variables Tab */}
         {activeTab === 'env' && (
           <div className="bg-white rounded-lg shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center justify-end mb-6">
+            {/* Configuration Notice */}
+            <div className="mb-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+              <div className="flex items-start space-x-3">
+                <div className="flex-shrink-0 mt-0.5">
+                  <svg className="w-5 h-5 text-blue-600" fill="currentColor" viewBox="0 0 20 20">
+                    <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                  </svg>
+                </div>
+                <div className="flex-1">
+                  {platformInfo.platform === 'windows' ? (
+                    <>
+                      <h4 className="text-sm font-semibold text-blue-900 mb-1">PowerShell Profile Configuration</h4>
+                      <p className="text-sm text-blue-800">
+                        Environment variables will be saved to your <strong>PowerShell Profile</strong> and applied immediately. 
+                        New PowerShell sessions will also load these variables automatically.
+                      </p>
+                    </>
+                  ) : (
+                    <>
+                      <h4 className="text-sm font-semibold text-blue-900 mb-1">Shell Configuration</h4>
+                      <p className="text-sm text-blue-800">
+                        Environment variables will be saved to your <strong>shell config file</strong> (.zshrc or .bashrc) and applied immediately. 
+                        New terminal sessions will also load these variables automatically.
+                      </p>
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end gap-3 mb-6">
+              <button
+                onClick={reloadEnvVars}
+                className="flex items-center space-x-2 px-4 py-2.5 rounded-lg transition-all font-medium bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-300"
+                title={platformInfo.platform === 'windows' 
+                  ? "Reload environment variables from PowerShell Profile" 
+                  : "Reload environment variables from shell config (.zshrc or .bashrc)"}
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>Reload</span>
+              </button>
+              
               <button
                 onClick={saveEnvVars}
                 disabled={saveStatus === 'saving'}
@@ -1588,21 +1712,79 @@ echo "Deployment completed!"`}
 
               <div>
                 <label className="block text-sm font-medium text-slate-700 mb-2">
-                  ANTHROPIC_AUTH_TOKEN
+                  ANTHROPIC_API_KEY
                 </label>
-                <input
-                  type="password"
-                  value={envVars.authToken}
-                  onChange={(e) => setEnvVars({ ...envVars, authToken: e.target.value })}
-                  placeholder="sk-ant-..."
-                  className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
-                />
+                <div className="relative">
+                  <input
+                    type={showApiKey ? "text" : "password"}
+                    value={envVars.authToken}
+                    onChange={(e) => setEnvVars({ ...envVars, authToken: e.target.value })}
+                    placeholder="sk-ant-..."
+                    className="w-full px-4 py-3 pr-12 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors"
+                    title={showApiKey ? "Hide API key" : "Show API key"}
+                  >
+                    {showApiKey ? <EyeOff size={20} /> : <Eye size={20} />}
+                  </button>
+                </div>
               </div>
 
-              <div className="mt-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-                <p className="text-sm text-amber-800">
-                  <strong>Note:</strong> After saving, restart your terminal or run <code className="px-1 py-0.5 bg-amber-100 rounded">source ~/.zshrc</code> to apply changes.
+              <div className="mt-6 pt-6 border-t border-slate-200">
+                <h3 className="text-lg font-semibold text-slate-800 mb-4">Model Defaults (Optional)</h3>
+                <div className="space-y-4">
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      ANTHROPIC_DEFAULT_HAIKU_MODEL
+                    </label>
+                    <input
+                      type="text"
+                      value={envVars.haikuModel}
+                      onChange={(e) => setEnvVars({ ...envVars, haikuModel: e.target.value })}
+                      placeholder="e.g., claude-3-5-haiku-20241022"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      ANTHROPIC_DEFAULT_OPUS_MODEL
+                    </label>
+                    <input
+                      type="text"
+                      value={envVars.opusModel}
+                      onChange={(e) => setEnvVars({ ...envVars, opusModel: e.target.value })}
+                      placeholder="e.g., claude-3-opus-20240229"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-slate-700 mb-2">
+                      ANTHROPIC_DEFAULT_SONNET_MODEL
+                    </label>
+                    <input
+                      type="text"
+                      value={envVars.sonnetModel}
+                      onChange={(e) => setEnvVars({ ...envVars, sonnetModel: e.target.value })}
+                      placeholder="e.g., claude-3-5-sonnet-20241022"
+                      className="w-full px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono text-sm"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-6 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>Note:</strong> After saving:
                 </p>
+                <ul className="text-sm text-blue-700 mt-2 ml-4 list-disc">
+                  <li><strong>Windows:</strong> Restart terminals/applications (variables set system-wide)</li>
+                  <li><strong>macOS/Linux:</strong> Run <code className="px-1 py-0.5 bg-blue-100 rounded">source ~/.zshrc</code> or restart terminal</li>
+                </ul>
               </div>
             </div>
           </div>
@@ -1690,20 +1872,157 @@ echo "Deployment completed!"`}
 
         {/* Chat Tab */}
         {activeTab === 'chat' && (
-          <div className="h-[calc(100vh-180px)] flex flex-col bg-white rounded-lg shadow-sm border border-slate-200">
+          <div className="h-[calc(100vh-180px)] flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
             {/* Chat Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
+            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm text-slate-600">Claude Code CLI is ready</span>
               </div>
-              <button
-                onClick={clearChatHistory}
-                disabled={chatMessages.length === 0}
-                className="px-4 py-2 text-sm text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Clear History
-              </button>
+              
+              <div className="flex items-center space-x-3">
+                {/* Custom Model Selector */}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowModelSelector(!showModelSelector)}
+                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl transition-all shadow-md hover:shadow-lg font-medium"
+                  >
+                    {selectedModel === 'auto' && <Bot className="w-4 h-4" />}
+                    {selectedModel === 'haiku' && <Zap className="w-4 h-4" />}
+                    {selectedModel === 'opus' && <Target className="w-4 h-4" />}
+                    {selectedModel === 'sonnet' && <Sparkles className="w-4 h-4" />}
+                    <span className="text-sm">
+                      {selectedModel === 'auto' && 'Auto'}
+                      {selectedModel === 'haiku' && 'Haiku'}
+                      {selectedModel === 'opus' && 'Opus'}
+                      {selectedModel === 'sonnet' && 'Sonnet'}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Dropdown Menu */}
+                  {showModelSelector && (
+                    <>
+                      {/* Backdrop */}
+                      <div 
+                        className="fixed inset-0 z-40" 
+                        onClick={() => setShowModelSelector(false)}
+                      />
+                      
+                      {/* Menu */}
+                      <div className="absolute top-full left-0 mt-2 w-56 bg-white rounded-xl shadow-2xl border border-slate-200 overflow-hidden z-50">
+                        <div className="py-2">
+                          <button
+                            onClick={() => {
+                              setSelectedModel('auto');
+                              setShowModelSelector(false);
+                            }}
+                            className={`w-full px-4 py-3 flex items-center space-x-3 hover:bg-purple-50 transition-colors ${
+                              selectedModel === 'auto' ? 'bg-purple-100 text-purple-700' : 'text-slate-700'
+                            }`}
+                          >
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                              selectedModel === 'auto' 
+                                ? 'bg-purple-500 text-white' 
+                                : 'bg-slate-100 text-slate-600'
+                            }`}>
+                              <Bot className="w-4 h-4" />
+                            </div>
+                            <div className="flex-1 text-left">
+                              <div className="font-semibold text-sm">Auto</div>
+                              <div className="text-xs text-slate-500">Default model</div>
+                            </div>
+                            {selectedModel === 'auto' && <Check className="w-4 h-4 text-purple-600" />}
+                          </button>
+
+                          {envVars.haikuModel && (
+                            <button
+                              onClick={() => {
+                                setSelectedModel('haiku');
+                                setShowModelSelector(false);
+                              }}
+                              className={`w-full px-4 py-3 flex items-center space-x-3 hover:bg-amber-50 transition-colors ${
+                                selectedModel === 'haiku' ? 'bg-amber-100 text-amber-700' : 'text-slate-700'
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                selectedModel === 'haiku' 
+                                  ? 'bg-amber-500 text-white' 
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                <Zap className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 text-left">
+                                <div className="font-semibold text-sm">Haiku</div>
+                                <div className="text-xs text-slate-500">Fast & efficient</div>
+                              </div>
+                              {selectedModel === 'haiku' && <Check className="w-4 h-4 text-amber-600" />}
+                            </button>
+                          )}
+
+                          {envVars.opusModel && (
+                            <button
+                              onClick={() => {
+                                setSelectedModel('opus');
+                                setShowModelSelector(false);
+                              }}
+                              className={`w-full px-4 py-3 flex items-center space-x-3 hover:bg-rose-50 transition-colors ${
+                                selectedModel === 'opus' ? 'bg-rose-100 text-rose-700' : 'text-slate-700'
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                selectedModel === 'opus' 
+                                  ? 'bg-rose-500 text-white' 
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                <Target className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 text-left">
+                                <div className="font-semibold text-sm">Opus</div>
+                                <div className="text-xs text-slate-500">Most powerful</div>
+                              </div>
+                              {selectedModel === 'opus' && <Check className="w-4 h-4 text-rose-600" />}
+                            </button>
+                          )}
+
+                          {envVars.sonnetModel && (
+                            <button
+                              onClick={() => {
+                                setSelectedModel('sonnet');
+                                setShowModelSelector(false);
+                              }}
+                              className={`w-full px-4 py-3 flex items-center space-x-3 hover:bg-emerald-50 transition-colors ${
+                                selectedModel === 'sonnet' ? 'bg-emerald-100 text-emerald-700' : 'text-slate-700'
+                              }`}
+                            >
+                              <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${
+                                selectedModel === 'sonnet' 
+                                  ? 'bg-emerald-500 text-white' 
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}>
+                                <Sparkles className="w-4 h-4" />
+                              </div>
+                              <div className="flex-1 text-left">
+                                <div className="font-semibold text-sm">Sonnet</div>
+                                <div className="text-xs text-slate-500">Balanced choice</div>
+                              </div>
+                              {selectedModel === 'sonnet' && <Check className="w-4 h-4 text-emerald-600" />}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={clearChatHistory}
+                  disabled={chatMessages.length === 0}
+                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 shadow-sm"
+                >
+                  Clear History
+                </button>
+              </div>
             </div>
 
             {/* Working Directory and Context Files */}
@@ -1763,7 +2082,7 @@ echo "Deployment completed!"`}
             </div>
 
             {/* Chat Messages */}
-            <div className="flex-1 overflow-y-auto p-6 space-y-4">
+            <div className="flex-1 overflow-y-auto p-6 space-y-6 bg-gradient-to-b from-slate-50 to-white">
               {chatMessages.length === 0 ? (
                 <div className="text-center py-12">
                   <MessageSquare className="w-16 h-16 mx-auto mb-4 text-slate-300" />
@@ -1808,24 +2127,38 @@ echo "Deployment completed!"`}
                 </div>
               ) : (
                 <>
-                  {chatMessages.map((message) => (
+                  {chatMessages.map((message, index) => (
                     <div
                       key={message.id}
-                      className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                      className={`flex items-start gap-4 mb-6 animate-fade-in ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
+                      style={{ animationDelay: `${index * 0.05}s` }}
                     >
-                      <div
-                        className={`max-w-[80%] rounded-lg px-4 py-3 ${
-                          message.role === 'user'
-                            ? 'bg-primary-500 text-white'
-                            : 'bg-slate-100 text-slate-900'
-                        }`}
-                      >
-                        <div className="flex items-start space-x-2">
-                          <div className="flex-1">
-                            {message.role === 'user' ? (
-                              <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-                            ) : (
-                              <div className="text-sm prose prose-sm max-w-none">
+                      {/* Avatar */}
+                      <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center ${
+                        message.role === 'user' 
+                          ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-purple-600 shadow-lg shadow-blue-500/30' 
+                          : 'bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 shadow-lg shadow-emerald-500/30'
+                      } ring-2 ring-white`}>
+                        {message.role === 'user' ? (
+                          <User className="w-5 h-5 text-white drop-shadow" />
+                        ) : (
+                          <Bot className="w-5 h-5 text-white drop-shadow" />
+                        )}
+                      </div>
+
+                      {/* Message Bubble */}
+                      <div className="flex max-w-[78%]">
+                        <div
+                          className={`inline-block rounded-2xl px-5 py-3.5 transition-all duration-200 hover:scale-[1.01] ${
+                            message.role === 'user'
+                              ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20'
+                              : 'bg-white border-2 border-slate-100 text-slate-900 shadow-lg shadow-slate-200/50 hover:border-slate-200'
+                          }`}
+                        >
+                          {message.role === 'user' ? (
+                            <p className="text-[15px] whitespace-pre-wrap leading-relaxed font-medium">{message.content}</p>
+                          ) : (
+                            <div className="text-[15px] prose prose-sm max-w-none prose-slate">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   components={{
@@ -1841,18 +2174,18 @@ echo "Deployment completed!"`}
                                           {String(children).replace(/\n$/, '')}
                                         </SyntaxHighlighter>
                                       ) : (
-                                        <code className="bg-slate-800 text-slate-100 px-1.5 py-0.5 rounded text-xs font-mono" {...props}>
+                                        <code className="bg-gradient-to-r from-slate-800 to-slate-900 text-emerald-300 px-2 py-0.5 rounded-md text-sm font-mono shadow-sm" {...props}>
                                           {children}
                                         </code>
                                       );
                                     },
-                                    p: ({ children }) => <p className="mb-2 last:mb-0 text-slate-900">{children}</p>,
-                                    ul: ({ children }) => <ul className="list-disc list-inside mb-2 space-y-1 text-slate-900">{children}</ul>,
-                                    ol: ({ children }) => <ol className="list-decimal list-inside mb-2 space-y-1 text-slate-900">{children}</ol>,
-                                    li: ({ children }) => <li className="text-slate-900">{children}</li>,
-                                    h1: ({ children }) => <h1 className="text-xl font-bold mb-2 mt-4 first:mt-0 text-slate-900">{children}</h1>,
-                                    h2: ({ children }) => <h2 className="text-lg font-bold mb-2 mt-3 first:mt-0 text-slate-900">{children}</h2>,
-                                    h3: ({ children }) => <h3 className="text-base font-bold mb-1 mt-2 first:mt-0 text-slate-900">{children}</h3>,
+                                    p: ({ children }) => <p className="mb-3 last:mb-0 text-slate-800 leading-relaxed">{children}</p>,
+                                    ul: ({ children }) => <ul className="list-disc list-outside ml-5 mb-3 space-y-1.5 text-slate-800">{children}</ul>,
+                                    ol: ({ children }) => <ol className="list-decimal list-outside ml-5 mb-3 space-y-1.5 text-slate-800">{children}</ol>,
+                                    li: ({ children }) => <li className="text-slate-800 leading-relaxed">{children}</li>,
+                                    h1: ({ children }) => <h1 className="text-xl font-bold mb-3 mt-5 first:mt-0 text-slate-900 border-b-2 border-slate-200 pb-2">{children}</h1>,
+                                    h2: ({ children }) => <h2 className="text-lg font-bold mb-2 mt-4 first:mt-0 text-slate-900">{children}</h2>,
+                                    h3: ({ children }) => <h3 className="text-base font-semibold mb-2 mt-3 first:mt-0 text-slate-900">{children}</h3>,
                                     blockquote: ({ children }) => (
                                       <blockquote className="border-l-4 border-slate-300 pl-4 italic my-2 text-slate-700">
                                         {children}
@@ -1880,28 +2213,35 @@ echo "Deployment completed!"`}
                                 >
                                   {message.content}
                                 </ReactMarkdown>
-                              </div>
-                            )}
-                            <p className={`text-xs mt-1 ${
-                              message.role === 'user' ? 'text-primary-100' : 'text-slate-500'
-                            }`}>
-                              {message.timestamp.toLocaleTimeString()}
-                            </p>
-                          </div>
+                            </div>
+                          )}
                         </div>
+                        {/* Timestamp */}
+                        <p className={`text-[11px] text-slate-400 font-medium mt-2 px-1 ${
+                          message.role === 'user' ? 'text-right' : 'text-left'
+                        }`}>
+                          {message.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
                       </div>
                     </div>
                   ))}
                   {isSendingMessage && (
-                    <div className="flex justify-start">
-                      <div className="bg-slate-100 rounded-lg px-4 py-3">
-                        <div className="flex items-center space-x-2">
-                          <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
-                            <div className="w-2 h-2 bg-slate-400 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                    <div className="flex items-start gap-4 mb-6 animate-fade-in">
+                      {/* Claude Avatar */}
+                      <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-400 via-teal-500 to-cyan-600 flex items-center justify-center shadow-lg shadow-emerald-500/30 ring-2 ring-white animate-pulse">
+                        <Bot className="w-5 h-5 text-white drop-shadow" />
+                      </div>
+                      {/* Typing Indicator */}
+                      <div className="flex max-w-[78%]">
+                        <div className="inline-block bg-white border-2 border-slate-100 rounded-2xl px-5 py-4 shadow-lg shadow-slate-200/50">
+                          <div className="flex items-center space-x-2">
+                            <div className="flex space-x-1">
+                              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce"></div>
+                              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.1s' }}></div>
+                              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-bounce" style={{ animationDelay: '0.2s' }}></div>
+                            </div>
+                            <span className="text-sm text-slate-500 font-medium">正在思考...</span>
                           </div>
-                          <span className="text-xs text-slate-500">Claude is typing...</span>
                         </div>
                       </div>
                     </div>
@@ -1912,7 +2252,7 @@ echo "Deployment completed!"`}
             </div>
 
             {/* Chat Input */}
-            <div className="border-t border-slate-200 p-4">
+            <div className="border-t border-slate-200 p-4 bg-gradient-to-r from-slate-50 to-white">
               {chatInput.startsWith('/') && !showSlashCommandList && (
                 <div className="mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700 flex items-center space-x-2">
                   <Terminal className="w-3 h-3" />
@@ -1947,14 +2287,14 @@ echo "Deployment completed!"`}
                         sendChatMessage();
                       }
                     }}
-                    placeholder="Type your message, @ to add files, or / for commands... (Press Enter to send)"
-                    className="flex-1 px-4 py-3 border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+                    placeholder="Type your message, @ to add files, or / for commands..."
+                    className="flex-1 px-5 py-3 border-2 border-slate-300 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all bg-white shadow-sm"
                     disabled={isSendingMessage}
                   />
                   <button
                     onClick={sendChatMessage}
                     disabled={!chatInput.trim() || isSendingMessage}
-                    className="px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2"
+                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 shadow-md hover:shadow-lg font-medium"
                   >
                     <Send className="w-4 h-4" />
                     <span>Send</span>
@@ -2148,7 +2488,11 @@ echo "Deployment completed!"`}
                       navigateToPath();
                     }
                   }}
-                  placeholder="Enter path (e.g., ~/Documents or /Users/yourname/projects)"
+                  placeholder={
+                    platformInfo.platform === 'windows' 
+                      ? "Enter path (e.g., C:\\Users\\YourName\\Documents or %USERPROFILE%\\Desktop)"
+                      : "Enter path (e.g., ~/Documents or /Users/yourname/projects)"
+                  }
                   className="flex-1 px-3 py-2 text-sm border border-slate-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent font-mono"
                 />
                 <button
@@ -2163,35 +2507,49 @@ echo "Deployment completed!"`}
               <div className="flex flex-wrap gap-2">
                 <span className="text-xs text-slate-600 font-medium mr-2 flex items-center">Quick:</span>
                 <button
-                  onClick={() => goToQuickPath('~')}
+                  onClick={() => goToQuickPath(platformInfo.quickPaths.home)}
                   className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-300 transition-colors"
                 >
                   🏠 Home
                 </button>
                 <button
-                  onClick={() => goToQuickPath('~/Desktop')}
+                  onClick={() => goToQuickPath(platformInfo.quickPaths.desktop)}
                   className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-300 transition-colors"
                 >
                   🖥️ Desktop
                 </button>
                 <button
-                  onClick={() => goToQuickPath('~/Documents')}
+                  onClick={() => goToQuickPath(platformInfo.quickPaths.documents)}
                   className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-300 transition-colors"
                 >
                   📄 Documents
                 </button>
                 <button
-                  onClick={() => goToQuickPath('~/Downloads')}
+                  onClick={() => goToQuickPath(platformInfo.quickPaths.downloads)}
                   className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-300 transition-colors"
                 >
                   📥 Downloads
                 </button>
-                <button
-                  onClick={() => goToQuickPath('/')}
-                  className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-300 transition-colors"
-                >
-                  💾 Root
-                </button>
+                
+                {/* Windows: Show drives, Unix: Show root */}
+                {platformInfo.platform === 'windows' && platformInfo.drives && platformInfo.drives.length > 0 ? (
+                  platformInfo.drives.map(drive => (
+                    <button
+                      key={drive}
+                      onClick={() => goToQuickPath(drive)}
+                      className="px-2 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 text-xs rounded border border-blue-300 transition-colors font-mono"
+                    >
+                      💾 {drive}
+                    </button>
+                  ))
+                ) : platformInfo.quickPaths.root ? (
+                  <button
+                    onClick={() => goToQuickPath(platformInfo.quickPaths.root)}
+                    className="px-2 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs rounded border border-slate-300 transition-colors"
+                  >
+                    💾 Root
+                  </button>
+                ) : null}
               </div>
             </div>
 

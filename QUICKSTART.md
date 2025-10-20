@@ -73,17 +73,20 @@ npm run dev
 
 ### ⚙️ 环境变量配置
 
-管理 `.zshrc` 中的 Anthropic API 配置：
+管理环境变量中的 Anthropic API 配置：
 
 1. 切换到 **"Environment Variables"** 标签
-2. 填写：
+2. 填写必需变量：
    - **ANTHROPIC_BASE_URL**: API 基础 URL
-   - **ANTHROPIC_AUTH_TOKEN**: 你的认证令牌
-3. 点击 **"Save Changes"**
-4. ⚠️ **重要**: 保存后需要重启终端或运行：
-   ```bash
-   source ~/.zshrc
-   ```
+   - **ANTHROPIC_API_KEY**: 你的 API 密钥
+3. （可选）配置默认模型：
+   - **ANTHROPIC_DEFAULT_HAIKU_MODEL**: 默认 Haiku 模型
+   - **ANTHROPIC_DEFAULT_OPUS_MODEL**: 默认 Opus 模型
+   - **ANTHROPIC_DEFAULT_SONNET_MODEL**: 默认 Sonnet 模型
+4. 点击 **"Save Changes"**
+5. ⚠️ **重要**: 
+   - **Windows**: 重启终端或应用（自动设置到系统环境变量）
+   - **macOS/Linux**: 重启终端或运行 `source ~/.zshrc`
 
 ### 📝 自定义命令
 
@@ -134,9 +137,17 @@ Environment Variables:
 
 ### 环境变量示例
 
+**必需变量:**
 ```
 ANTHROPIC_BASE_URL: https://api.codemirror.codes/
-ANTHROPIC_AUTH_TOKEN: sk-DUp1wFC0ZFtJPHlTaD7BJTlMAIKclG86lQhovR2F0pOPNTBk
+ANTHROPIC_API_KEY: sk-DUp1wFC0ZFtJPHlTaD7BJTlMAIKclG86lQhovR2F0pOPNTBk
+```
+
+**可选的模型默认值:**
+```
+ANTHROPIC_DEFAULT_HAIKU_MODEL: claude-3-5-haiku-20241022
+ANTHROPIC_DEFAULT_OPUS_MODEL: claude-3-opus-20240229
+ANTHROPIC_DEFAULT_SONNET_MODEL: claude-3-5-sonnet-20241022
 ```
 
 ## Chat 功能使用指南
