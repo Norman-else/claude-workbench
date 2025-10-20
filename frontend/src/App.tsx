@@ -1872,9 +1872,9 @@ echo "Deployment completed!"`}
 
         {/* Chat Tab */}
         {activeTab === 'chat' && (
-          <div className="h-[calc(100vh-180px)] flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+          <div className="h-[calc(100vh-140px)] flex flex-col bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
             {/* Chat Header */}
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
+            <div className="flex items-center justify-between px-6 py-2.5 border-b border-slate-200 bg-gradient-to-r from-slate-50 to-white">
               <div className="flex items-center space-x-2">
                 <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
                 <span className="text-sm text-slate-600">Claude Code CLI is ready</span>
@@ -1885,19 +1885,19 @@ echo "Deployment completed!"`}
                 <div className="relative">
                   <button
                     onClick={() => setShowModelSelector(!showModelSelector)}
-                    className="flex items-center space-x-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-xl transition-all shadow-md hover:shadow-lg font-medium"
+                    className="flex items-center space-x-1.5 px-3 py-1.5 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 text-white rounded-lg transition-all shadow-md hover:shadow-lg font-medium"
                   >
-                    {selectedModel === 'auto' && <Bot className="w-4 h-4" />}
-                    {selectedModel === 'haiku' && <Zap className="w-4 h-4" />}
-                    {selectedModel === 'opus' && <Target className="w-4 h-4" />}
-                    {selectedModel === 'sonnet' && <Sparkles className="w-4 h-4" />}
-                    <span className="text-sm">
+                    {selectedModel === 'auto' && <Bot className="w-3.5 h-3.5" />}
+                    {selectedModel === 'haiku' && <Zap className="w-3.5 h-3.5" />}
+                    {selectedModel === 'opus' && <Target className="w-3.5 h-3.5" />}
+                    {selectedModel === 'sonnet' && <Sparkles className="w-3.5 h-3.5" />}
+                    <span className="text-xs">
                       {selectedModel === 'auto' && 'Auto'}
                       {selectedModel === 'haiku' && 'Haiku'}
                       {selectedModel === 'opus' && 'Opus'}
                       {selectedModel === 'sonnet' && 'Sonnet'}
                     </span>
-                    <ChevronDown className={`w-4 h-4 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showModelSelector ? 'rotate-180' : ''}`} />
                   </button>
 
                   {/* Dropdown Menu */}
@@ -2018,30 +2018,30 @@ echo "Deployment completed!"`}
                 <button
                   onClick={clearChatHistory}
                   disabled={chatMessages.length === 0}
-                  className="px-4 py-2 text-sm font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 shadow-sm"
+                  className="px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 hover:bg-slate-100 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 shadow-sm"
                 >
                   Clear History
                 </button>
               </div>
             </div>
 
-            {/* Working Directory and Context Files */}
-            <div className="px-6 py-3 bg-slate-50 border-b border-slate-200 space-y-2">
+            {/* Working Directory and Context Files - Compact */}
+            <div className="px-6 py-2 bg-slate-50 border-b border-slate-200 space-y-1.5">
               {/* Working Directory */}
               <div className="flex items-center space-x-2">
-                <FolderOpen className="w-4 h-4 text-slate-500" />
+                <FolderOpen className="w-3.5 h-3.5 text-slate-500" />
                 <label className="text-xs font-medium text-slate-600 whitespace-nowrap">Working Directory:</label>
                 <input
                   type="text"
                   value={chatWorkingDir}
                   onChange={(e) => setChatWorkingDir(e.target.value)}
                   placeholder="~/your/project/path"
-                  className="flex-1 px-2 py-1 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-transparent"
+                  className="flex-1 px-2 py-0.5 text-xs border border-slate-300 rounded focus:ring-1 focus:ring-primary-500 focus:border-transparent"
                   readOnly
                 />
                 <button
                   onClick={openDirectoryBrowser}
-                  className="px-3 py-1 bg-slate-600 hover:bg-slate-700 text-white text-xs rounded flex items-center space-x-1"
+                  className="px-2 py-0.5 bg-slate-600 hover:bg-slate-700 text-white text-xs rounded flex items-center space-x-1"
                 >
                   <FolderOpen className="w-3 h-3" />
                   <span>Browse</span>
@@ -2050,32 +2050,32 @@ echo "Deployment completed!"`}
 
               {/* Context Files */}
               <div className="flex items-start space-x-2">
-                <FileText className="w-4 h-4 text-slate-500 mt-1" />
+                <FileText className="w-3.5 h-3.5 text-slate-500 mt-0.5" />
                 <div className="flex-1">
                   <div className="flex items-center justify-between mb-1">
                     <label className="text-xs font-medium text-slate-600">Context Files:</label>
-                    <span className="text-xs text-slate-500 italic">Type @ in chat to add files</span>
+                    <span className="text-[10px] text-slate-500 italic">Type @ in chat to add files</span>
                   </div>
                   
                   {chatContextFiles.length > 0 ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-1.5">
                       {chatContextFiles.map((file, index) => (
                         <div
                           key={index}
-                          className="flex items-center space-x-1 px-2 py-1 bg-white border border-slate-300 rounded text-xs"
+                          className="flex items-center space-x-1 px-1.5 py-0.5 bg-white border border-slate-300 rounded text-[10px]"
                         >
                           <span className="text-slate-700">{file}</span>
                           <button
                             onClick={() => removeContextFile(file)}
                             className="text-slate-400 hover:text-red-600"
                           >
-                            <X className="w-3 h-3" />
+                            <X className="w-2.5 h-2.5" />
                           </button>
                         </div>
                       ))}
                     </div>
                   ) : (
-                    <p className="text-xs text-slate-400 italic">No files in context. Type @ in the chat input to select files.</p>
+                    <p className="text-[10px] text-slate-400 italic">No files in context. Type @ in the chat input to select files.</p>
                   )}
                 </div>
               </div>
@@ -2146,19 +2146,27 @@ echo "Deployment completed!"`}
                         )}
                       </div>
 
-                      {/* Message Bubble */}
-                      <div className="flex max-w-[78%]">
+                      {/* Message Content with Timestamp */}
+                      <div className="flex flex-col max-w-[78%]">
+                        {/* Timestamp */}
+                        <p className={`text-[11px] text-slate-400 font-medium mb-1.5 px-1 ${
+                          message.role === 'user' ? 'text-right' : 'text-left'
+                        }`}>
+                          {message.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
+                        </p>
+                        
+                        {/* Message Bubble */}
                         <div
-                          className={`inline-block rounded-2xl px-5 py-3.5 transition-all duration-200 hover:scale-[1.01] ${
+                          className={`inline-block rounded-2xl px-4 py-3 transition-all duration-200 hover:scale-[1.01] ${
                             message.role === 'user'
                               ? 'bg-gradient-to-br from-blue-500 via-blue-600 to-indigo-600 text-white shadow-lg shadow-blue-500/20'
                               : 'bg-white border-2 border-slate-100 text-slate-900 shadow-lg shadow-slate-200/50 hover:border-slate-200'
                           }`}
                         >
                           {message.role === 'user' ? (
-                            <p className="text-[15px] whitespace-pre-wrap leading-relaxed font-medium">{message.content}</p>
+                            <p className="text-sm whitespace-pre-wrap leading-relaxed">{message.content}</p>
                           ) : (
-                            <div className="text-[15px] prose prose-sm max-w-none prose-slate">
+                            <div className="text-sm prose prose-sm max-w-none prose-slate">
                                 <ReactMarkdown
                                   remarkPlugins={[remarkGfm]}
                                   components={{
@@ -2216,12 +2224,6 @@ echo "Deployment completed!"`}
                             </div>
                           )}
                         </div>
-                        {/* Timestamp */}
-                        <p className={`text-[11px] text-slate-400 font-medium mt-2 px-1 ${
-                          message.role === 'user' ? 'text-right' : 'text-left'
-                        }`}>
-                          {message.timestamp.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
                       </div>
                     </div>
                   ))}
@@ -2252,52 +2254,62 @@ echo "Deployment completed!"`}
             </div>
 
             {/* Chat Input */}
-            <div className="border-t border-slate-200 p-4 bg-gradient-to-r from-slate-50 to-white">
+            <div className="border-t border-slate-200 px-4 py-2 bg-gradient-to-r from-slate-50 to-white">
               {chatInput.startsWith('/') && !showSlashCommandList && (
-                <div className="mb-2 px-2 py-1 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700 flex items-center space-x-2">
-                  <Terminal className="w-3 h-3" />
-                  <span>💡 Use <kbd className="px-1 bg-blue-100 rounded">↑↓</kbd> to navigate commands, <kbd className="px-1 bg-blue-100 rounded">Enter</kbd> to select</span>
+                <div className="mb-1.5 px-2 py-0.5 bg-blue-50 border border-blue-200 rounded text-[10px] text-blue-700 flex items-center space-x-1">
+                  <Terminal className="w-2.5 h-2.5" />
+                  <span>💡 Use <kbd className="px-0.5 bg-blue-100 rounded text-[9px]">↑↓</kbd> to navigate, <kbd className="px-0.5 bg-blue-100 rounded text-[9px]">Enter</kbd> to select</span>
                 </div>
               )}
               {chatInput.includes('@') && !showFileAutocomplete && (
-                <div className="mb-2 px-2 py-1 bg-green-50 border border-green-200 rounded text-xs text-green-700">
-                  📎 File selector active. Use the search box to find files or click to navigate folders.
+                <div className="mb-1.5 px-2 py-0.5 bg-green-50 border border-green-200 rounded text-[10px] text-green-700">
+                  📎 File selector active
                 </div>
               )}
               
               <div className="relative">
-                <div className="flex items-center space-x-3">
-                  <input
-                    ref={chatInputRef}
-                    type="text"
-                    value={chatInput}
-                    onChange={(e) => handleChatInputChange(e.target.value)}
-                    onKeyDown={(e) => {
-                      // Handle slash command navigation
-                      if (showSlashCommandList) {
-                        const filteredCommands = slashCommands.filter(cmd => 
-                          cmd.command.toLowerCase().includes(chatInput.toLowerCase())
-                        );
-                        handleSlashCommandKeyDown(e, filteredCommands);
-                      }
-                    }}
-                    onKeyPress={(e) => {
-                      if (e.key === 'Enter' && !e.shiftKey && !showFileAutocomplete && !showSlashCommandList) {
-                        e.preventDefault();
-                        sendChatMessage();
-                      }
-                    }}
-                    placeholder="Type your message, @ to add files, or / for commands..."
-                    className="flex-1 px-5 py-3 border-2 border-slate-300 rounded-2xl focus:ring-2 focus:ring-blue-500 focus:border-blue-400 transition-all bg-white shadow-sm"
-                    disabled={isSendingMessage}
-                  />
+                <div className="flex items-center space-x-2 p-2 bg-gradient-to-br from-slate-50 to-white rounded-2xl border border-slate-200 shadow-lg">
+                  <div className="relative flex-1">
+                    <input
+                      ref={chatInputRef}
+                      type="text"
+                      value={chatInput}
+                      onChange={(e) => handleChatInputChange(e.target.value)}
+                      onKeyDown={(e) => {
+                        // Handle slash command navigation
+                        if (showSlashCommandList) {
+                          const filteredCommands = slashCommands.filter(cmd => 
+                            cmd.command.toLowerCase().includes(chatInput.toLowerCase())
+                          );
+                          handleSlashCommandKeyDown(e, filteredCommands);
+                        }
+                      }}
+                      onKeyPress={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && !showFileAutocomplete && !showSlashCommandList) {
+                          e.preventDefault();
+                          sendChatMessage();
+                        }
+                      }}
+                      placeholder="Type your message, @ to add files, or / for commands..."
+                      className="w-full px-3 py-2 border-2 border-slate-200 rounded-xl focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all duration-200 bg-white placeholder-slate-400 text-sm text-slate-900 shadow-sm hover:border-slate-300"
+                      disabled={isSendingMessage}
+                    />
+                    {/* Input hint icons */}
+                    <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center space-x-1 pointer-events-none">
+                      <span className="text-[10px] text-slate-400 font-medium hidden sm:block">
+                        @ files · / commands
+                      </span>
+                    </div>
+                  </div>
                   <button
                     onClick={sendChatMessage}
                     disabled={!chatInput.trim() || isSendingMessage}
-                    className="px-6 py-3 bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-600 hover:to-blue-700 text-white rounded-2xl transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center space-x-2 shadow-md hover:shadow-lg font-medium"
+                    className="group relative px-4 py-2 bg-gradient-to-r from-blue-500 via-blue-600 to-indigo-600 hover:from-blue-600 hover:via-blue-700 hover:to-indigo-700 text-white rounded-xl transition-all duration-300 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:scale-100 flex items-center space-x-1.5 shadow-lg hover:shadow-xl hover:shadow-blue-500/30 font-semibold hover:scale-105 active:scale-95"
                   >
-                    <Send className="w-4 h-4" />
-                    <span>Send</span>
+                    <Send className="w-3.5 h-3.5 group-hover:rotate-12 transition-transform duration-200" />
+                    <span className="hidden sm:inline text-sm">Send</span>
+                    {/* Shine effect */}
+                    <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-transparent via-white/20 to-transparent translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-700"></div>
                   </button>
                 </div>
 
