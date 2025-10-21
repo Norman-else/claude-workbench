@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code } from 'lucide-react';
+import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code, Play, Square, RotateCw, Activity, FileText } from 'lucide-react';
 
 interface McpServer {
   command: string;
@@ -16,7 +16,88 @@ interface CommandFile {
   content: string;
 }
 
+interface McpStatus {
+  status: 'running' | 'stopped' | 'stopping' | 'error';
+  running: boolean;
+  pid?: number;
+  startTime?: string;
+  error?: string;
+}
+
 type ViewMode = 'list' | 'detail';
+
+// Server Logs Component
+function ServerLogs({ serverName }: { serverName: string }) {
+  const [logs, setLogs] = useState<Array<{ timestamp: string; type: string; message: string }>>([]);
+  const [autoScroll, setAutoScroll] = useState(true);
+  const logsEndRef = useState<HTMLDivElement | null>(null)[0];
+
+  useEffect(() => {
+    const fetchLogs = async () => {
+      try {
+        const res = await fetch(`/api/mcp/${serverName}/logs?limit=50`);
+        if (res.ok) {
+          const data = await res.json();
+          setLogs(data.logs || []);
+          if (autoScroll && logsEndRef) {
+            logsEndRef.scrollIntoView({ behavior: 'smooth' });
+          }
+        }
+      } catch (error) {
+        console.error('Failed to fetch logs:', error);
+      }
+    };
+
+    fetchLogs();
+    const interval = setInterval(fetchLogs, 2000);
+    return () => clearInterval(interval);
+  }, [serverName, autoScroll, logsEndRef]);
+
+  const getLogColor = (type: string) => {
+    switch (type) {
+      case 'error': case 'stderr': return 'text-red-400';
+      case 'info': return 'text-blue-400';
+      case 'stdout': return 'text-green-400';
+      default: return 'text-gray-400';
+    }
+  };
+
+  return (
+    <div className="flex flex-col h-full space-y-3">
+      <div className="flex items-center justify-between flex-shrink-0">
+        <label className="flex items-center space-x-2 text-sm font-medium text-gray-300">
+          <Activity className="w-4 h-4 text-purple-400" />
+          <span>Server Logs</span>
+        </label>
+        <label className="flex items-center space-x-2 cursor-pointer">
+          <input
+            type="checkbox"
+            checked={autoScroll}
+            onChange={(e) => setAutoScroll(e.target.checked)}
+            className="rounded bg-gray-800 border-purple-500/20"
+          />
+          <span className="text-xs text-gray-400">Auto-scroll</span>
+        </label>
+      </div>
+      <div className="glass border border-purple-500/20 rounded-xl p-4 flex-1 overflow-y-auto font-mono text-xs">
+        {logs.length === 0 ? (
+          <div className="text-gray-500 text-center py-8">No logs yet</div>
+        ) : (
+          logs.map((log, index) => (
+            <div key={index} className="mb-1">
+              <span className="text-gray-600">{new Date(log.timestamp).toLocaleTimeString()}</span>
+              {' '}
+              <span className={`font-medium ${getLogColor(log.type)}`}>[{log.type}]</span>
+              {' '}
+              <span className="text-gray-300">{log.message}</span>
+            </div>
+          ))
+        )}
+        <div ref={(el) => { if (el) logsEndRef }} />
+      </div>
+    </div>
+  );
+}
 
 function App() {
   const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands'>('mcp');
@@ -31,6 +112,10 @@ function App() {
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   
+  // MCP Status Management
+  const [mcpStatuses, setMcpStatuses] = useState<Record<string, McpStatus>>({});
+  const [isLoadingStatus, setIsLoadingStatus] = useState<Record<string, boolean>>({});
+  
   // View mode state
   const [mcpViewMode, setMcpViewMode] = useState<ViewMode>('list');
   const [commandViewMode, setCommandViewMode] = useState<ViewMode>('list');
@@ -41,6 +126,8 @@ function App() {
   const [showAddCommandModal, setShowAddCommandModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
+  const [showLogsModal, setShowLogsModal] = useState(false);
+  const [logsServerName, setLogsServerName] = useState<string | null>(null);
   
   // Editing state
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
@@ -61,6 +148,29 @@ function App() {
 
   useEffect(() => {
     loadConfig();
+  }, []);
+
+  // Poll MCP statuses every 3 seconds
+  useEffect(() => {
+    const pollStatuses = async () => {
+      try {
+        const res = await fetch('/api/mcp/status/all');
+        if (res.ok) {
+          const statuses = await res.json();
+          setMcpStatuses(statuses);
+        }
+      } catch (error) {
+        console.error('Failed to poll MCP statuses:', error);
+      }
+    };
+
+    // Initial poll
+    pollStatuses();
+
+    // Set up polling interval
+    const interval = setInterval(pollStatuses, 3000);
+
+    return () => clearInterval(interval);
   }, []);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -287,6 +397,82 @@ function App() {
     }
   };
 
+  // MCP Server Control Functions
+  const startMcpServer = async (serverName: string) => {
+    setIsLoadingStatus(prev => ({ ...prev, [serverName]: true }));
+    try {
+      const response = await fetch(`/api/mcp/${serverName}/start`, {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        showNotification(`Server "${serverName}" started successfully! PID: ${data.pid}`);
+        // Update status immediately
+        setMcpStatuses(prev => ({
+          ...prev,
+          [serverName]: { status: 'running', running: true, pid: data.pid }
+        }));
+      } else {
+        showNotification(data.error || 'Failed to start server', 'error');
+      }
+    } catch (error) {
+      showNotification(`Failed to start server: ${error}`, 'error');
+    } finally {
+      setIsLoadingStatus(prev => ({ ...prev, [serverName]: false }));
+    }
+  };
+
+  const stopMcpServer = async (serverName: string) => {
+    setIsLoadingStatus(prev => ({ ...prev, [serverName]: true }));
+    try {
+      const response = await fetch(`/api/mcp/${serverName}/stop`, {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        showNotification(`Server "${serverName}" stopped`);
+        // Update status immediately
+        setMcpStatuses(prev => ({
+          ...prev,
+          [serverName]: { status: 'stopping', running: false }
+        }));
+      } else {
+        showNotification(data.error || 'Failed to stop server', 'error');
+      }
+    } catch (error) {
+      showNotification(`Failed to stop server: ${error}`, 'error');
+    } finally {
+      setIsLoadingStatus(prev => ({ ...prev, [serverName]: false }));
+    }
+  };
+
+  const restartMcpServer = async (serverName: string) => {
+    setIsLoadingStatus(prev => ({ ...prev, [serverName]: true }));
+    try {
+      showNotification(`Restarting server "${serverName}"...`, 'success');
+      
+      const response = await fetch(`/api/mcp/${serverName}/restart`, {
+        method: 'POST',
+      });
+      
+      const data = await response.json();
+      
+      if (response.ok) {
+        showNotification(`Server "${serverName}" restarted! PID: ${data.pid}`);
+      } else {
+        showNotification(data.error || 'Failed to restart server', 'error');
+      }
+    } catch (error) {
+      showNotification(`Failed to restart server: ${error}`, 'error');
+    } finally {
+      setIsLoadingStatus(prev => ({ ...prev, [serverName]: false }));
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Animated background */}
@@ -451,16 +637,43 @@ function App() {
 
                   {/* Server cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {Object.entries(claudeConfig.mcpServers || {}).map(([name, server]) => (
+                    {Object.entries(claudeConfig.mcpServers || {}).map(([name, server]) => {
+                      const status = mcpStatuses[name];
+                      const isRunning = status?.running || false;
+                      const isLoading = isLoadingStatus[name] || false;
+                      
+                      return (
                       <div
                         key={name}
-                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative"
-                        onClick={() => openServerDetail(name)}
+                        className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col"
                       >
                         {/* Status indicator */}
                         <div className="absolute top-4 right-4 flex items-center space-x-2">
-                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-              <button
+                          <div className="flex items-center space-x-1.5">
+                            <div className={`w-2 h-2 rounded-full ${
+                              isRunning ? 'bg-green-400 animate-pulse' : 
+                              status?.status === 'stopping' ? 'bg-yellow-400 animate-pulse' :
+                              status?.status === 'error' ? 'bg-red-400 animate-pulse' :
+                              'bg-gray-500'
+                            }`}></div>
+                            <div className="flex flex-col items-start">
+                              <span className={`text-xs font-medium leading-tight ${
+                                isRunning ? 'text-green-400' : 
+                                status?.status === 'stopping' ? 'text-yellow-400' :
+                                status?.status === 'error' ? 'text-red-400' :
+                                'text-gray-500'
+                              }`}>
+                                {isRunning ? 'Running' : 
+                                 status?.status === 'stopping' ? 'Stopping' :
+                                 status?.status === 'error' ? 'Error' :
+                                 'Stopped'}
+                              </span>
+                              {status?.pid && (
+                                <span className="text-[10px] text-gray-500">PID: {status.pid}</span>
+                              )}
+                            </div>
+                          </div>
+                          <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setItemToDelete(name);
@@ -470,44 +683,107 @@ function App() {
                             data-tooltip="Delete server"
                           >
                             <Trash2 className="w-4 h-4 text-red-400" />
-              </button>
-            </div>
+                          </button>
+                        </div>
 
                         <div className="flex items-start mb-4">
                           <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
                             <Server className="w-6 h-6 text-purple-400" />
-              </div>
-              </div>
+                          </div>
+                        </div>
 
-                        <h3 className="text-xl font-bold text-white mb-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-blue-400 transition-all">
+                        <h3 
+                          className="text-xl font-bold text-white mb-2 transition-all cursor-pointer"
+                          onClick={() => openServerDetail(name)}
+                        >
                           {name}
                         </h3>
                         
-                        <div className="space-y-2 text-sm">
+                        <div className="space-y-2 text-sm mb-4 flex-1">
                           <div className="flex items-center space-x-2">
                             <Code className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-400 font-mono text-xs">{server.command}</span>
-                </div>
+                            <span className="text-gray-400 font-mono text-xs truncate">{server.command}</span>
+                          </div>
                           {server.args && server.args.length > 0 && (
                             <div className="flex items-center space-x-1 ml-6">
                               <div className="px-2 py-1 bg-purple-500/10 rounded text-xs text-purple-400">
                                 {server.args.length} arg{server.args.length > 1 ? 's' : ''}
-          </div>
-        </div>
-      )}
-            </div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
 
-                        <div className="mt-4 pt-4 border-t border-purple-500/20">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500">Click to edit</span>
-                            <Edit2 className="w-3 h-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-              </div>
+                        {/* Control buttons */}
+                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                          {isRunning ? (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLogsServerName(name);
+                                  setShowLogsModal(true);
+                                }}
+                                className="flex-1 glass hover:border-blue-500/50 border border-blue-500/20 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect tooltip"
+                                data-tooltip="View logs"
+                              >
+                                <FileText className="w-4 h-4 text-blue-400" />
+                                <span className="text-xs text-blue-400">Logs</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  restartMcpServer(name);
+                                }}
+                                disabled={isLoading}
+                                className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect tooltip disabled:opacity-50"
+                                data-tooltip="Restart server"
+                              >
+                                <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span className="text-xs text-yellow-400">Restart</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  stopMcpServer(name);
+                                }}
+                                disabled={isLoading}
+                                className="flex-1 glass hover:border-red-500/50 border border-red-500/20 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect tooltip disabled:opacity-50"
+                                data-tooltip="Stop server"
+                              >
+                                <Square className="w-4 h-4 text-red-400" />
+                                <span className="text-xs text-red-400">Stop</span>
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startMcpServer(name);
+                                }}
+                                disabled={isLoading}
+                                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect neon-glow disabled:opacity-50"
+                              >
+                                <Play className={`w-4 h-4 text-white ${isLoading ? 'animate-pulse' : ''}`} />
+                                <span className="text-xs text-white font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openServerDetail(name);
+                                }}
+                                className="glass hover:border-purple-500/50 border border-purple-500/20 px-3 py-2 rounded-lg flex items-center justify-center transition-all ripple-effect"
+                              >
+                                <Edit2 className="w-4 h-4 text-purple-400" />
+                              </button>
+                            </>
+                          )}
+                        </div>
 
-                        {/* Hover glow effect */}
-                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500/0 via-purple-500/5 to-blue-500/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
-              </div>
-                    ))}
+                        {/* Hover border effect - removed background glow for better text readability */}
+                      </div>
+                      );
+                    })}
 
                     {/* Empty state */}
                     {Object.keys(claudeConfig.mcpServers || {}).length === 0 && (
@@ -591,6 +867,13 @@ function App() {
                           placeholder='{\n  "KEY": "value"\n}'
                     />
                   </div>
+                  
+                  {/* Server Logs Section */}
+                  {selectedServer && mcpStatuses[selectedServer]?.running && (
+                    <div className="mt-6 pt-6 border-t border-purple-500/20">
+                      <ServerLogs serverName={selectedServer} />
+                    </div>
+                  )}
 
                       <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
               <button
@@ -740,7 +1023,7 @@ function App() {
                     {commands.map((cmd) => (
                   <div 
                     key={cmd.name} 
-                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative"
+                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[280px] flex flex-col"
                         onClick={() => openCommandDetail(cmd.name)}
                       >
                         {/* Status indicator */}
@@ -765,23 +1048,22 @@ function App() {
                           </div>
                     </div>
 
-                        <h3 className="text-xl font-bold text-white mb-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-purple-400 group-hover:to-blue-400 transition-all">
+                        <h3 className="text-xl font-bold text-white mb-2 transition-all">
                           {cmd.name.replace(/\.md$/, '')}
                         </h3>
                         
-                        <p className="text-sm text-gray-400 line-clamp-3 mb-4 font-mono">
+                        <p className="text-sm text-gray-400 line-clamp-3 mb-4 font-mono flex-1">
                           {cmd.content.substring(0, 100)}...
                         </p>
 
-                        <div className="mt-4 pt-4 border-t border-purple-500/20">
+                        <div className="mt-auto pt-4 border-t border-purple-500/20">
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-500">Click to edit</span>
                             <Edit2 className="w-3 h-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-          </div>
+                          </div>
+                        </div>
 
-                        {/* Hover glow effect */}
-                        <div className="absolute inset-0 rounded-2xl bg-gradient-to-r from-purple-500/0 via-blue-500/5 to-purple-500/0 opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none"></div>
+                        {/* Hover border effect - removed background glow for better text readability */}
               </div>
                     ))}
             
@@ -1025,6 +1307,52 @@ function App() {
                         </button>
                         </div>
                     </div>
+          </div>
+        </div>
+      )}
+
+      {/* Logs Viewer Modal */}
+      {showLogsModal && logsServerName && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-4xl w-full h-[600px] animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow flex flex-col">
+            <div className="flex items-center justify-between mb-6">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center pulse-ring">
+                  <FileText className="w-6 h-6 text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                    Server Logs
+                  </h3>
+                  <p className="text-gray-400 text-sm">{logsServerName}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => {
+                  setShowLogsModal(false);
+                  setLogsServerName(null);
+                }}
+                className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+              >
+                <X className="w-6 h-6 text-gray-400" />
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-hidden">
+              <ServerLogs serverName={logsServerName} />
+            </div>
+
+            <div className="flex justify-end pt-4 border-t border-blue-500/20 mt-4">
+              <button
+                onClick={() => {
+                  setShowLogsModal(false);
+                  setLogsServerName(null);
+                }}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect"
+              >
+                Close
+              </button>
+            </div>
           </div>
         </div>
       )}

@@ -5,11 +5,15 @@ import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import os from 'os';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import crypto from 'crypto';
 
 const execPromise = promisify(exec);
+
+// MCP Process Manager
+const mcpProcesses = new Map(); // Map<serverName, { process, pid, status, startTime, logs }>
+const mcpLogs = new Map(); // Map<serverName, Array<logEntry>>
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -659,8 +663,279 @@ app.post('/api/list-files', async (req, res) => {
   }
 });
 
+// ============================================
+// MCP Process Management APIs
+// ============================================
+
+// Helper function to add log entry
+function addLog(serverName, type, message) {
+  if (!mcpLogs.has(serverName)) {
+    mcpLogs.set(serverName, []);
+  }
+  const logs = mcpLogs.get(serverName);
+  logs.push({
+    timestamp: new Date().toISOString(),
+    type, // 'info', 'error', 'stdout', 'stderr'
+    message
+  });
+  // Keep only last 100 logs
+  if (logs.length > 100) {
+    logs.shift();
+  }
+}
+
+// Start MCP Server
+app.post('/api/mcp/:name/start', async (req, res) => {
+  const serverName = req.params.name;
+  
+  try {
+    // Check if already running
+    if (mcpProcesses.has(serverName)) {
+      const processInfo = mcpProcesses.get(serverName);
+      if (processInfo.status === 'running') {
+        return res.status(400).json({ error: 'Server already running' });
+      }
+    }
+
+    // Read config to get server details
+    const configContent = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+    const config = JSON.parse(configContent);
+    const serverConfig = config.mcpServers?.[serverName];
+    
+    if (!serverConfig) {
+      return res.status(404).json({ error: 'Server not found in config' });
+    }
+
+    // Prepare command
+    const { command, args = [], env = {} } = serverConfig;
+    
+    addLog(serverName, 'info', `Starting MCP server: ${serverName}`);
+    addLog(serverName, 'info', `Command: ${command} ${args.join(' ')}`);
+
+    // Spawn process
+    const childProcess = spawn(command, args, {
+      env: { ...process.env, ...env },
+      shell: IS_WINDOWS,
+      stdio: ['pipe', 'pipe', 'pipe']
+    });
+
+    const processInfo = {
+      process: childProcess,
+      pid: childProcess.pid,
+      status: 'running',
+      startTime: new Date().toISOString(),
+      command,
+      args
+    };
+
+    mcpProcesses.set(serverName, processInfo);
+
+    // Handle stdout
+    childProcess.stdout.on('data', (data) => {
+      const message = data.toString().trim();
+      if (message) {
+        addLog(serverName, 'stdout', message);
+      }
+    });
+
+    // Handle stderr
+    childProcess.stderr.on('data', (data) => {
+      const message = data.toString().trim();
+      if (message) {
+        addLog(serverName, 'stderr', message);
+      }
+    });
+
+    // Handle process exit
+    childProcess.on('exit', (code, signal) => {
+      const message = `Process exited with code ${code} ${signal ? `and signal ${signal}` : ''}`;
+      addLog(serverName, 'info', message);
+      
+      if (mcpProcesses.has(serverName)) {
+        const info = mcpProcesses.get(serverName);
+        info.status = 'stopped';
+        info.exitCode = code;
+        info.exitSignal = signal;
+      }
+    });
+
+    // Handle errors
+    childProcess.on('error', (error) => {
+      addLog(serverName, 'error', `Process error: ${error.message}`);
+      if (mcpProcesses.has(serverName)) {
+        const info = mcpProcesses.get(serverName);
+        info.status = 'error';
+        info.error = error.message;
+      }
+    });
+
+    res.json({
+      message: 'Server started successfully',
+      pid: childProcess.pid,
+      status: 'running'
+    });
+
+  } catch (error) {
+    addLog(serverName, 'error', `Failed to start: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Stop MCP Server
+app.post('/api/mcp/:name/stop', (req, res) => {
+  const serverName = req.params.name;
+  
+  try {
+    if (!mcpProcesses.has(serverName)) {
+      return res.status(404).json({ error: 'Server not running' });
+    }
+
+    const processInfo = mcpProcesses.get(serverName);
+    
+    if (processInfo.status !== 'running') {
+      return res.status(400).json({ error: 'Server is not running' });
+    }
+
+    addLog(serverName, 'info', 'Stopping server...');
+
+    // Kill process
+    if (IS_WINDOWS) {
+      // Windows: use taskkill
+      exec(`taskkill /pid ${processInfo.pid} /T /F`, (error) => {
+        if (error) {
+          addLog(serverName, 'error', `Error stopping process: ${error.message}`);
+        }
+      });
+    } else {
+      // Unix: use kill
+      processInfo.process.kill('SIGTERM');
+    }
+
+    processInfo.status = 'stopping';
+
+    // Force kill after 5 seconds if not stopped
+    setTimeout(() => {
+      if (mcpProcesses.has(serverName)) {
+        const info = mcpProcesses.get(serverName);
+        if (info.status === 'stopping') {
+          addLog(serverName, 'info', 'Force killing process...');
+          info.process.kill('SIGKILL');
+          info.status = 'stopped';
+        }
+      }
+    }, 5000);
+
+    res.json({ message: 'Server stop initiated', status: 'stopping' });
+
+  } catch (error) {
+    addLog(serverName, 'error', `Failed to stop: ${error.message}`);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get MCP Server Status
+app.get('/api/mcp/:name/status', (req, res) => {
+  const serverName = req.params.name;
+  
+  if (!mcpProcesses.has(serverName)) {
+    return res.json({
+      status: 'stopped',
+      running: false
+    });
+  }
+
+  const processInfo = mcpProcesses.get(serverName);
+  
+  res.json({
+    status: processInfo.status,
+    running: processInfo.status === 'running',
+    pid: processInfo.pid,
+    startTime: processInfo.startTime,
+    command: processInfo.command,
+    args: processInfo.args,
+    exitCode: processInfo.exitCode,
+    exitSignal: processInfo.exitSignal,
+    error: processInfo.error
+  });
+});
+
+// Get all MCP servers status
+app.get('/api/mcp/status/all', async (req, res) => {
+  try {
+    const configContent = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+    const config = JSON.parse(configContent);
+    const servers = config.mcpServers || {};
+    
+    const statuses = {};
+    
+    for (const serverName of Object.keys(servers)) {
+      if (mcpProcesses.has(serverName)) {
+        const processInfo = mcpProcesses.get(serverName);
+        statuses[serverName] = {
+          status: processInfo.status,
+          running: processInfo.status === 'running',
+          pid: processInfo.pid,
+          startTime: processInfo.startTime
+      };
+    } else {
+        statuses[serverName] = {
+          status: 'stopped',
+          running: false
+        };
+      }
+    }
+    
+    res.json(statuses);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Get MCP Server Logs
+app.get('/api/mcp/:name/logs', (req, res) => {
+  const serverName = req.params.name;
+  const limit = parseInt(req.query.limit) || 50;
+  
+  if (!mcpLogs.has(serverName)) {
+    return res.json({ logs: [] });
+  }
+
+  const logs = mcpLogs.get(serverName);
+  const recentLogs = logs.slice(-limit);
+  
+  res.json({ logs: recentLogs });
+});
+
+// Restart MCP Server
+app.post('/api/mcp/:name/restart', async (req, res) => {
+  const serverName = req.params.name;
+  
+  try {
+    // Stop if running
+    if (mcpProcesses.has(serverName)) {
+      const processInfo = mcpProcesses.get(serverName);
+      if (processInfo.status === 'running') {
+        processInfo.process.kill('SIGTERM');
+        await new Promise(resolve => setTimeout(resolve, 2000));
+      }
+    }
+
+    // Start
+    const response = await fetch(`http://localhost:${PORT}/api/mcp/${serverName}/start`, {
+      method: 'POST'
+    });
+    
+    const result = await response.json();
+    res.json(result);
+    
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Claude Config Service backend running on http://localhost:${PORT}`);
+  console.log(`📡 MCP Process Manager ready`);
 });
 
