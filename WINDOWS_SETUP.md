@@ -111,14 +111,6 @@ On Windows, file paths use backslashes (`\`) by default, but the application wil
 - Windows format: `C:\Users\YourName\Documents`
 - Unix format: `C:/Users/YourName/Documents`
 
-### Working with the Chat Interface
-
-The chat interface on Windows uses PowerShell to execute Claude CLI commands. Make sure:
-
-1. PowerShell is available in your system PATH
-2. The `claude` command is accessible from PowerShell
-3. Your working directory paths use Windows format or Unix-style forward slashes
-
 ### Troubleshooting
 
 #### Claude command not found

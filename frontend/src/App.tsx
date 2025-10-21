@@ -28,7 +28,7 @@ interface ChatMessage {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands' | 'chat'>('mcp');
+  const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands'>('mcp');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [envVars, setEnvVars] = useState({ 
     baseUrl: '', 
@@ -1441,17 +1441,6 @@ echo "Deployment completed!"`}
               <Command className="w-5 h-5" />
               <span className="font-medium">Commands</span>
             </button>
-            <button
-              onClick={() => setActiveTab('chat')}
-              className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
-                activeTab === 'chat'
-                  ? 'bg-primary-500 text-white shadow-md'
-                  : 'text-slate-700 hover:bg-slate-100'
-              }`}
-            >
-              <MessageSquare className="w-5 h-5" />
-              <span className="font-medium">Chat</span>
-            </button>
           </div>
         </nav>
 
@@ -1477,13 +1466,11 @@ echo "Deployment completed!"`}
               {activeTab === 'mcp' && 'MCP Servers Configuration'}
               {activeTab === 'env' && 'Environment Variables'}
               {activeTab === 'commands' && 'Custom Commands'}
-              {activeTab === 'chat' && 'Claude Code CLI Chat'}
             </h2>
             <p className="text-sm text-slate-600 mt-1">
               {activeTab === 'mcp' && 'Configure Model Context Protocol servers for Claude CLI'}
               {activeTab === 'env' && 'Manage API credentials and environment settings'}
               {activeTab === 'commands' && 'Create and manage custom command scripts'}
-              {activeTab === 'chat' && 'Chat directly with Claude Code CLI'}
             </p>
           </div>
         </div>
