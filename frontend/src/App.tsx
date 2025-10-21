@@ -268,13 +268,27 @@ function App() {
   const addNewServer = () => {
     if (!newServerForm.name || !newServerForm.command) {
       showNotification('Please fill in server name and command', 'error');
-          return;
+      return;
+    }
+
+    // Validate JSON environment variables
+    let envObject = {};
+    if (newServerForm.env) {
+      try {
+        envObject = JSON.parse(newServerForm.env);
+        if (typeof envObject !== 'object' || envObject === null) {
+          throw new Error('Environment variables must be a valid JSON object');
         }
+      } catch (error) {
+        showNotification(`Invalid JSON format: ${error instanceof Error ? error.message : 'Unable to parse JSON'}`, 'error');
+        return;
+      }
+    }
 
     const newServer: McpServer = {
-            command: newServerForm.command,
+      command: newServerForm.command,
       args: newServerForm.args ? newServerForm.args.split(',').map(a => a.trim()) : [],
-      env: newServerForm.env ? JSON.parse(newServerForm.env) : {}
+      env: envObject
     };
 
     const newConfig = {
@@ -950,19 +964,24 @@ function App() {
                   <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">Environment Variables (JSON)</label>
                     <textarea
-                          value={JSON.stringify(editingServer?.env || {}, null, 2)}
-                          onChange={(e) => {
-                            try {
-                              const env = JSON.parse(e.target.value);
-                              setEditingServer(prev => prev ? { ...prev, env } : null);
-                            } catch (err) {
-                              // Invalid JSON, ignore
-                            }
-                          }}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                      value={JSON.stringify(editingServer?.env || {}, null, 2)}
+                      onChange={(e) => {
+                        try {
+                          const env = JSON.parse(e.target.value);
+                          if (typeof env !== 'object' || env === null) {
+                            throw new Error('Must be a valid JSON object');
+                          }
+                          setEditingServer(prev => prev ? { ...prev, env } : null);
+                        } catch (err) {
+                          // Show error but keep the input editable so user can fix it
+                          console.error('Invalid JSON:', err);
+                        }
+                      }}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
                       rows={6}
-                          placeholder='{\n  "KEY": "value"\n}'
+                      placeholder='{\n  "KEY": "value"\n}'
                     />
+                    <p className="text-xs text-gray-500 mt-1">Enter a valid JSON object. Updates will only save when JSON is valid.</p>
                   </div>
 
                   {/* Server Logs Section */}
