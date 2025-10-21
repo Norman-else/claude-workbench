@@ -158,8 +158,8 @@ function App() {
         if (res.ok) {
           const statuses = await res.json();
           setMcpStatuses(statuses);
-        }
-      } catch (error) {
+      }
+    } catch (error) {
         console.error('Failed to poll MCP statuses:', error);
       }
     };
@@ -440,7 +440,7 @@ function App() {
           ...prev,
           [serverName]: { status: 'stopping', running: false }
         }));
-      } else {
+    } else {
         showNotification(data.error || 'Failed to stop server', 'error');
       }
     } catch (error) {
@@ -463,7 +463,7 @@ function App() {
       
       if (response.ok) {
         showNotification(`Server "${serverName}" restarted! PID: ${data.pid}`);
-      } else {
+    } else {
         showNotification(data.error || 'Failed to restart server', 'error');
       }
     } catch (error) {
@@ -541,7 +541,7 @@ function App() {
               className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
                 activeTab === 'mcp'
                   ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass hover:border hover:border-purple-500/30'
+                  : 'hover:glass border border-transparent hover:border-purple-500/30'
               }`}
             >
               <div className={`p-2 rounded-lg transition-all ${
@@ -562,7 +562,7 @@ function App() {
               className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
                 activeTab === 'env'
                   ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass hover:border hover:border-purple-500/30'
+                  : 'hover:glass border border-transparent hover:border-purple-500/30'
               }`}
             >
               <div className={`p-2 rounded-lg transition-all ${
@@ -583,7 +583,7 @@ function App() {
               className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
                 activeTab === 'commands'
                   ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass hover:border hover:border-purple-500/30'
+                  : 'hover:glass border border-transparent hover:border-purple-500/30'
               }`}
             >
               <div className={`p-2 rounded-lg transition-all ${
@@ -625,15 +625,15 @@ function App() {
                         MCP Servers
                       </h2>
                       <p className="text-gray-400">Manage your Model Context Protocol servers</p>
-                    </div>
-                <button
+              </div>
+              <button
                       onClick={() => setShowAddServerModal(true)}
                       className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
-                >
+              >
                       <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
                       <span className="text-white font-medium">Add Server</span>
-                </button>
-              </div>
+              </button>
+            </div>
 
                   {/* Server cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -671,9 +671,9 @@ function App() {
                               {status?.pid && (
                                 <span className="text-[10px] text-gray-500">PID: {status.pid}</span>
                               )}
-                            </div>
-                          </div>
-                          <button
+              </div>
+              </div>
+              <button
                             onClick={(e) => {
                               e.stopPropagation();
                               setItemToDelete(name);
@@ -683,41 +683,41 @@ function App() {
                             data-tooltip="Delete server"
                           >
                             <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </div>
+              </button>
+            </div>
 
                         <div className="flex items-start mb-4">
                           <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
                             <Server className="w-6 h-6 text-purple-400" />
-                          </div>
-                        </div>
+          </div>
+        </div>
 
                         <h3 
                           className="text-xl font-bold text-white mb-2 transition-all cursor-pointer"
                           onClick={() => openServerDetail(name)}
                         >
                           {name}
-                        </h3>
+                  </h3>
                         
                         <div className="space-y-2 text-sm mb-4 flex-1">
                           <div className="flex items-center space-x-2">
                             <Code className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-400 font-mono text-xs truncate">{server.command}</span>
-                          </div>
+              </div>
                           {server.args && server.args.length > 0 && (
                             <div className="flex items-center space-x-1 ml-6">
                               <div className="px-2 py-1 bg-purple-500/10 rounded text-xs text-purple-400">
                                 {server.args.length} arg{server.args.length > 1 ? 's' : ''}
-                              </div>
-                            </div>
+              </div>
+              </div>
                           )}
-                        </div>
+            </div>
 
                         {/* Control buttons */}
                         <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
                           {isRunning ? (
                             <>
-                              <button
+                <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setLogsServerName(name);
@@ -728,8 +728,8 @@ function App() {
                               >
                                 <FileText className="w-4 h-4 text-blue-400" />
                                 <span className="text-xs text-blue-400">Logs</span>
-                              </button>
-                              <button
+                </button>
+                <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   restartMcpServer(name);
@@ -740,8 +740,8 @@ function App() {
                               >
                                 <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
                                 <span className="text-xs text-yellow-400">Restart</span>
-                              </button>
-                              <button
+                </button>
+                <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   stopMcpServer(name);
@@ -752,7 +752,7 @@ function App() {
                               >
                                 <Square className="w-4 h-4 text-red-400" />
                                 <span className="text-xs text-red-400">Stop</span>
-                              </button>
+                </button>
                             </>
                           ) : (
                             <>
@@ -767,7 +767,7 @@ function App() {
                                 <Play className={`w-4 h-4 text-white ${isLoading ? 'animate-pulse' : ''}`} />
                                 <span className="text-xs text-white font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
                               </button>
-                              <button
+              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openServerDetail(name);
@@ -775,10 +775,10 @@ function App() {
                                 className="glass hover:border-purple-500/50 border border-purple-500/20 px-3 py-2 rounded-lg flex items-center justify-center transition-all ripple-effect"
                               >
                                 <Edit2 className="w-4 h-4 text-purple-400" />
-                              </button>
+              </button>
                             </>
                           )}
-                        </div>
+            </div>
 
                         {/* Hover border effect - removed background glow for better text readability */}
                       </div>
@@ -805,7 +805,7 @@ function App() {
                 /* Server Detail View */
               <div>
                   <div className="flex items-center space-x-4 mb-8">
-              <button
+                <button
                   onClick={() => {
                         setMcpViewMode('list');
                         setSelectedServer(null);
@@ -814,7 +814,7 @@ function App() {
                       className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
                 >
                       <ArrowLeft className="w-6 h-6 text-purple-400" />
-              </button>
+                </button>
               <div>
                       <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
                         {selectedServer}
@@ -867,7 +867,7 @@ function App() {
                           placeholder='{\n  "KEY": "value"\n}'
                     />
                   </div>
-                  
+
                   {/* Server Logs Section */}
                   {selectedServer && mcpStatuses[selectedServer]?.running && (
                     <div className="mt-6 pt-6 border-t border-purple-500/20">
@@ -1060,8 +1060,8 @@ function App() {
                           <div className="flex items-center justify-between text-xs">
                             <span className="text-gray-500">Click to edit</span>
                             <Edit2 className="w-3 h-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                          </div>
-                        </div>
+              </div>
+          </div>
 
                         {/* Hover border effect - removed background glow for better text readability */}
               </div>
@@ -1081,7 +1081,7 @@ function App() {
                   </button>
                             </div>
                     )}
-                              </div>
+                            </div>
                               </div>
               ) : (
                 /* Command Detail View */
@@ -1101,8 +1101,8 @@ function App() {
                         {editingCommand?.name.replace(/\.md$/, '')}
                       </h2>
                       <p className="text-gray-400">Edit command content</p>
-                        </div>
-                </div>
+                              </div>
+                              </div>
 
                   <div className="glass border border-purple-500/20 rounded-2xl p-8">
                     <div className="space-y-6">
@@ -1118,30 +1118,30 @@ function App() {
               </div>
 
                       <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
-                          <button
-                        onClick={() => {
+                            <button
+                              onClick={() => {
                           setCommandViewMode('list');
                           setEditingCommand(null);
                         }}
                           className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
                         >
                           Cancel
-                          </button>
-                        <button
+                            </button>
+                            <button
                           onClick={saveCommandDetail}
                           className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
                         >
                           <Save className="w-4 h-4" />
                           <span>Save Changes</span>
                         </button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              )}
-                            </div>
-                          )}
+                              </div>
+                              </div>
                         </div>
+                      </div>
+                  )}
+                </div>
+                          )}
+              </div>
             </div>
 
       {/* Add Server Modal */}
@@ -1153,14 +1153,14 @@ function App() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Server Name</label>
-                    <input
-                      type="text"
+                <input
+                  type="text"
                   value={newServerForm.name}
                   onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
                   className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
                   placeholder="e.g., mcp-filesystem"
                 />
-                </div>
+              </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Command</label>
@@ -1171,8 +1171,8 @@ function App() {
                   className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
                   placeholder="e.g., npx"
                 />
-                    </div>
-
+                  </div>
+                  
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Arguments (comma-separated)</label>
                 <input
@@ -1182,7 +1182,7 @@ function App() {
                   className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
                   placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
                 />
-                    </div>
+                        </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Environment Variables (JSON)</label>
@@ -1193,11 +1193,11 @@ function App() {
                   rows={4}
                   placeholder='{"KEY": "value"}'
                 />
-                    </div>
-                  </div>
+              </div>
+            </div>
 
             <div className="flex justify-end space-x-4 mt-8">
-              <button
+                        <button
                 onClick={() => {
                   setShowAddServerModal(false);
                   setNewServerForm({ name: '', command: '', args: '', env: '' });
@@ -1205,16 +1205,16 @@ function App() {
                 className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
               >
                 Cancel
-              </button>
+                        </button>
                         <button
                 onClick={addNewServer}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
               >
                 Add Server
                         </button>
-                        </div>
-            </div>
-          </div>
+                      </div>
+                    </div>
+                  </div>
         )}
 
       {/* Add Command Modal */}
@@ -1226,14 +1226,14 @@ function App() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Command Name</label>
-                <input
-                  type="text"
+                    <input
+                      type="text"
                   value={newServerForm.name}
                   onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
                   className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
                   placeholder="e.g., deploy.md"
                 />
-              </div>
+                </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Command Content</label>
@@ -1244,11 +1244,11 @@ function App() {
                   rows={12}
                   placeholder="Enter your command script here..."
                 />
-              </div>
-            </div>
+                      </div>
+                    </div>
 
             <div className="flex justify-end space-x-4 mt-8">
-                    <button
+                        <button
                 onClick={() => {
                   setShowAddCommandModal(false);
                   setNewServerForm({ name: '', command: '', args: '', env: '' });
@@ -1256,17 +1256,17 @@ function App() {
                 className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
               >
                 Cancel
-                    </button>
-                  <button
+                        </button>
+                        <button
                 onClick={addNewCommand}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
                   >
                 Add Command
-                  </button>
-              </div>
+                        </button>
+                        </div>
             </div>
-              </div>
-      )}
+          </div>
+        )}
 
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
@@ -1275,14 +1275,14 @@ function App() {
             <div className="text-center">
               <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
                 <Trash2 className="w-8 h-8 text-red-400" />
-            </div>
+        </div>
               <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : 'Command'}?</h3>
               <p className="text-gray-400 mb-6">
                 Are you sure you want to delete <span className="text-white font-medium">{itemToDelete}</span>? This action cannot be undone.
               </p>
               
               <div className="flex justify-center space-x-4">
-                      <button
+              <button
                         onClick={() => {
                     setShowDeleteConfirm(false);
                     setItemToDelete(null);
@@ -1290,7 +1290,7 @@ function App() {
                   className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
                 >
                   Cancel
-                      </button>
+              </button>
                         <button
                           onClick={() => {
                     if (itemToDelete) {
@@ -1304,10 +1304,10 @@ function App() {
                   className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-pink-500 text-white font-medium hover:shadow-lg hover:shadow-red-500/50 transition-all ripple-effect pulse-ring"
                 >
                   Delete
-                        </button>
-                        </div>
-                    </div>
-          </div>
+                </button>
+              </div>
+              </div>
+            </div>
         </div>
       )}
 
@@ -1319,23 +1319,23 @@ function App() {
               <div className="flex items-center space-x-3">
                 <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center pulse-ring">
                   <FileText className="w-6 h-6 text-blue-400" />
-                </div>
+              </div>
                 <div>
                   <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
                     Server Logs
                   </h3>
                   <p className="text-gray-400 text-sm">{logsServerName}</p>
-                </div>
-              </div>
-              <button
-                onClick={() => {
+            </div>
+            </div>
+                      <button
+                        onClick={() => {
                   setShowLogsModal(false);
                   setLogsServerName(null);
                 }}
                 className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
               >
                 <X className="w-6 h-6 text-gray-400" />
-              </button>
+                      </button>
             </div>
             
             <div className="flex-1 overflow-hidden">
@@ -1343,16 +1343,16 @@ function App() {
             </div>
 
             <div className="flex justify-end pt-4 border-t border-blue-500/20 mt-4">
-              <button
-                onClick={() => {
+                        <button
+                          onClick={() => {
                   setShowLogsModal(false);
                   setLogsServerName(null);
                 }}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect"
               >
                 Close
-              </button>
-            </div>
+                        </button>
+                        </div>
           </div>
         </div>
       )}
