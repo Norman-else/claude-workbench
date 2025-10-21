@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code, Play, Square, RotateCw, Activity, FileText, CheckCircle2, Settings } from 'lucide-react';
+import { ThemeToggle } from './ThemeToggle';
 
 interface McpServer {
   command: string;
@@ -796,6 +797,11 @@ function App() {
             <RefreshCw className="w-4 h-4 text-purple-400 group-hover:rotate-180 transition-transform duration-500" />
             <span className="text-sm text-gray-300">Refresh Config</span>
                 </button>
+
+          {/* Theme toggle */}
+          <div className="mt-4">
+            <ThemeToggle />
+          </div>
         </nav>
 
         {/* Main content */}
