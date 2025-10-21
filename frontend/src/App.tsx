@@ -648,6 +648,18 @@ function App() {
     }
   };
 
+  const getDeleteItemDisplayName = (): string => {
+    if (!itemToDelete) return '';
+    
+    if (activeTab === 'env') {
+      // For environment profiles, get the profile name from the profiles list
+      const profile = envProfiles.find(p => p.id === itemToDelete);
+      return profile?.name || itemToDelete;
+    }
+    // For MCP servers and commands, itemToDelete is already the name
+    return itemToDelete;
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Animated background */}
@@ -1387,24 +1399,14 @@ function App() {
                     {commands.map((cmd) => (
                   <div 
                     key={cmd.name} 
-                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[280px] flex flex-col"
+                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
                         onClick={() => openCommandDetail(cmd.name)}
                       >
                         {/* Status indicator */}
-                        <div className="absolute top-4 right-4 flex items-center space-x-2">
+                        <div className="flex items-center space-x-2 mb-4">
                           <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                              setItemToDelete(cmd.name);
-                              setShowDeleteConfirm(true);
-                        }}
-                            className="p-2 rounded-lg hover:bg-red-500/20 transition-colors ripple-effect tooltip"
-                            data-tooltip="Delete command"
-                      >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                      </button>
-                    </div>
+                          <span className="text-xs font-medium text-blue-400">Command</span>
+                        </div>
 
                         <div className="flex items-start mb-4">
                           <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
@@ -1412,20 +1414,39 @@ function App() {
                           </div>
                     </div>
 
-                        <h3 className="text-xl font-bold text-white mb-2 transition-all">
+                        <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">
                           {cmd.name.replace(/\.md$/, '')}
                         </h3>
                         
-                        <p className="text-sm text-gray-400 line-clamp-3 mb-4 font-mono flex-1">
-                          {cmd.content.substring(0, 100)}...
-                        </p>
+                        <div className="space-y-2 text-sm mb-4 flex-1">
+                          <p className="text-gray-400 line-clamp-3 font-mono text-xs">
+                            {cmd.content.substring(0, 100)}...
+                          </p>
+                        </div>
 
-                        <div className="mt-auto pt-4 border-t border-purple-500/20">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="text-gray-500">Click to edit</span>
-                            <Edit2 className="w-3 h-3 text-purple-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-              </div>
-          </div>
+                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openCommandDetail(cmd.name);
+                            }}
+                            className="flex-1 glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                          >
+                            <Edit2 className="w-4 h-4 text-purple-400" />
+                            <span className="text-xs text-white font-medium">Edit</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setItemToDelete(cmd.name);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                            data-tooltip="Delete command"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
 
                         {/* Hover border effect - removed background glow for better text readability */}
               </div>
@@ -1762,7 +1783,7 @@ function App() {
         </div>
               <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : 'Command'}?</h3>
               <p className="text-gray-400 mb-6">
-                Are you sure you want to delete <span className="text-white font-medium">{itemToDelete}</span>? This action cannot be undone.
+                Are you sure you want to delete <span className="text-white font-medium">{getDeleteItemDisplayName()}</span>? This action cannot be undone.
               </p>
               
               <div className="flex justify-center space-x-4">
