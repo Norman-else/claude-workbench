@@ -27,6 +27,7 @@ app.use(bodyParser.json());
 const HOME_DIR = os.homedir();
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
+const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 
 // Platform-specific configuration
 const IS_WINDOWS = os.platform() === 'win32';
@@ -528,6 +529,325 @@ app.delete('/api/commands/:name', async (req, res) => {
     const filePath = path.join(CLAUDE_COMMANDS_DIR, name);
     await fs.unlink(filePath);
     res.json({ success: true, message: 'Command deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// Environment Profiles API
+// ============================================
+
+// Helper: Read profiles from disk
+async function readProfiles() {
+  try {
+    await ensureFileExists(CLAUDE_PROFILES_PATH, JSON.stringify({ profiles: [], activeProfileId: null }, null, 2));
+    const content = await fs.readFile(CLAUDE_PROFILES_PATH, 'utf-8');
+    return JSON.parse(content);
+  } catch (error) {
+    return { profiles: [], activeProfileId: null };
+  }
+}
+
+// Helper: Write profiles to disk
+async function writeProfiles(data) {
+  const profileDir = path.dirname(CLAUDE_PROFILES_PATH);
+  await fs.mkdir(profileDir, { recursive: true });
+  await fs.writeFile(CLAUDE_PROFILES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+// Helper: Get current active profile ID from environment
+async function getCurrentActiveProfileId() {
+  try {
+    // Read from current environment variable
+    const profileId = process.env.ANTHROPIC_PROFILE_ID;
+    if (profileId) return profileId;
+
+    // Read from shell config file
+    if (IS_WINDOWS) {
+      let profilePath;
+      try {
+        const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+        profilePath = stdout.trim();
+      } catch {
+        const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+        profilePath = stdout.trim();
+      }
+      
+      const content = await fs.readFile(profilePath, 'utf-8');
+      const match = content.match(/\$env:ANTHROPIC_PROFILE_ID\s*=\s*"([^"]+)"/);
+      if (match) return match[1];
+    } else {
+      const configPath = await getEnvConfigPath();
+      const content = await fs.readFile(configPath, 'utf-8');
+      const match = content.match(/export ANTHROPIC_PROFILE_ID="([^"]+)"/);
+      if (match) return match[1];
+    }
+  } catch (error) {
+    console.error('Failed to get active profile ID:', error);
+  }
+  return null;
+}
+
+// Get all environment profiles
+app.get('/api/env-profiles', async (req, res) => {
+  try {
+    const data = await readProfiles();
+    const activeProfileId = await getCurrentActiveProfileId();
+    
+    res.json({
+      profiles: data.profiles || [],
+      activeProfileId: activeProfileId || data.activeProfileId
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new environment profile
+app.post('/api/env-profiles', async (req, res) => {
+  try {
+    const { name, baseUrl, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
+    
+    if (!name) {
+      return res.status(400).json({ error: 'Profile name is required' });
+    }
+    
+    const data = await readProfiles();
+    
+    // Check for duplicate names
+    if (data.profiles.some(p => p.name === name)) {
+      return res.status(400).json({ error: 'Profile name already exists' });
+    }
+    
+    // Generate unique ID
+    const id = crypto.randomUUID();
+    
+    const newProfile = {
+      id,
+      name,
+      baseUrl: baseUrl || '',
+      authToken: authToken || '',
+      haikuModel: haikuModel || '',
+      opusModel: opusModel || '',
+      sonnetModel: sonnetModel || '',
+      smallFastModel: smallFastModel || '',
+      createdAt: new Date().toISOString()
+    };
+    
+    data.profiles.push(newProfile);
+    await writeProfiles(data);
+    
+    res.json({ success: true, profile: newProfile, message: 'Profile created successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Update an environment profile
+app.put('/api/env-profiles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { name, baseUrl, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
+    
+    const data = await readProfiles();
+    const profileIndex = data.profiles.findIndex(p => p.id === id);
+    
+    if (profileIndex === -1) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    // Check for duplicate names (excluding current profile)
+    if (name && data.profiles.some((p, idx) => p.name === name && idx !== profileIndex)) {
+      return res.status(400).json({ error: 'Profile name already exists' });
+    }
+    
+    // Update profile
+    data.profiles[profileIndex] = {
+      ...data.profiles[profileIndex],
+      name: name || data.profiles[profileIndex].name,
+      baseUrl: baseUrl !== undefined ? baseUrl : data.profiles[profileIndex].baseUrl,
+      authToken: authToken !== undefined ? authToken : data.profiles[profileIndex].authToken,
+      haikuModel: haikuModel !== undefined ? haikuModel : data.profiles[profileIndex].haikuModel,
+      opusModel: opusModel !== undefined ? opusModel : data.profiles[profileIndex].opusModel,
+      sonnetModel: sonnetModel !== undefined ? sonnetModel : data.profiles[profileIndex].sonnetModel,
+      smallFastModel: smallFastModel !== undefined ? smallFastModel : data.profiles[profileIndex].smallFastModel,
+      updatedAt: new Date().toISOString()
+    };
+    
+    await writeProfiles(data);
+    
+    res.json({ success: true, profile: data.profiles[profileIndex], message: 'Profile updated successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete an environment profile
+app.delete('/api/env-profiles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await readProfiles();
+    
+    const profileIndex = data.profiles.findIndex(p => p.id === id);
+    if (profileIndex === -1) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    // Don't allow deleting the active profile
+    const activeProfileId = await getCurrentActiveProfileId();
+    if (activeProfileId === id) {
+      return res.status(400).json({ error: 'Cannot delete the active profile. Please activate another profile first.' });
+    }
+    
+    data.profiles.splice(profileIndex, 1);
+    await writeProfiles(data);
+    
+    res.json({ success: true, message: 'Profile deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Activate an environment profile (apply to system)
+app.post('/api/env-profiles/:id/activate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await readProfiles();
+    
+    const profile = data.profiles.find(p => p.id === id);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    // Apply environment variables to system
+    if (IS_WINDOWS) {
+      // Windows: Write to PowerShell Profile
+      try {
+        let profilePath;
+        try {
+          const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        } catch {
+          const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        }
+        
+        const profileDir = path.dirname(profilePath);
+        await fs.mkdir(profileDir, { recursive: true });
+        await ensureFileExists(profilePath, '');
+        
+        let profileContent = await fs.readFile(profilePath, 'utf-8');
+        
+        // Remove old environment variable settings
+        const varsToRemove = [
+          'ANTHROPIC_BASE_URL',
+          'ANTHROPIC_API_KEY',
+          'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+          'ANTHROPIC_DEFAULT_OPUS_MODEL',
+          'ANTHROPIC_DEFAULT_SONNET_MODEL',
+          'ANTHROPIC_PROFILE_ID'
+        ];
+        
+        for (const varName of varsToRemove) {
+          const regex = new RegExp(`^\\$env:${varName}\\s*=.*$`, 'gm');
+          profileContent = profileContent.replace(regex, '');
+        }
+        
+        profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
+        profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
+        
+        // Add new environment variables
+        const newVars = [
+          '',
+          '# Claude Code Environment Variables - START',
+          `$env:ANTHROPIC_PROFILE_ID = "${id}"`,
+          `$env:ANTHROPIC_BASE_URL = "${profile.baseUrl}"`,
+          `$env:ANTHROPIC_API_KEY = "${profile.authToken}"`,
+          profile.haikuModel ? `$env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "${profile.haikuModel}"` : '',
+          profile.opusModel ? `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = "${profile.opusModel}"` : '',
+          profile.sonnetModel ? `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = "${profile.sonnetModel}"` : '',
+          profile.smallFastModel ? `$env:ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = "${profile.smallFastModel}"` : '',
+          '# Claude Code Environment Variables - END',
+          ''
+        ].filter(line => line !== '').join('\n');
+        
+        profileContent = profileContent + '\n' + newVars;
+        await fs.writeFile(profilePath, profileContent, 'utf-8');
+        
+        // Hot reload
+        await reloadEnvFromProfile();
+        
+        // Update active profile in data
+        data.activeProfileId = id;
+        await writeProfiles(data);
+        
+        res.json({
+          success: true,
+          message: `Profile "${profile.name}" activated and reloaded!`,
+          profilePath,
+          hotReloaded: true
+        });
+      } catch (error) {
+        console.error('Failed to activate profile:', error);
+        res.status(500).json({ error: error.message });
+      }
+    } else {
+      // Unix: Write to shell config file
+      const configPath = await getEnvConfigPath();
+      await ensureFileExists(configPath, '');
+      let content = await fs.readFile(configPath, 'utf-8');
+      let lines = content.split('\n');
+      
+      const startMarker = '# Claude Code & Codex Environment Variables';
+      const endMarker = '# End Claude Code & Codex Environment Variables';
+      
+      let startIndex = lines.findIndex(line => line.includes(startMarker));
+      let endIndex = lines.findIndex(line => line.includes(endMarker));
+      
+      if (startIndex !== -1 && endIndex !== -1) {
+        lines.splice(startIndex, endIndex - startIndex + 1);
+      }
+      
+      const newSection = [
+        '',
+        startMarker,
+        `export ANTHROPIC_PROFILE_ID="${id}"`,
+        `export ANTHROPIC_BASE_URL="${profile.baseUrl}"`,
+        `export ANTHROPIC_API_KEY="${profile.authToken}"`,
+      ];
+      
+      if (profile.haikuModel) {
+        newSection.push(`export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"`);
+      }
+      if (profile.opusModel) {
+        newSection.push(`export ANTHROPIC_DEFAULT_OPUS_MODEL="${profile.opusModel}"`);
+      }
+      if (profile.sonnetModel) {
+        newSection.push(`export ANTHROPIC_DEFAULT_SONNET_MODEL="${profile.sonnetModel}"`);
+      }
+      if (profile.smallFastModel) {
+        newSection.push(`export ANTHROPIC_DEFAULT_SMALL_FAST_MODEL="${profile.smallFastModel}"`);
+      }
+      
+      newSection.push(endMarker);
+      lines.push(...newSection);
+      await fs.writeFile(configPath, lines.join('\n'));
+      
+      // Hot reload
+      await reloadEnvFromProfile();
+      
+      // Update active profile in data
+      data.activeProfileId = id;
+      await writeProfiles(data);
+      
+      res.json({
+        success: true,
+        message: `Profile "${profile.name}" activated and reloaded!`,
+        configPath,
+        hotReloaded: true
+      });
+    }
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

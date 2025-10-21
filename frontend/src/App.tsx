@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code, Play, Square, RotateCw, Activity, FileText } from 'lucide-react';
+import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code, Play, Square, RotateCw, Activity, FileText, CheckCircle2, Settings } from 'lucide-react';
 
 interface McpServer {
   command: string;
@@ -22,6 +22,19 @@ interface McpStatus {
   pid?: number;
   startTime?: string;
   error?: string;
+}
+
+interface EnvProfile {
+  id: string;
+  name: string;
+  baseUrl: string;
+  authToken: string;
+  haikuModel: string;
+  opusModel: string;
+  sonnetModel: string;
+  smallFastModel: string;
+  createdAt: string;
+  updatedAt?: string;
 }
 
 type ViewMode = 'list' | 'detail';
@@ -102,19 +115,20 @@ function ServerLogs({ serverName }: { serverName: string }) {
 function App() {
   const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands'>('mcp');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
-  const [envVars, setEnvVars] = useState({ 
-    baseUrl: '', 
-    authToken: '', 
-    haikuModel: '', 
-    opusModel: '', 
-    sonnetModel: '' 
-  });
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   
   // MCP Status Management
   const [mcpStatuses, setMcpStatuses] = useState<Record<string, McpStatus>>({});
   const [isLoadingStatus, setIsLoadingStatus] = useState<Record<string, boolean>>({});
+  
+  // Environment Profiles Management
+  const [envProfiles, setEnvProfiles] = useState<EnvProfile[]>([]);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
+  const [envViewMode, setEnvViewMode] = useState<ViewMode>('list');
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
+  const [editingProfile, setEditingProfile] = useState<EnvProfile | null>(null);
+  const [showAddProfileModal, setShowAddProfileModal] = useState(false);
   
   // View mode state
   const [mcpViewMode, setMcpViewMode] = useState<ViewMode>('list');
@@ -137,6 +151,15 @@ function App() {
     command: '',
     args: '',
     env: ''
+  });
+  const [newProfileForm, setNewProfileForm] = useState({
+    name: '',
+    baseUrl: '',
+    authToken: '',
+    haikuModel: '',
+    opusModel: '',
+    sonnetModel: '',
+    smallFastModel: ''
   });
   
   // Notification state
@@ -189,17 +212,12 @@ function App() {
         setClaudeConfig(config);
       }
       
-      // Load env vars
-      const envRes = await fetch('/api/env-vars');
-      if (envRes.ok) {
-        const data = await envRes.json();
-        setEnvVars({
-          baseUrl: data.baseUrl || '',
-          authToken: data.authToken || '',
-          haikuModel: data.haikuModel || '',
-          opusModel: data.opusModel || '',
-          sonnetModel: data.sonnetModel || ''
-        });
+      // Load environment profiles
+      const profilesRes = await fetch('/api/env-profiles');
+      if (profilesRes.ok) {
+        const data = await profilesRes.json();
+        setEnvProfiles(data.profiles || []);
+        setActiveProfileId(data.activeProfileId || null);
       }
       
       // Load commands
@@ -211,25 +229,6 @@ function App() {
     } catch (error) {
       console.error('Failed to load config:', error);
       showNotification('Failed to load configuration', 'error');
-    }
-  };
-
-  const saveEnvVars = async () => {
-    try {
-      const response = await fetch('/api/env-vars', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(envVars),
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        showNotification(data.message || 'Environment variables saved!');
-        } else {
-        throw new Error('Failed to save');
-      }
-    } catch (error) {
-      showNotification('Failed to save environment variables', 'error');
     }
   };
 
@@ -321,6 +320,107 @@ function App() {
     }).then(res => {
       if (res.ok) showNotification('Server deleted successfully!');
     });
+  };
+
+  // Environment Profile functions
+  const openProfileDetail = (profileId: string) => {
+    const profile = envProfiles.find(p => p.id === profileId);
+    if (profile) {
+      setSelectedProfileId(profileId);
+      setEditingProfile({ ...profile });
+      setEnvViewMode('detail');
+    }
+  };
+
+  const saveProfileDetail = async () => {
+    if (!editingProfile) return;
+    
+    try {
+      const response = await fetch(`/api/env-profiles/${editingProfile.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingProfile),
+      });
+
+      if (response.ok) {
+        showNotification('Profile updated successfully!');
+        await loadConfig();
+        setEnvViewMode('list');
+        setEditingProfile(null);
+        setSelectedProfileId(null);
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to save profile', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to save profile', 'error');
+    }
+  };
+
+  const addNewProfile = async () => {
+    if (!newProfileForm.name) {
+      showNotification('Please fill in profile name', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/env-profiles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newProfileForm),
+      });
+
+      if (response.ok) {
+        showNotification('Profile added successfully!');
+        await loadConfig();
+        setShowAddProfileModal(false);
+        setNewProfileForm({ name: '', baseUrl: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to add profile', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to add profile', 'error');
+    }
+  };
+
+  const deleteProfile = async (profileId: string) => {
+    try {
+      const response = await fetch(`/api/env-profiles/${profileId}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        showNotification('Profile deleted successfully!');
+        await loadConfig();
+        setShowDeleteConfirm(false);
+        setItemToDelete(null);
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to delete profile', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to delete profile', 'error');
+    }
+  };
+
+  const activateProfile = async (profileId: string) => {
+    try {
+      const response = await fetch(`/api/env-profiles/${profileId}/activate`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        showNotification(data.message || 'Profile activated successfully!');
+        await loadConfig();
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to activate profile', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to activate profile', 'error');
+    }
   };
 
   // Command functions
@@ -645,114 +745,99 @@ function App() {
                       return (
                       <div
                         key={name}
-                        className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col"
+                        className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col card-hover cursor-pointer"
                       >
-                        {/* Status indicator */}
-                        <div className="absolute top-4 right-4 flex items-center space-x-2">
-                          <div className="flex items-center space-x-1.5">
-                            <div className={`w-2 h-2 rounded-full ${
-                              isRunning ? 'bg-green-400 animate-pulse' : 
-                              status?.status === 'stopping' ? 'bg-yellow-400 animate-pulse' :
-                              status?.status === 'error' ? 'bg-red-400 animate-pulse' :
-                              'bg-gray-500'
-                            }`}></div>
-                            <div className="flex flex-col items-start">
-                              <span className={`text-xs font-medium leading-tight ${
-                                isRunning ? 'text-green-400' : 
-                                status?.status === 'stopping' ? 'text-yellow-400' :
-                                status?.status === 'error' ? 'text-red-400' :
-                                'text-gray-500'
-                              }`}>
-                                {isRunning ? 'Running' : 
-                                 status?.status === 'stopping' ? 'Stopping' :
-                                 status?.status === 'error' ? 'Error' :
-                                 'Stopped'}
-                              </span>
-                              {status?.pid && (
-                                <span className="text-[10px] text-gray-500">PID: {status.pid}</span>
-                              )}
-              </div>
-              </div>
-              <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setItemToDelete(name);
-                              setShowDeleteConfirm(true);
-                            }}
-                            className="p-2 rounded-lg hover:bg-red-500/20 transition-colors ripple-effect tooltip"
-                            data-tooltip="Delete server"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-              </button>
-            </div>
+                        {/* Status indicator - improved display */}
+                        <div className="mb-4 flex items-center space-x-2">
+                          <div className={`w-2 h-2 rounded-full ${
+                            isRunning ? 'bg-green-400 animate-pulse' : 
+                            status?.status === 'stopping' ? 'bg-yellow-400 animate-pulse' :
+                            status?.status === 'error' ? 'bg-red-400 animate-pulse' :
+                            'bg-gray-500'
+                          }`}></div>
+                          <span className={`text-xs font-medium ${
+                            isRunning ? 'text-green-400' : 
+                            status?.status === 'stopping' ? 'text-yellow-400' :
+                            status?.status === 'error' ? 'text-red-400' :
+                            'text-gray-500'
+                          }`}>
+                            {isRunning ? 'Running' : 
+                             status?.status === 'stopping' ? 'Stopping' :
+                             status?.status === 'error' ? 'Error' :
+                             'Stopped'}
+                          </span>
+                          {status?.pid && (
+                            <span className="text-[10px] text-gray-500 ml-1">PID: {status.pid}</span>
+                          )}
+                        </div>
 
                         <div className="flex items-start mb-4">
                           <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
                             <Server className="w-6 h-6 text-purple-400" />
-          </div>
-        </div>
+                          </div>
+                        </div>
 
                         <h3 
                           className="text-xl font-bold text-white mb-2 transition-all cursor-pointer"
                           onClick={() => openServerDetail(name)}
                         >
                           {name}
-                  </h3>
+                        </h3>
                         
                         <div className="space-y-2 text-sm mb-4 flex-1">
                           <div className="flex items-center space-x-2">
                             <Code className="w-4 h-4 text-gray-500" />
                             <span className="text-gray-400 font-mono text-xs truncate">{server.command}</span>
-              </div>
+                          </div>
                           {server.args && server.args.length > 0 && (
                             <div className="flex items-center space-x-1 ml-6">
                               <div className="px-2 py-1 bg-purple-500/10 rounded text-xs text-purple-400">
                                 {server.args.length} arg{server.args.length > 1 ? 's' : ''}
-              </div>
-              </div>
+                              </div>
+                            </div>
                           )}
-            </div>
+                        </div>
 
                         {/* Control buttons */}
                         <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
                           {isRunning ? (
                             <>
-                <button
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setLogsServerName(name);
                                   setShowLogsModal(true);
                                 }}
-                                className="flex-1 glass hover:border-blue-500/50 border border-blue-500/20 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect tooltip"
+                                className="flex-1 glass hover:border-blue-500/50 border border-blue-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs"
                                 data-tooltip="View logs"
                               >
                                 <FileText className="w-4 h-4 text-blue-400" />
-                                <span className="text-xs text-blue-400">Logs</span>
-                </button>
-                <button
+                                <span className="text-blue-400 hidden sm:inline">Logs</span>
+                              </button>
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   restartMcpServer(name);
                                 }}
                                 disabled={isLoading}
-                                className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect tooltip disabled:opacity-50"
+                                className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
                                 data-tooltip="Restart server"
                               >
                                 <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span className="text-xs text-yellow-400">Restart</span>
-                </button>
-                <button
+                                <span className="text-yellow-400 hidden sm:inline">Restart</span>
+                              </button>
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   stopMcpServer(name);
                                 }}
                                 disabled={isLoading}
-                                className="flex-1 glass hover:border-red-500/50 border border-red-500/20 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect tooltip disabled:opacity-50"
+                                className="flex-1 glass hover:border-red-500/50 border border-red-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
                                 data-tooltip="Stop server"
                               >
                                 <Square className="w-4 h-4 text-red-400" />
-                                <span className="text-xs text-red-400">Stop</span>
-                </button>
+                                <span className="text-red-400 hidden sm:inline">Stop</span>
+                              </button>
                             </>
                           ) : (
                             <>
@@ -762,23 +847,35 @@ function App() {
                                   startMcpServer(name);
                                 }}
                                 disabled={isLoading}
-                                className="flex-1 bg-gradient-to-r from-green-500 to-emerald-500 hover:from-green-600 hover:to-emerald-600 px-3 py-2 rounded-lg flex items-center justify-center space-x-1 transition-all ripple-effect neon-glow disabled:opacity-50"
+                                className="flex-1 bg-gradient-to-r from-green-500/20 to-emerald-500/20 hover:from-green-500/30 hover:to-emerald-500/30 border border-green-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect text-xs"
                               >
-                                <Play className={`w-4 h-4 text-white ${isLoading ? 'animate-pulse' : ''}`} />
-                                <span className="text-xs text-white font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
+                                <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
+                                <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
                               </button>
-              <button
+                              <button
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   openServerDetail(name);
                                 }}
-                                className="glass hover:border-purple-500/50 border border-purple-500/20 px-3 py-2 rounded-lg flex items-center justify-center transition-all ripple-effect"
+                                className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all tooltip"
+                                data-tooltip="Edit server"
                               >
                                 <Edit2 className="w-4 h-4 text-purple-400" />
-              </button>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToDelete(name);
+                                  setShowDeleteConfirm(true);
+                                }}
+                                className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                                data-tooltip="Delete server"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
                             </>
                           )}
-            </div>
+                        </div>
 
                         {/* Hover border effect - removed background glow for better text readability */}
                       </div>
@@ -903,96 +1000,274 @@ function App() {
 
           {/* Environment Tab */}
         {activeTab === 'env' && (
-            <div className="p-8">
-              <div className="mb-8">
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
-                  Environment Variables
-                </h2>
-                <p className="text-gray-400">Configure your API credentials and settings</p>
-            </div>
-
-              <div className="glass border border-purple-500/20 rounded-2xl p-8">
-                <div className="space-y-6">
+          <div className="p-8">
+            {envViewMode === 'list' ? (
               <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
-                <input
-                  type="text"
-                  value={envVars.baseUrl}
-                  onChange={(e) => setEnvVars({ ...envVars, baseUrl: e.target.value })}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="https://api.anthropic.com"
-                />
-              </div>
-
-              <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
-                <div className="relative">
-                  <input
-                        type={showApiKey ? 'text' : 'password'}
-                    value={envVars.authToken}
-                    onChange={(e) => setEnvVars({ ...envVars, authToken: e.target.value })}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
-                    placeholder="sk-ant-..."
-                  />
+                {/* Header */}
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                      Environment Profiles
+                    </h2>
+                    <p className="text-gray-400">Manage your API credential profiles</p>
+                  </div>
                   <button
-                    onClick={() => setShowApiKey(!showApiKey)}
-                        className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                      >
-                        {showApiKey ? (
-                          <EyeOff className="w-4 h-4 text-gray-400" />
-                        ) : (
-                          <Eye className="w-4 h-4 text-gray-400" />
-                        )}
+                    onClick={() => setShowAddProfileModal(true)}
+                    className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
+                  >
+                    <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                    <span className="text-white font-medium">Add Profile</span>
                   </button>
                 </div>
-              </div>
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                  <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model</label>
-                    <input
-                      type="text"
-                      value={envVars.haikuModel}
-                      onChange={(e) => setEnvVars({ ...envVars, haikuModel: e.target.value })}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                        placeholder="claude-3-5-haiku-..."
-                    />
-                  </div>
+                {/* Profile cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {envProfiles.map((profile) => {
+                    const isActive = profile.id === activeProfileId;
+                    return (
+                      <div 
+                        key={profile.id} 
+                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
+                        onClick={() => openProfileDetail(profile.id)}
+                      >
+                        {/* Active indicator */}
+                        {isActive && (
+                          <div className="absolute top-4 right-4 flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/50">
+                            <CheckCircle2 className="w-4 h-4 text-green-400" />
+                            <span className="text-xs text-green-400 font-medium">Active</span>
+                          </div>
+                        )}
 
-                  <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model</label>
-                    <input
-                      type="text"
-                      value={envVars.opusModel}
-                      onChange={(e) => setEnvVars({ ...envVars, opusModel: e.target.value })}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                        placeholder="claude-3-opus-..."
-                    />
-                  </div>
+                        <div className="flex items-start mb-4">
+                          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
+                            <Settings className="w-6 h-6 text-purple-400" />
+                          </div>
+                        </div>
 
-                  <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model</label>
-                    <input
-                      type="text"
-                      value={envVars.sonnetModel}
-                      onChange={(e) => setEnvVars({ ...envVars, sonnetModel: e.target.value })}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                        placeholder="claude-3-5-sonnet-..."
-                    />
+                        <h3 className="text-xl font-bold text-white mb-2">
+                          {profile.name}
+                        </h3>
+                        
+                        <div className="space-y-2 text-sm mb-4 flex-1">
+                          <div className="flex items-center space-x-2">
+                            <Terminal className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-400 font-mono text-xs truncate">
+                              {profile.baseUrl || 'No base URL'}
+                            </span>
+                          </div>
+                          {profile.authToken && (
+                            <div className="flex items-center space-x-1 ml-6">
+                              <div className="px-2 py-1 bg-green-500/10 rounded text-xs text-green-400">
+                                API Key Configured
+                              </div>
+                            </div>
+                          )}
+                          <div className="text-xs text-gray-500 mt-2">
+                            Created: {new Date(profile.createdAt).toLocaleDateString()}
+                          </div>
+                        </div>
+
+                        {/* Control buttons */}
+                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                          {!isActive ? (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  activateProfile(profile.id);
+                                }}
+                                className="flex-1 glass hover:border-green-500/50 border border-green-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-green-500/20 bg-gradient-to-r from-green-500/10 to-emerald-500/10"
+                              >
+                                <Play className="w-4 h-4 text-green-400" />
+                                <span className="text-xs text-white font-medium">Activate</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openProfileDetail(profile.id);
+                                }}
+                                className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
+                              >
+                                <Edit2 className="w-4 h-4 text-purple-400" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setItemToDelete(profile.id);
+                                  setShowDeleteConfirm(true);
+                                }}
+                                className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                                data-tooltip="Delete profile"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </>
+                          ) : (
+                            <div className="w-full text-center">
+                              <div className="px-4 py-2 bg-green-500/10 rounded-xl border border-green-500/20">
+                                <span className="text-xs text-green-400 font-medium">Currently Active Profile</span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
 
-                  <div className="flex justify-end pt-6 border-t border-purple-500/20">
+                {/* Empty state */}
+                {envProfiles.length === 0 && (
+                  <div className="text-center py-16">
+                    <Settings className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 mb-4">No environment profiles configured yet</p>
                     <button
-                      onClick={saveEnvVars}
-                      className="px-8 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2 ripple-effect pulse-ring neon-glow"
+                      onClick={() => setShowAddProfileModal(true)}
+                      className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
                     >
-                      <Save className="w-5 h-5" />
-                      <span>Save Environment Variables</span>
+                      <Plus className="w-5 h-5 text-purple-400" />
+                      <span className="text-white font-medium">Add Your First Profile</span>
                     </button>
                   </div>
+                )}
               </div>
-            </div>
+            ) : (
+              /* Profile Detail View */
+              <div>
+                <div className="flex items-center space-x-4 mb-8">
+                  <button
+                    onClick={() => {
+                      setEnvViewMode('list');
+                      setEditingProfile(null);
+                      setSelectedProfileId(null);
+                    }}
+                    className="p-3 rounded-xl glass hover:border-purple-500/50 border border-purple-500/20 transition-all ripple-effect neon-glow"
+                  >
+                    <ArrowLeft className="w-6 h-6 text-purple-400" />
+                  </button>
+                  <div>
+                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                      {editingProfile?.name}
+                    </h2>
+                    <p className="text-gray-400">Edit profile configuration</p>
+                  </div>
+                </div>
+
+                <div className="glass border border-purple-500/20 rounded-2xl p-8">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
+                      <input
+                        type="text"
+                        value={editingProfile?.name || ''}
+                        onChange={(e) => setEditingProfile(prev => prev ? { ...prev, name: e.target.value } : null)}
+                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                        placeholder="e.g., Production, Development"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
+                      <input
+                        type="text"
+                        value={editingProfile?.baseUrl || ''}
+                        onChange={(e) => setEditingProfile(prev => prev ? { ...prev, baseUrl: e.target.value } : null)}
+                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                        placeholder="https://api.anthropic.com"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
+                      <div className="relative">
+                        <input
+                          type={showApiKey ? 'text' : 'password'}
+                          value={editingProfile?.authToken || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, authToken: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
+                          placeholder="sk-ant-..."
+                        />
+                        <button
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <Eye className="w-4 h-4 text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model</label>
+                        <input
+                          type="text"
+                          value={editingProfile?.haikuModel || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, haikuModel: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                          placeholder="claude-3-5-haiku-..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model</label>
+                        <input
+                          type="text"
+                          value={editingProfile?.opusModel || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, opusModel: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                          placeholder="claude-3-opus-..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model</label>
+                        <input
+                          type="text"
+                          value={editingProfile?.sonnetModel || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, sonnetModel: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                          placeholder="claude-3-5-sonnet-..."
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Small Fast Model</label>
+                        <input
+                          type="text"
+                          value={editingProfile?.smallFastModel || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, smallFastModel: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                          placeholder="claude-3-5-haiku-..."
+                        />
+                      </div>
+                    </div>
+
+                    <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                      <button
+                        onClick={() => {
+                          setEnvViewMode('list');
+                          setEditingProfile(null);
+                          setSelectedProfileId(null);
+                        }}
+                        className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveProfileDetail}
+                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Save Changes</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -1268,6 +1543,126 @@ function App() {
           </div>
         )}
 
+      {/* Add Profile Modal */}
+      {showAddProfileModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Environment Profile</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
+                <input
+                  type="text"
+                  value={newProfileForm.name}
+                  onChange={(e) => setNewProfileForm({ ...newProfileForm, name: e.target.value })}
+                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  placeholder="e.g., Production, Development, Testing"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
+                <input
+                  type="text"
+                  value={newProfileForm.baseUrl}
+                  onChange={(e) => setNewProfileForm({ ...newProfileForm, baseUrl: e.target.value })}
+                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  placeholder="https://api.anthropic.com"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={newProfileForm.authToken}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, authToken: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
+                    placeholder="sk-ant-..."
+                  />
+                  <button
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                  >
+                    {showApiKey ? (
+                      <EyeOff className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model (Optional)</label>
+                  <input
+                    type="text"
+                    value={newProfileForm.haikuModel}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, haikuModel: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="claude-3-5-haiku-..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model (Optional)</label>
+                  <input
+                    type="text"
+                    value={newProfileForm.opusModel}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, opusModel: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="claude-3-opus-..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model (Optional)</label>
+                  <input
+                    type="text"
+                    value={newProfileForm.sonnetModel}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, sonnetModel: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="claude-3-5-sonnet-..."
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Small Fast Model (Optional)</label>
+                  <input
+                    type="text"
+                    value={newProfileForm.smallFastModel}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, smallFastModel: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="claude-3-5-haiku-..."
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-4 mt-8">
+              <button
+                onClick={() => {
+                  setShowAddProfileModal(false);
+                  setNewProfileForm({ name: '', baseUrl: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
+                }}
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addNewProfile}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+              >
+                Add Profile
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
@@ -1276,7 +1671,7 @@ function App() {
               <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
                 <Trash2 className="w-8 h-8 text-red-400" />
         </div>
-              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : 'Command'}?</h3>
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : 'Command'}?</h3>
               <p className="text-gray-400 mb-6">
                 Are you sure you want to delete <span className="text-white font-medium">{itemToDelete}</span>? This action cannot be undone.
               </p>
@@ -1296,6 +1691,8 @@ function App() {
                     if (itemToDelete) {
                       if (activeTab === 'mcp') {
                         deleteServer(itemToDelete);
+                      } else if (activeTab === 'env') {
+                        deleteProfile(itemToDelete);
                       } else {
                         deleteCommand(itemToDelete);
                       }
