@@ -527,9 +527,9 @@ function App() {
                 </div>
                 <div>
                 <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-                  Claude
+                  Claude Code
                 </h1>
-                <p className="text-xs text-gray-400">Workbench v2.0</p>
+                <p className="text-xs text-gray-400">Workbench</p>
                 </div>
               </div>
               </div>
