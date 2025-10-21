@@ -142,6 +142,8 @@ function App() {
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [logsServerName, setLogsServerName] = useState<string | null>(null);
+  const [showImportJsonModal, setShowImportJsonModal] = useState(false);
+  const [importJsonContent, setImportJsonContent] = useState('');
   
   // Editing state
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
@@ -587,6 +589,65 @@ function App() {
     }
   };
 
+  const importMcpConfigFromJson = () => {
+    if (!importJsonContent.trim()) {
+      showNotification('Please enter JSON content', 'error');
+      return;
+    }
+
+    try {
+      const importedServers = JSON.parse(importJsonContent);
+      
+      // Validate that it's an object with server configurations
+      if (typeof importedServers !== 'object' || importedServers === null) {
+        throw new Error('JSON must be an object');
+      }
+
+      // Validate each server entry
+      const validatedServers: Record<string, McpServer> = {};
+      for (const [name, serverConfig] of Object.entries(importedServers)) {
+        if (typeof serverConfig !== 'object' || serverConfig === null) {
+          throw new Error(`Server "${name}" must be a valid object`);
+        }
+        
+        const server = serverConfig as any;
+        if (!server.command || typeof server.command !== 'string') {
+          throw new Error(`Server "${name}" must have a valid "command" field`);
+        }
+
+        validatedServers[name] = {
+          command: server.command,
+          args: Array.isArray(server.args) ? server.args : [],
+          env: typeof server.env === 'object' && server.env !== null ? server.env : {}
+        };
+      }
+
+      // Merge with existing servers or replace
+      const newConfig = {
+        ...claudeConfig,
+        mcpServers: {
+          ...claudeConfig.mcpServers,
+          ...validatedServers
+        }
+      };
+
+      setClaudeConfig(newConfig);
+      setShowImportJsonModal(false);
+      setImportJsonContent('');
+
+      // Auto-save
+      fetch('/api/claude-config', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newConfig),
+      }).then(res => {
+        if (res.ok) showNotification(`Successfully imported ${Object.keys(validatedServers).length} server(s)!`);
+      });
+    } catch (error) {
+      showNotification(`Invalid JSON format: ${error instanceof Error ? error.message : 'Unable to parse JSON'}`, 'error');
+    }
+  };
+
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Animated background */}
@@ -740,13 +801,22 @@ function App() {
                       </h2>
                       <p className="text-gray-400">Manage your Model Context Protocol servers</p>
               </div>
-              <button
+              <div className="flex space-x-4">
+                <button
                       onClick={() => setShowAddServerModal(true)}
                       className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
               >
                       <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
                       <span className="text-white font-medium">Add Server</span>
               </button>
+              <button
+                      onClick={() => setShowImportJsonModal(true)}
+                      className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect"
+              >
+                      <Code className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
+                      <span className="text-white font-medium">Import JSON</span>
+              </button>
+            </div>
             </div>
 
                   {/* Server cards */}
@@ -1491,7 +1561,7 @@ function App() {
             </div>
 
             <div className="flex justify-end space-x-4 mt-8">
-                        <button
+              <button
                 onClick={() => {
                   setShowAddServerModal(false);
                   setNewServerForm({ name: '', command: '', args: '', env: '' });
@@ -1499,16 +1569,16 @@ function App() {
                 className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
               >
                 Cancel
-                        </button>
-                        <button
+              </button>
+              <button
                 onClick={addNewServer}
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
               >
                 Add Server
-                        </button>
-                      </div>
-                    </div>
-                  </div>
+              </button>
+            </div>
+            </div>
+          </div>
         )}
 
       {/* Add Command Modal */}
@@ -1560,7 +1630,7 @@ function App() {
                         </div>
             </div>
           </div>
-        )}
+      )}
 
       {/* Add Profile Modal */}
       {showAddProfileModal && (
@@ -1769,6 +1839,58 @@ function App() {
                 Close
                         </button>
                         </div>
+          </div>
+        </div>
+      )}
+
+      {/* Import MCP Config from JSON Modal */}
+      {showImportJsonModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
+            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-6">Import MCP Servers from JSON</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">MCP Configuration (JSON)</label>
+                <textarea
+                  value={importJsonContent}
+                  onChange={(e) => setImportJsonContent(e.target.value)}
+                  className="w-full glass border border-blue-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-blue-500/50 focus:outline-none transition-all input-focus"
+                  rows={10}
+                  placeholder={`{
+  "server-name-1": {
+    "command": "npx",
+    "args": ["-y", "@modelcontextprotocol/server-filesystem"],
+    "env": {}
+  },
+  "server-name-2": {
+    "command": "node",
+    "args": ["path/to/server.js"],
+    "env": {"DEBUG": "true"}
+  }
+}`}
+                />
+                <p className="text-xs text-gray-500 mt-2">Each server must have a "command" field. "args" and "env" are optional.</p>
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-4 mt-8">
+              <button
+                onClick={() => {
+                  setShowImportJsonModal(false);
+                  setImportJsonContent('');
+                }}
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={importMcpConfigFromJson}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect neon-glow"
+              >
+                Import
+              </button>
+            </div>
           </div>
         </div>
       )}
