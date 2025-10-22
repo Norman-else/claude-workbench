@@ -853,6 +853,98 @@ app.post('/api/env-profiles/:id/activate', async (req, res) => {
   }
 });
 
+// Deactivate an environment profile (remove from system)
+app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await readProfiles();
+    
+    const profile = data.profiles.find(p => p.id === id);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+    
+    // Remove environment variables from system
+    if (IS_WINDOWS) {
+      // Windows: Remove from PowerShell Profile
+      try {
+        let profilePath;
+        try {
+          const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        } catch {
+          const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        }
+        
+        let profileContent = await fs.readFile(profilePath, 'utf-8');
+        
+        // Remove Claude Code environment variables section
+        profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
+        
+        // Clean up multiple blank lines
+        profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
+        
+        await fs.writeFile(profilePath, profileContent, 'utf-8');
+        
+        // Hot reload
+        await reloadEnvFromProfile();
+        
+        // Update active profile in data
+        data.activeProfileId = null;
+        await writeProfiles(data);
+        
+        res.json({
+          success: true,
+          message: `Profile "${profile.name}" deactivated!`,
+          profilePath,
+          hotReloaded: true
+        });
+      } catch (error) {
+        console.error('Failed to deactivate profile:', error);
+        res.status(500).json({ error: error.message });
+      }
+    } else {
+      // Unix: Remove from shell config file
+      const configPath = await getEnvConfigPath();
+      let content = await fs.readFile(configPath, 'utf-8');
+      let lines = content.split('\n');
+      
+      const startMarker = '# Claude Code & Codex Environment Variables';
+      const endMarker = '# End Claude Code & Codex Environment Variables';
+      
+      let startIndex = lines.findIndex(line => line.includes(startMarker));
+      let endIndex = lines.findIndex(line => line.includes(endMarker));
+      
+      // Remove the section if it exists
+      if (startIndex !== -1 && endIndex !== -1) {
+        lines.splice(startIndex, endIndex - startIndex + 1);
+      }
+      
+      // Clean up multiple blank lines
+      const cleanedLines = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+      
+      await fs.writeFile(configPath, cleanedLines);
+      
+      // Hot reload
+      await reloadEnvFromProfile();
+      
+      // Update active profile in data
+      data.activeProfileId = null;
+      await writeProfiles(data);
+      
+      res.json({
+        success: true,
+        message: `Profile "${profile.name}" deactivated!`,
+        configPath,
+        hotReloaded: true
+      });
+    }
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Helper function to expand path placeholders (cross-platform)
 function expandPath(inputPath) {
   let expandedPath = inputPath;

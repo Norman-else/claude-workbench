@@ -127,7 +127,6 @@ function App() {
   const [envProfiles, setEnvProfiles] = useState<EnvProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [envViewMode, setEnvViewMode] = useState<ViewMode>('list');
-  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [editingProfile, setEditingProfile] = useState<EnvProfile | null>(null);
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
   
@@ -343,7 +342,6 @@ function App() {
   const openProfileDetail = (profileId: string) => {
     const profile = envProfiles.find(p => p.id === profileId);
     if (profile) {
-      setSelectedProfileId(profileId);
       setEditingProfile({ ...profile });
       setEnvViewMode('detail');
     }
@@ -364,7 +362,6 @@ function App() {
         await loadConfig();
         setEnvViewMode('list');
         setEditingProfile(null);
-        setSelectedProfileId(null);
       } else {
         const data = await response.json();
         showNotification(data.error || 'Failed to save profile', 'error');
@@ -437,6 +434,25 @@ function App() {
       }
     } catch (error) {
       showNotification('Failed to activate profile', 'error');
+    }
+  };
+
+  const deactivateProfile = async (profileId: string) => {
+    try {
+      const response = await fetch(`/api/env-profiles/${profileId}/deactivate`, {
+        method: 'POST',
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        showNotification(data.message || 'Profile deactivated successfully!');
+        await loadConfig();
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to deactivate profile', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to deactivate profile', 'error');
     }
   };
 
@@ -1225,11 +1241,27 @@ function App() {
                               </button>
                             </>
                           ) : (
-                            <div className="w-full text-center">
-                              <div className="px-4 py-2 bg-green-500/10 rounded-xl border border-green-500/20">
-                                <span className="text-xs text-green-400 font-medium">Currently Active Profile</span>
-                              </div>
-                            </div>
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  deactivateProfile(profile.id);
+                                }}
+                                className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-yellow-500/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/10"
+                              >
+                                <Square className="w-4 h-4 text-yellow-400" />
+                                <span className="text-xs text-white font-medium">Deactivate</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openProfileDetail(profile.id);
+                                }}
+                                className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
+                              >
+                                <Edit2 className="w-4 h-4 text-purple-400" />
+                              </button>
+                            </>
                           )}
                         </div>
                       </div>
@@ -1260,7 +1292,6 @@ function App() {
                     onClick={() => {
                       setEnvViewMode('list');
                       setEditingProfile(null);
-                      setSelectedProfileId(null);
                     }}
                     className="p-3 rounded-xl glass hover:border-purple-500/50 border border-purple-500/20 transition-all ripple-effect neon-glow"
                   >
@@ -1372,7 +1403,6 @@ function App() {
                         onClick={() => {
                           setEnvViewMode('list');
                           setEditingProfile(null);
-                          setSelectedProfileId(null);
                         }}
                         className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
                       >
