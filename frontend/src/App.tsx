@@ -144,7 +144,6 @@ function App() {
   const [logsServerName, setLogsServerName] = useState<string | null>(null);
   const [showImportJsonModal, setShowImportJsonModal] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState('');
-  const [showMcpJsonModal, setShowMcpJsonModal] = useState(false);
   
   // Editing state
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
@@ -1052,26 +1051,17 @@ function App() {
                       </h2>
                       <p className="text-gray-400">Edit server configuration</p>
               </div>
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => {
-                    const serverJson = JSON.stringify({ [selectedServer as string]: editingServer }, null, 2);
-                    navigator.clipboard.writeText(serverJson);
-                    showNotification('MCP configuration copied to clipboard!');
-                  }}
-                  className="p-2 glass hover:border-blue-500/50 border border-blue-500/20 rounded-lg transition-all tooltip"
-                  data-tooltip="Copy JSON"
-                >
-                  <Copy className="w-5 h-5 text-blue-400" />
-                </button>
-                <button
-                  onClick={() => setShowMcpJsonModal(true)}
-                  className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-lg transition-all tooltip"
-                  data-tooltip="View JSON"
-                >
-                  <Code className="w-5 h-5 text-cyan-400" />
-                </button>
-              </div>
+              <button
+                onClick={() => {
+                  const serverJson = JSON.stringify({ [selectedServer as string]: editingServer }, null, 2);
+                  navigator.clipboard.writeText(serverJson);
+                  showNotification('MCP configuration copied to clipboard!');
+                }}
+                className="p-2 glass hover:border-blue-500/50 border border-blue-500/20 rounded-lg transition-all tooltip"
+                data-tooltip="Copy JSON"
+              >
+                <Copy className="w-5 h-5 text-blue-400" />
+              </button>
             </div>
 
                   <div className="glass border border-purple-500/20 rounded-2xl p-8">
@@ -1988,64 +1978,6 @@ function App() {
         </div>
       )}
 
-      {/* View MCP Server JSON Modal */}
-      {showMcpJsonModal && selectedServer && editingServer && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="border border-cyan-500/30 rounded-2xl overflow-hidden max-w-3xl w-full max-h-[85vh] animate-slide-up shadow-2xl shadow-cyan-500/20 neon-glow flex flex-col bg-white dark:bg-gray-950">
-            {/* Header */}
-            <div className="flex items-center justify-between p-6 border-b border-cyan-500/20 bg-white/95 dark:bg-gray-900">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-cyan-500/20 rounded-full flex items-center justify-center pulse-ring">
-                  <Code className="w-6 h-6 text-cyan-400" />
-                </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-cyan-400 to-blue-400">
-                    {selectedServer} Configuration
-                  </h3>
-                  <p className="text-gray-500 dark:text-gray-400 text-sm">Complete MCP Server JSON</p>
-                </div>
-              </div>
-              <button
-                onClick={() => setShowMcpJsonModal(false)}
-                className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-600 dark:text-gray-400" />
-              </button>
-            </div>
-            
-            {/* JSON Content */}
-            <div className="flex-1 overflow-hidden flex flex-col p-6 bg-gray-50 dark:bg-gray-950">
-              <div className="relative flex-1 flex flex-col">
-                <div className="absolute top-3 right-3 z-10">
-                  <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(JSON.stringify({ [selectedServer as string]: editingServer }, null, 2));
-                      showNotification('JSON copied to clipboard!');
-                    }}
-                    className="p-2 rounded-lg bg-cyan-600/30 hover:bg-cyan-600/50 border border-cyan-500/60 transition-all tooltip dark:border-cyan-500/60"
-                    data-tooltip="Copy JSON"
-                  >
-                    <Copy className="w-4 h-4 text-cyan-600 dark:text-cyan-300" />
-                  </button>
-                </div>
-                <pre className="rounded-lg p-5 bg-white dark:bg-gray-950 text-gray-900 dark:text-gray-100 font-mono text-sm overflow-auto flex-1 scrollbar scrollbar-thumb-gray-400 dark:scrollbar-thumb-cyan-500/60 scrollbar-track-gray-200 dark:scrollbar-track-gray-800/50 border border-gray-300 dark:border-cyan-500/20 shadow-inner">
-                  {JSON.stringify({ [selectedServer]: editingServer }, null, 2)}
-                </pre>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <div className="flex justify-end space-x-4 p-6 border-t border-cyan-500/20 bg-white/95 dark:bg-gray-900">
-              <button
-                onClick={() => setShowMcpJsonModal(false)}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-cyan-500/50 transition-all ripple-effect"
-              >
-                Close
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
