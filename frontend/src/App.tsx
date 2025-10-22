@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code, Play, Square, RotateCw, Activity, FileText, CheckCircle2, Settings, Copy } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 
@@ -774,23 +774,71 @@ function App() {
     return itemToDelete;
   };
 
+  // Generate starlight configuration once and keep it stable
+  const starlights = useMemo(() => {
+    return [...Array(30)].map((_, i) => {
+      const size = Math.random() < 0.7 ? 2 + Math.random() * 3 : 4 + Math.random() * 4;
+      const isLarge = size > 5;
+      return {
+        id: i,
+        size,
+        isLarge,
+        top: Math.random() * 100,
+        left: Math.random() * 100,
+        duration1: 2 + Math.random() * 3,
+        duration2: 2 + Math.random() * 3,
+        delay1: Math.random() * 5,
+        delay2: Math.random() * 5
+      };
+    });
+  }, []); // Empty dependency array means this only runs once
+
+  // Generate particle configuration once and keep it stable
+  const particles = useMemo(() => {
+    return [...Array(20)].map((_, i) => ({
+      id: i,
+      left: Math.random() * 100,
+      top: Math.random() * 100,
+      delay: Math.random() * 6,
+      duration: 6 + Math.random() * 4
+    }));
+  }, []);
+
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Animated background */}
       <div className="fixed inset-0 grid-bg opacity-30"></div>
       <div className="fixed inset-0 scan-lines opacity-20"></div>
       
+      {/* Starlight twinkle effect */}
+      <div className="starlights">
+        {starlights.map((star) => (
+          <div
+            key={star.id}
+            className={`starlight ${star.isLarge ? 'large' : ''}`}
+            style={{
+              top: `${star.top}%`,
+              left: `${star.left}%`,
+              width: `${star.size}px`,
+              height: `${star.size}px`,
+              animationDuration: `${star.duration1}s, ${star.duration2}s`,
+              animationDelay: `${star.delay1}s, ${star.delay2}s`
+            }}
+          />
+        ))}
+      </div>
+      
       {/* Particle background */}
       <div className="particles">
-        {[...Array(20)].map((_, i) => (
+        {particles.map((particle) => (
           <div
-            key={i}
+            key={particle.id}
             className="particle"
             style={{
-              left: `${Math.random() * 100}%`,
-              top: `${Math.random() * 100}%`,
-              animationDelay: `${Math.random() * 6}s`,
-              animationDuration: `${6 + Math.random() * 4}s`
+              left: `${particle.left}%`,
+              top: `${particle.top}%`,
+              animationDelay: `${particle.delay}s`,
+              animationDuration: `${particle.duration}s`
             }}
           />
         ))}
