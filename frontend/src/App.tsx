@@ -122,6 +122,7 @@ function App() {
   // MCP Status Management
   const [mcpStatuses, setMcpStatuses] = useState<Record<string, McpStatus>>({});
   const [isLoadingStatus, setIsLoadingStatus] = useState<Record<string, boolean>>({});
+  const [isRefreshingConfig, setIsRefreshingConfig] = useState(false);
   
   // Environment Profiles Management
   const [envProfiles, setEnvProfiles] = useState<EnvProfile[]>([]);
@@ -144,9 +145,17 @@ function App() {
   const [logsServerName, setLogsServerName] = useState<string | null>(null);
   const [showImportJsonModal, setShowImportJsonModal] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState('');
+  const [showRefreshModal, setShowRefreshModal] = useState(false);
+  const [refreshProgress, setRefreshProgress] = useState<{
+    mcpConfig: 'pending' | 'loading' | 'done' | 'error';
+    envProfiles: 'pending' | 'loading' | 'done' | 'error';
+    commands: 'pending' | 'loading' | 'done' | 'error';
+  }>({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending' });
   
   // Editing state
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
+  const [editingServerArgsInput, setEditingServerArgsInput] = useState('');
+  const [editingServerEnvInput, setEditingServerEnvInput] = useState('');
   const [editingCommand, setEditingCommand] = useState<{ name: string; content: string } | null>(null);
   const [newServerForm, setNewServerForm] = useState({
     name: '',
@@ -205,50 +214,121 @@ function App() {
     }, 3000);
   };
 
-  const loadConfig = async () => {
+  const loadConfig = async (showProgress = false) => {
+    setIsRefreshingConfig(true);
+    
+    if (showProgress) {
+      setShowRefreshModal(true);
+      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending' });
+    }
+    
     try {
       // Load Claude config
+      if (showProgress) setRefreshProgress(prev => ({ ...prev, mcpConfig: 'loading' }));
       const configRes = await fetch('/api/claude-config');
       if (configRes.ok) {
         const config = await configRes.json();
         setClaudeConfig(config);
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, mcpConfig: 'done' }));
+      } else {
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, mcpConfig: 'error' }));
       }
       
       // Load environment profiles
+      if (showProgress) setRefreshProgress(prev => ({ ...prev, envProfiles: 'loading' }));
       const profilesRes = await fetch('/api/env-profiles');
       if (profilesRes.ok) {
         const data = await profilesRes.json();
         setEnvProfiles(data.profiles || []);
         setActiveProfileId(data.activeProfileId || null);
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, envProfiles: 'done' }));
+      } else {
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, envProfiles: 'error' }));
       }
       
       // Load commands
+      if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'loading' }));
       const cmdRes = await fetch('/api/commands');
       if (cmdRes.ok) {
         const data = await cmdRes.json();
         setCommands(data);
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'done' }));
+      } else {
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'error' }));
+      }
+      
+      if (showProgress) {
+        // Auto close modal after 1.5 seconds if all successful
+        setTimeout(() => {
+          setShowRefreshModal(false);
+        }, 1500);
       }
     } catch (error) {
       console.error('Failed to load config:', error);
       showNotification('Failed to load configuration', 'error');
+      if (showProgress) {
+        setTimeout(() => {
+          setShowRefreshModal(false);
+        }, 2000);
+      }
+    } finally {
+      setIsRefreshingConfig(false);
     }
   };
 
   // MCP Server functions
   const openServerDetail = (serverName: string) => {
     setSelectedServer(serverName);
-    setEditingServer(claudeConfig.mcpServers?.[serverName] || { command: '', args: [], env: {} });
+    const server = claudeConfig.mcpServers?.[serverName] || { command: '', args: [], env: {} };
+    setEditingServer(server);
+    setEditingServerArgsInput(server.args?.join(', ') || '');
+    setEditingServerEnvInput(JSON.stringify(server.env || {}, null, 2));
     setMcpViewMode('detail');
   };
 
   const saveServerDetail = () => {
     if (!selectedServer || !editingServer) return;
     
+    // Validate and parse args from input string
+    let argsArray: string[] = [];
+    
+    if (editingServerArgsInput.trim() !== '') {
+      argsArray = editingServerArgsInput.split(',').map(a => a.trim()).filter(a => a !== '');
+      
+      // Check if any argument is empty after trimming
+      const hasInvalidArgs = editingServerArgsInput.split(',').some(a => a.trim() === '');
+      if (hasInvalidArgs) {
+        showNotification('Arguments cannot contain empty values. Please remove extra commas.', 'error');
+        return;
+      }
+    }
+    
+    // Validate and parse environment variables JSON
+    let envObject: Record<string, string> = {};
+    
+    if (editingServerEnvInput.trim() !== '') {
+      try {
+        envObject = JSON.parse(editingServerEnvInput);
+        if (typeof envObject !== 'object' || envObject === null || Array.isArray(envObject)) {
+          throw new Error('Environment variables must be a valid JSON object');
+        }
+      } catch (error) {
+        showNotification(`Invalid JSON format: ${error instanceof Error ? error.message : 'Unable to parse JSON'}`, 'error');
+        return;
+      }
+    }
+    
+    const cleanedServer = {
+      ...editingServer,
+      args: argsArray,
+      env: envObject
+    };
+    
     const newConfig = {
       ...claudeConfig,
       mcpServers: {
         ...claudeConfig.mcpServers,
-        [selectedServer]: editingServer
+        [selectedServer]: cleanedServer
       }
     };
     
@@ -256,6 +336,8 @@ function App() {
     setMcpViewMode('list');
     setSelectedServer(null);
     setEditingServer(null);
+    setEditingServerArgsInput('');
+    setEditingServerEnvInput('');
     
     // Auto-save
     fetch('/api/claude-config', {
@@ -821,12 +903,13 @@ function App() {
 
           {/* Refresh button */}
                 <button
-            onClick={loadConfig}
-            className="mt-auto w-full glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 ripple-effect group tooltip"
-            data-tooltip="Reload configuration from disk"
+            onClick={() => loadConfig(true)}
+            disabled={isRefreshingConfig}
+            className="mt-auto w-full glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 ripple-effect group tooltip disabled:opacity-50 disabled:cursor-not-allowed"
+            data-tooltip={isRefreshingConfig ? "Refreshing..." : "Reload configuration from disk"}
                 >
-            <RefreshCw className="w-4 h-4 text-purple-400 group-hover:rotate-180 transition-transform duration-500" />
-            <span className="text-sm text-gray-300">Refresh Config</span>
+            <RefreshCw className={`w-4 h-4 text-purple-400 transition-transform duration-500 ${isRefreshingConfig ? 'animate-spin' : 'group-hover:rotate-180'}`} />
+            <span className="text-sm text-gray-300">{isRefreshingConfig ? 'Refreshing...' : 'Refresh Config'}</span>
                 </button>
 
           {/* Theme toggle */}
@@ -1064,6 +1147,8 @@ function App() {
                         setMcpViewMode('list');
                         setSelectedServer(null);
                         setEditingServer(null);
+                        setEditingServerArgsInput('');
+                        setEditingServerEnvInput('');
                   }}
                       className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
                 >
@@ -1094,11 +1179,8 @@ function App() {
                         <label className="block text-sm font-medium text-gray-300 mb-2">Arguments (comma-separated)</label>
                     <input
                       type="text"
-                          value={editingServer?.args?.join(', ') || ''}
-                          onChange={(e) => setEditingServer(prev => prev ? { 
-                            ...prev, 
-                            args: e.target.value.split(',').map(a => a.trim()).filter(a => a)
-                          } : null)}
+                          value={editingServerArgsInput}
+                          onChange={(e) => setEditingServerArgsInput(e.target.value)}
                           className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
                           placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
                         />
@@ -1107,24 +1189,13 @@ function App() {
                   <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">Environment Variables (JSON)</label>
                     <textarea
-                      value={JSON.stringify(editingServer?.env || {}, null, 2)}
-                      onChange={(e) => {
-                        try {
-                          const env = JSON.parse(e.target.value);
-                          if (typeof env !== 'object' || env === null) {
-                            throw new Error('Must be a valid JSON object');
-                          }
-                          setEditingServer(prev => prev ? { ...prev, env } : null);
-                        } catch (err) {
-                          // Show error but keep the input editable so user can fix it
-                          console.error('Invalid JSON:', err);
-                        }
-                      }}
+                      value={editingServerEnvInput}
+                      onChange={(e) => setEditingServerEnvInput(e.target.value)}
                       className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
                       rows={6}
                       placeholder='{\n  "KEY": "value"\n}'
                     />
-                    <p className="text-xs text-gray-500 mt-1">Enter a valid JSON object. Updates will only save when JSON is valid.</p>
+                    <p className="text-xs text-gray-500 mt-1">Enter a valid JSON object. Validation will occur when you save.</p>
                   </div>
 
                   {/* Server Logs Section */}
@@ -1140,6 +1211,8 @@ function App() {
                             setMcpViewMode('list');
                             setSelectedServer(null);
                             setEditingServer(null);
+                            setEditingServerArgsInput('');
+                            setEditingServerEnvInput('');
                           }}
                           className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
               >
@@ -1986,6 +2059,137 @@ function App() {
               >
                 Import
               </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Refresh Progress Modal */}
+      {showRefreshModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+            <div className="text-center mb-6">
+              <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
+                <RefreshCw className="w-8 h-8 text-purple-400 animate-spin" />
+              </div>
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                Refreshing Configuration
+              </h3>
+              <p className="text-gray-400 text-sm">Loading configuration from disk...</p>
+            </div>
+
+            <div className="space-y-4">
+              {/* MCP Config Progress */}
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  {refreshProgress.mcpConfig === 'pending' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                  )}
+                  {refreshProgress.mcpConfig === 'loading' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                  )}
+                  {refreshProgress.mcpConfig === 'done' && (
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  {refreshProgress.mcpConfig === 'error' && (
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <X className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className={`text-sm font-medium ${
+                    refreshProgress.mcpConfig === 'done' ? 'text-green-400' : 
+                    refreshProgress.mcpConfig === 'error' ? 'text-red-400' :
+                    refreshProgress.mcpConfig === 'loading' ? 'text-purple-400' :
+                    'text-gray-400'
+                  }`}>
+                    MCP Servers Configuration
+                  </div>
+                </div>
+              </div>
+
+              {/* Environment Profiles Progress */}
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  {refreshProgress.envProfiles === 'pending' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                  )}
+                  {refreshProgress.envProfiles === 'loading' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                  )}
+                  {refreshProgress.envProfiles === 'done' && (
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  {refreshProgress.envProfiles === 'error' && (
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <X className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className={`text-sm font-medium ${
+                    refreshProgress.envProfiles === 'done' ? 'text-green-400' : 
+                    refreshProgress.envProfiles === 'error' ? 'text-red-400' :
+                    refreshProgress.envProfiles === 'loading' ? 'text-purple-400' :
+                    'text-gray-400'
+                  }`}>
+                    Environment Profiles
+                  </div>
+                </div>
+              </div>
+
+              {/* Commands Progress */}
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  {refreshProgress.commands === 'pending' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                  )}
+                  {refreshProgress.commands === 'loading' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                  )}
+                  {refreshProgress.commands === 'done' && (
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  {refreshProgress.commands === 'error' && (
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <X className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className={`text-sm font-medium ${
+                    refreshProgress.commands === 'done' ? 'text-green-400' : 
+                    refreshProgress.commands === 'error' ? 'text-red-400' :
+                    refreshProgress.commands === 'loading' ? 'text-purple-400' :
+                    'text-gray-400'
+                  }`}>
+                    Custom Commands
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Progress bar */}
+            <div className="mt-6">
+              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div 
+                  className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out"
+                  style={{
+                    width: `${
+                      ((refreshProgress.mcpConfig === 'done' || refreshProgress.mcpConfig === 'error' ? 1 : 0) +
+                       (refreshProgress.envProfiles === 'done' || refreshProgress.envProfiles === 'error' ? 1 : 0) +
+                       (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0)) / 3 * 100
+                    }%`
+                  }}
+                ></div>
+              </div>
             </div>
           </div>
         </div>
