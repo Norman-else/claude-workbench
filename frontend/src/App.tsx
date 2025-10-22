@@ -971,6 +971,18 @@ function App() {
                                 <Square className="w-4 h-4 text-red-400" />
                                 <span className="text-red-400 hidden sm:inline">Stop</span>
                               </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const serverJson = JSON.stringify({ [name]: server }, null, 2);
+                                  navigator.clipboard.writeText(serverJson);
+                                  showNotification('MCP configuration copied to clipboard!');
+                                }}
+                                className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
+                                data-tooltip="Copy JSON"
+                              >
+                                <Copy className="w-4 h-4 text-cyan-400" />
+                              </button>
                             </>
                           ) : (
                             <>
@@ -984,6 +996,18 @@ function App() {
                               >
                                 <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
                                 <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const serverJson = JSON.stringify({ [name]: server }, null, 2);
+                                  navigator.clipboard.writeText(serverJson);
+                                  showNotification('MCP configuration copied to clipboard!');
+                                }}
+                                className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
+                                data-tooltip="Copy JSON"
+                              >
+                                <Copy className="w-4 h-4 text-cyan-400" />
                               </button>
                               <button
                                 onClick={(e) => {
@@ -1051,17 +1075,6 @@ function App() {
                       </h2>
                       <p className="text-gray-400">Edit server configuration</p>
               </div>
-              <button
-                onClick={() => {
-                  const serverJson = JSON.stringify({ [selectedServer as string]: editingServer }, null, 2);
-                  navigator.clipboard.writeText(serverJson);
-                  showNotification('MCP configuration copied to clipboard!');
-                }}
-                className="p-2 glass hover:border-blue-500/50 border border-blue-500/20 rounded-lg transition-all tooltip"
-                data-tooltip="Copy JSON"
-              >
-                <Copy className="w-5 h-5 text-blue-400" />
-              </button>
             </div>
 
                   <div className="glass border border-purple-500/20 rounded-2xl p-8">
