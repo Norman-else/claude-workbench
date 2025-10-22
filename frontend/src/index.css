@@ -850,12 +850,6 @@ html[data-theme="light"] .card-hover:hover {
   border-color: rgb(203, 213, 225) !important;
 }
 
-/* 浅色模式下的 glass 元素在 hover 时的效果 */
-html[data-theme="light"] .glass:hover {
-  background: rgba(241, 245, 249, 0.8) !important;
-  border-color: rgb(203, 213, 225) !important;
-}
-
 /* 浅色模式下的 gradient-border hover 效果 */
 html[data-theme="light"] .gradient-border:hover::before {
   opacity: 0.1 !important;
