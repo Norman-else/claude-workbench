@@ -437,8 +437,8 @@ app.post('/api/env-vars', async (req, res) => {
       let lines = content.split('\n');
       
       // Find the section markers
-      const startMarker = '# Claude Code & Codex Environment Variables';
-      const endMarker = '# End Claude Code & Codex Environment Variables';
+      const startMarker = '# Claude Code Environment Variables - START';
+      const endMarker = '# Claude Code Environment Variables - END';
       
       let startIndex = lines.findIndex(line => line.includes(startMarker));
       let endIndex = lines.findIndex(line => line.includes(endMarker));
@@ -559,11 +559,8 @@ async function writeProfiles(data) {
 // Helper: Get current active profile ID from environment
 async function getCurrentActiveProfileId() {
   try {
-    // Read from current environment variable
-    const profileId = process.env.ANTHROPIC_PROFILE_ID;
-    if (profileId) return profileId;
-
-    // Read from shell config file
+    // Always read from shell config file (source of truth)
+    // Never rely on process.env to avoid caching issues
     if (IS_WINDOWS) {
       let profilePath;
       try {
@@ -593,11 +590,13 @@ async function getCurrentActiveProfileId() {
 app.get('/api/env-profiles', async (req, res) => {
   try {
     const data = await readProfiles();
+    // IMPORTANT: Always trust the system config file (shell profile) as source of truth
+    // If ANTHROPIC_PROFILE_ID is not in the shell config, it means no profile is active
     const activeProfileId = await getCurrentActiveProfileId();
     
     res.json({
       profiles: data.profiles || [],
-      activeProfileId: activeProfileId || data.activeProfileId
+      activeProfileId: activeProfileId  // Return exactly what getCurrentActiveProfileId returns (or null)
     });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -799,8 +798,8 @@ app.post('/api/env-profiles/:id/activate', async (req, res) => {
       let content = await fs.readFile(configPath, 'utf-8');
       let lines = content.split('\n');
       
-      const startMarker = '# Claude Code & Codex Environment Variables';
-      const endMarker = '# End Claude Code & Codex Environment Variables';
+      const startMarker = '# Claude Code Environment Variables - START';
+      const endMarker = '# Claude Code Environment Variables - END';
       
       let startIndex = lines.findIndex(line => line.includes(startMarker));
       let endIndex = lines.findIndex(line => line.includes(endMarker));
@@ -910,8 +909,8 @@ app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
       let content = await fs.readFile(configPath, 'utf-8');
       let lines = content.split('\n');
       
-      const startMarker = '# Claude Code & Codex Environment Variables';
-      const endMarker = '# End Claude Code & Codex Environment Variables';
+      const startMarker = '# Claude Code Environment Variables - START';
+      const endMarker = '# Claude Code Environment Variables - END';
       
       let startIndex = lines.findIndex(line => line.includes(startMarker));
       let endIndex = lines.findIndex(line => line.includes(endMarker));
