@@ -1031,13 +1031,38 @@ app.post('/api/mcp/:name/start', async (req, res) => {
     
     addLog(serverName, 'info', `Starting MCP server: ${serverName}`);
     addLog(serverName, 'info', `Command: ${command} ${args.join(' ')}`);
+    addLog(serverName, 'info', `Environment variables: ${Object.keys(env).join(', ') || 'none'}`);
 
-    // Spawn process
-    const childProcess = spawn(command, args, {
-      env: { ...process.env, ...env },
-      shell: IS_WINDOWS,
-      stdio: ['pipe', 'pipe', 'pipe']
-    });
+    let childProcess;
+    let startError = null;
+
+    try {
+      // Spawn process
+      childProcess = spawn(command, args, {
+        env: { ...process.env, ...env },
+        shell: IS_WINDOWS,
+        stdio: ['pipe', 'pipe', 'pipe']
+      });
+    } catch (spawnError) {
+      startError = spawnError;
+      addLog(serverName, 'error', `Failed to spawn process: ${spawnError.message}`);
+      
+      // Store process info with error
+      mcpProcesses.set(serverName, {
+        process: null,
+        pid: null,
+        status: 'error',
+        startTime: new Date().toISOString(),
+        command,
+        args,
+        error: spawnError.message
+      });
+
+      return res.status(500).json({ 
+        error: `Failed to start server: ${spawnError.message}`,
+        details: spawnError.message
+      });
+    }
 
     const processInfo = {
       process: childProcess,
@@ -1045,7 +1070,8 @@ app.post('/api/mcp/:name/start', async (req, res) => {
       status: 'running',
       startTime: new Date().toISOString(),
       command,
-      args
+      args,
+      keepAliveInterval: null  // Track keep-alive timer
     };
 
     mcpProcesses.set(serverName, processInfo);
@@ -1076,28 +1102,84 @@ app.post('/api/mcp/:name/start', async (req, res) => {
         info.status = 'stopped';
         info.exitCode = code;
         info.exitSignal = signal;
+        
+        // Clear keep-alive timer when process exits
+        if (info.keepAliveInterval) {
+          clearInterval(info.keepAliveInterval);
+          info.keepAliveInterval = null;
+        }
       }
     });
 
-    // Handle errors
+    // Handle errors - IMPORTANT: This is different from spawn errors
     childProcess.on('error', (error) => {
       addLog(serverName, 'error', `Process error: ${error.message}`);
       if (mcpProcesses.has(serverName)) {
         const info = mcpProcesses.get(serverName);
         info.status = 'error';
         info.error = error.message;
+        
+        // Clear keep-alive timer on error
+        if (info.keepAliveInterval) {
+          clearInterval(info.keepAliveInterval);
+          info.keepAliveInterval = null;
+        }
       }
     });
+
+    // Handle close event
+    childProcess.on('close', (code, signal) => {
+      if (code !== 0 || code === null) {
+        addLog(serverName, 'warn', `Process closed with code ${code} and signal ${signal}`);
+      }
+    });
+
+    // Important: Keep stdin open to prevent MCP server from exiting
+    // Many MCP implementations exit when stdin is closed
+    // We keep stdin open by not closing it and occasionally writing to it
+    childProcess.stdin.on('error', (error) => {
+      addLog(serverName, 'warn', `stdin error (normal for some MCP servers): ${error.message}`);
+    });
+
+    // Optional: Send periodic keep-alive messages to prevent timeout
+    // This depends on the MCP server implementation
+    // Some servers accept newline-delimited JSON, others just need the connection open
+    const keepAliveInterval = setInterval(() => {
+      if (childProcess && !childProcess.killed) {
+        // Try to keep the connection alive
+        // Note: This may not work for all MCP server implementations
+        // The server might reject these messages, which is fine
+        try {
+          // Don't write anything - just keeping the stream open is usually enough
+          // childProcess.stdin.write('\n');
+        } catch (error) {
+          // Ignore errors writing to stdin
+        }
+      }
+    }, 30000);  // Check every 30 seconds
+
+    // Store the interval ID so we can clear it later
+    if (mcpProcesses.has(serverName)) {
+      const info = mcpProcesses.get(serverName);
+      info.keepAliveInterval = keepAliveInterval;
+    }
+
+    addLog(serverName, 'info', `Process started successfully with PID ${childProcess.pid}`);
 
     res.json({
       message: 'Server started successfully',
       pid: childProcess.pid,
-      status: 'running'
+      status: 'running',
+      logs: mcpLogs.get(serverName) || []
     });
 
   } catch (error) {
     addLog(serverName, 'error', `Failed to start: ${error.message}`);
-    res.status(500).json({ error: error.message });
+    console.error(`Error starting MCP server ${serverName}:`, error);
+    res.status(500).json({ 
+      error: error.message,
+      details: error.stack
+    });
   }
 });
 
@@ -1118,6 +1200,22 @@ app.post('/api/mcp/:name/stop', (req, res) => {
 
     addLog(serverName, 'info', 'Stopping server...');
 
+    // Clear keep-alive interval first
+    if (processInfo.keepAliveInterval) {
+      clearInterval(processInfo.keepAliveInterval);
+      processInfo.keepAliveInterval = null;
+    }
+
+    // Close stdin to signal the process to shut down gracefully
+    try {
+      if (processInfo.process && processInfo.process.stdin) {
+        processInfo.process.stdin.end();
+        addLog(serverName, 'info', 'Closed stdin, waiting for graceful shutdown...');
+      }
+    } catch (error) {
+      addLog(serverName, 'warn', `Error closing stdin: ${error.message}`);
+    }
+
     // Kill process
     if (IS_WINDOWS) {
       // Windows: use taskkill
@@ -1127,7 +1225,7 @@ app.post('/api/mcp/:name/stop', (req, res) => {
         }
       });
     } else {
-      // Unix: use kill
+      // Unix: use kill with SIGTERM first
       processInfo.process.kill('SIGTERM');
     }
 
@@ -1141,6 +1239,12 @@ app.post('/api/mcp/:name/stop', (req, res) => {
           addLog(serverName, 'info', 'Force killing process...');
           info.process.kill('SIGKILL');
           info.status = 'stopped';
+        }
+        
+        // Ensure interval is cleared
+        if (info.keepAliveInterval) {
+          clearInterval(info.keepAliveInterval);
+          info.keepAliveInterval = null;
         }
       }
     }, 5000);
@@ -1217,13 +1321,28 @@ app.get('/api/mcp/:name/logs', (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   
   if (!mcpLogs.has(serverName)) {
-    return res.json({ logs: [] });
+    return res.json({ logs: [], message: 'No logs available for this server yet' });
   }
 
   const logs = mcpLogs.get(serverName);
   const recentLogs = logs.slice(-limit);
   
-  res.json({ logs: recentLogs });
+  res.json({ 
+    logs: recentLogs,
+    total: logs.length,
+    displayed: recentLogs.length
+  });
+});
+
+// Clear MCP Server Logs
+app.post('/api/mcp/:name/logs/clear', (req, res) => {
+  const serverName = req.params.name;
+  
+  if (mcpLogs.has(serverName)) {
+    mcpLogs.delete(serverName);
+  }
+  
+  res.json({ success: true, message: 'Logs cleared for server' });
 });
 
 // Restart MCP Server
@@ -1235,6 +1354,21 @@ app.post('/api/mcp/:name/restart', async (req, res) => {
     if (mcpProcesses.has(serverName)) {
       const processInfo = mcpProcesses.get(serverName);
       if (processInfo.status === 'running') {
+        // Clear keep-alive interval
+        if (processInfo.keepAliveInterval) {
+          clearInterval(processInfo.keepAliveInterval);
+          processInfo.keepAliveInterval = null;
+        }
+        
+        // Close stdin gracefully
+        try {
+          if (processInfo.process && processInfo.process.stdin) {
+            processInfo.process.stdin.end();
+          }
+        } catch (error) {
+          // Ignore
+        }
+        
         processInfo.process.kill('SIGTERM');
         await new Promise(resolve => setTimeout(resolve, 2000));
       }

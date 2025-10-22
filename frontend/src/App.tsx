@@ -532,10 +532,25 @@ function App() {
           [serverName]: { status: 'running', running: true, pid: data.pid }
         }));
       } else {
-        showNotification(data.error || 'Failed to start server', 'error');
+        const errorMessage = data.details || data.error || 'Failed to start server';
+        console.error(`Failed to start server ${serverName}:`, data);
+        showNotification(`❌ Failed to start "${serverName}": ${errorMessage}`, 'error');
+        
+        // Show logs in console for debugging
+        if (data.logs && data.logs.length > 0) {
+          console.error(`Server logs for ${serverName}:`, data.logs);
+        }
+        
+        // Update status to error
+        setMcpStatuses(prev => ({
+          ...prev,
+          [serverName]: { status: 'error', running: false, error: errorMessage }
+        }));
       }
     } catch (error) {
-      showNotification(`Failed to start server: ${error}`, 'error');
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`Error starting server ${serverName}:`, error);
+      showNotification(`❌ Failed to start server: ${errorMsg}`, 'error');
     } finally {
       setIsLoadingStatus(prev => ({ ...prev, [serverName]: false }));
     }
