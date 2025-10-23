@@ -27,6 +27,7 @@ app.use(bodyParser.json());
 const HOME_DIR = os.homedir();
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
+const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 
 // Platform-specific configuration
@@ -529,6 +530,121 @@ app.delete('/api/commands/:name', async (req, res) => {
     const filePath = path.join(CLAUDE_COMMANDS_DIR, name);
     await fs.unlink(filePath);
     res.json({ success: true, message: 'Command deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// ============================================
+// Skills API
+// ============================================
+
+// Helper function to parse YAML frontmatter from SKILL.md
+function parseFrontmatter(content) {
+  const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
+  const match = content.match(frontmatterRegex);
+  
+  if (!match) {
+    return { frontmatter: {}, body: content };
+  }
+  
+  const [, frontmatterText, body] = match;
+  const frontmatter = {};
+  
+  // Simple YAML parser for key-value pairs
+  const lines = frontmatterText.split('\n');
+  for (const line of lines) {
+    const colonIndex = line.indexOf(':');
+    if (colonIndex > 0) {
+      const key = line.substring(0, colonIndex).trim();
+      const value = line.substring(colonIndex + 1).trim();
+      frontmatter[key] = value;
+    }
+  }
+  
+  return { frontmatter, body };
+}
+
+// Validate skill name format
+function validateSkillName(name) {
+  // Must use lowercase letters, numbers, and hyphens only (max 64 characters)
+  const regex = /^[a-z0-9-]{1,64}$/;
+  return regex.test(name);
+}
+
+// Get list of skills
+app.get('/api/skills', async (req, res) => {
+  try {
+    await fs.mkdir(CLAUDE_SKILLS_DIR, { recursive: true });
+    const dirs = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true });
+    const skills = [];
+    
+    for (const dir of dirs) {
+      if (dir.isDirectory()) {
+        const skillPath = path.join(CLAUDE_SKILLS_DIR, dir.name);
+        const skillFilePath = path.join(skillPath, 'SKILL.md');
+        
+        try {
+          const content = await fs.readFile(skillFilePath, 'utf-8');
+          const { frontmatter } = parseFrontmatter(content);
+          
+          skills.push({
+            name: dir.name,
+            content,
+            description: frontmatter.description || '',
+            allowedTools: frontmatter['allowed-tools'] || ''
+          });
+        } catch (error) {
+          // Skip if SKILL.md doesn't exist or can't be read
+          console.warn(`Skipping skill ${dir.name}: ${error.message}`);
+        }
+      }
+    }
+    
+    res.json(skills);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Save a skill
+app.post('/api/skills', async (req, res) => {
+  try {
+    const { name, content } = req.body;
+    
+    if (!name || !content) {
+      return res.status(400).json({ error: 'Name and content are required' });
+    }
+    
+    // Validate skill name format
+    if (!validateSkillName(name)) {
+      return res.status(400).json({ 
+        error: 'Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)' 
+      });
+    }
+    
+    const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
+    await fs.mkdir(skillPath, { recursive: true });
+    
+    const skillFilePath = path.join(skillPath, 'SKILL.md');
+    await fs.writeFile(skillFilePath, content, 'utf-8');
+    
+    res.json({ success: true, message: 'Skill saved successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete a skill
+app.delete('/api/skills/:name', async (req, res) => {
+  try {
+    const { name } = req.params;
+    const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
+    
+    // Remove entire skill directory
+    await fs.rm(skillPath, { recursive: true, force: true });
+    
+    res.json({ success: true, message: 'Skill deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

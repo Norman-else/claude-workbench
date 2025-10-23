@@ -17,6 +17,13 @@ interface CommandFile {
   content: string;
 }
 
+interface Skill {
+  name: string;
+  content: string;
+  description?: string;
+  allowedTools?: string;
+}
+
 interface McpStatus {
   status: 'running' | 'stopped' | 'stopping' | 'error';
   running: boolean;
@@ -114,9 +121,10 @@ function ServerLogs({ serverName }: { serverName: string }) {
 }
 
 function App() {
-  const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands'>('mcp');
+  const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands' | 'skills'>('mcp');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [commands, setCommands] = useState<CommandFile[]>([]);
+  const [skills, setSkills] = useState<Skill[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
   
   // MCP Status Management
@@ -134,11 +142,13 @@ function App() {
   // View mode state
   const [mcpViewMode, setMcpViewMode] = useState<ViewMode>('list');
   const [commandViewMode, setCommandViewMode] = useState<ViewMode>('list');
+  const [skillViewMode, setSkillViewMode] = useState<ViewMode>('list');
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
   
   // Modal state
   const [showAddServerModal, setShowAddServerModal] = useState(false);
   const [showAddCommandModal, setShowAddCommandModal] = useState(false);
+  const [showAddSkillModal, setShowAddSkillModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [itemToDelete, setItemToDelete] = useState<string | null>(null);
   const [showLogsModal, setShowLogsModal] = useState(false);
@@ -150,13 +160,15 @@ function App() {
     mcpConfig: 'pending' | 'loading' | 'done' | 'error';
     envProfiles: 'pending' | 'loading' | 'done' | 'error';
     commands: 'pending' | 'loading' | 'done' | 'error';
-  }>({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending' });
+    skills: 'pending' | 'loading' | 'done' | 'error';
+  }>({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending' });
   
   // Editing state
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
   const [editingServerArgsInput, setEditingServerArgsInput] = useState('');
   const [editingServerEnvInput, setEditingServerEnvInput] = useState('');
   const [editingCommand, setEditingCommand] = useState<{ name: string; content: string } | null>(null);
+  const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [newServerForm, setNewServerForm] = useState({
     name: '',
     command: '',
@@ -219,7 +231,7 @@ function App() {
     
     if (showProgress) {
       setShowRefreshModal(true);
-      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending' });
+      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending' });
     }
     
     try {
@@ -255,6 +267,17 @@ function App() {
         if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'done' }));
       } else {
         if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'error' }));
+      }
+      
+      // Load skills
+      if (showProgress) setRefreshProgress(prev => ({ ...prev, skills: 'loading' }));
+      const skillsRes = await fetch('/api/skills');
+      if (skillsRes.ok) {
+        const data = await skillsRes.json();
+        setSkills(data);
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, skills: 'done' }));
+      } else {
+        if (showProgress) setRefreshProgress(prev => ({ ...prev, skills: 'error' }));
       }
       
       if (showProgress) {
@@ -568,6 +591,94 @@ function App() {
     }
   };
 
+  // Skills functions
+  const openSkillDetail = (skill: Skill) => {
+    setEditingSkill(skill);
+    setSkillViewMode('detail');
+  };
+
+  const saveSkillDetail = async () => {
+    if (!editingSkill) return;
+    
+    // Validate skill name format
+    const nameRegex = /^[a-z0-9-]{1,64}$/;
+    if (!nameRegex.test(editingSkill.name)) {
+      showNotification('Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)', 'error');
+      return;
+    }
+    
+    try {
+      const response = await fetch('/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: editingSkill.name, content: editingSkill.content }),
+      });
+
+      if (response.ok) {
+        showNotification('Skill saved successfully!');
+        await loadConfig();
+        setSkillViewMode('list');
+        setEditingSkill(null);
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to save skill', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to save skill', 'error');
+    }
+  };
+
+  const addNewSkill = async () => {
+    if (!newServerForm.name || !newServerForm.command) {
+      showNotification('Please fill in skill name and content', 'error');
+      return;
+    }
+
+    // Validate skill name format
+    const nameRegex = /^[a-z0-9-]{1,64}$/;
+    if (!nameRegex.test(newServerForm.name)) {
+      showNotification('Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)', 'error');
+      return;
+    }
+
+    try {
+      const response = await fetch('/api/skills', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ name: newServerForm.name, content: newServerForm.command }),
+      });
+
+      if (response.ok) {
+        showNotification('Skill created successfully!');
+        await loadConfig();
+        setShowAddSkillModal(false);
+        setNewServerForm({ name: '', command: '', args: '', env: '' });
+      } else {
+        const data = await response.json();
+        showNotification(data.error || 'Failed to create skill', 'error');
+      }
+    } catch (error) {
+      showNotification('Failed to create skill', 'error');
+    }
+  };
+
+  const useSkillTemplate = () => {
+    const template = `---
+name: ${newServerForm.name || 'skill-name'}
+description: Brief description of what this Skill does and when to use it
+---
+
+# ${newServerForm.name ? newServerForm.name.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ') : 'Skill Name'}
+
+## Instructions
+Provide clear, step-by-step guidance for Claude.
+
+## Examples
+Show concrete examples of using this Skill.
+`;
+    setNewServerForm({ ...newServerForm, command: template });
+  };
+
   const addNewCommand = async () => {
     if (!newServerForm.name || !newServerForm.command) {
       showNotification('Please fill in command name and content', 'error');
@@ -609,6 +720,23 @@ function App() {
       }
     } catch (error) {
       showNotification('Failed to delete command', 'error');
+    }
+  };
+
+  const deleteSkill = async (skillName: string) => {
+    try {
+      const response = await fetch(`/api/skills/${skillName}`, {
+        method: 'DELETE',
+      });
+      
+      if (response.ok) {
+        showNotification('Skill deleted successfully!');
+        await loadConfig();
+        setShowDeleteConfirm(false);
+        setItemToDelete(null);
+      }
+    } catch (error) {
+      showNotification('Failed to delete skill', 'error');
     }
   };
 
@@ -944,6 +1072,27 @@ function App() {
                 </div>
               <span className="font-medium text-white">Commands</span>
               {activeTab === 'commands' && (
+                <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+              )}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('skills')}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
+                activeTab === 'skills'
+                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
+                  : 'hover:glass border border-transparent hover:border-purple-500/30'
+              }`}
+            >
+              <div className={`p-2 rounded-lg transition-all ${
+                activeTab === 'skills' 
+                  ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
+                  : 'bg-gray-800 group-hover:bg-purple-900/30'
+              }`}>
+                <Zap className="w-5 h-5 text-white" />
+                </div>
+              <span className="font-medium text-white">Skills</span>
+              {activeTab === 'skills' && (
                 <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
               )}
             </button>
@@ -1649,21 +1798,21 @@ function App() {
                     ))}
             
                     {/* Empty state */}
-            {commands.length === 0 && (
+                    {commands.length === 0 && (
                       <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
                         <Command className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                         <p className="text-gray-400 mb-4">No custom commands yet</p>
-                  <button
+                        <button
                           onClick={() => setShowAddCommandModal(true)}
                           className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
                         >
                           <Plus className="w-5 h-5 text-purple-400" />
                           <span className="text-white font-medium">Create Your First Command</span>
-                  </button>
-                            </div>
+                        </button>
+                      </div>
                     )}
-                            </div>
-                              </div>
+                  </div>
+                </div>
               ) : (
                 /* Command Detail View */
                 <div>
@@ -1715,15 +1864,191 @@ function App() {
                           <Save className="w-4 h-4" />
                           <span>Save Changes</span>
                         </button>
-                              </div>
-                              </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Skills Tab */}
+          {activeTab === 'skills' && (
+            <div className="p-8">
+            {skillViewMode === 'list' ? (
+              <div>
+                {/* Header */}
+                <div className="flex items-center justify-between mb-8">
+                  <div>
+                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                      Personal Skills
+                    </h2>
+                    <p className="text-gray-400">Create and manage your Agent Skills</p>
+                  </div>
+                  <button
+                    onClick={() => setShowAddSkillModal(true)}
+                    className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
+                  >
+                    <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                    <span className="text-white font-medium">Add Skill</span>
+                  </button>
+                </div>
+
+                {/* Skill cards */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {skills.map((skill) => (
+                    <div 
+                      key={skill.name} 
+                      className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
+                      onClick={() => openSkillDetail(skill)}
+                    >
+                      {/* Status indicator */}
+                      <div className="flex items-center space-x-2 mb-4">
+                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+                        <span className="text-xs font-medium text-blue-400">Skill</span>
+                      </div>
+
+                      <div className="flex items-start mb-4">
+                        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
+                          <Zap className="w-6 h-6 text-purple-400" />
                         </div>
                       </div>
+
+                      <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">
+                        {skill.name}
+                      </h3>
+                      
+                      <div className="space-y-2 text-sm mb-4 flex-1">
+                        <p className="text-gray-400 line-clamp-3 text-xs">
+                          {skill.description || skill.content.substring(0, 100) + '...'}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openSkillDetail(skill);
+                          }}
+                          className="flex-1 glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                        >
+                          <Edit2 className="w-4 h-4 text-purple-400" />
+                          <span className="text-xs text-white font-medium">Edit</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setItemToDelete(skill.name);
+                            setShowDeleteConfirm(true);
+                          }}
+                          className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                          data-tooltip="Delete skill"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+          
+                  {/* Empty state */}
+                  {skills.length === 0 && (
+                    <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
+                      <Zap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 mb-4">No skills yet</p>
+                      <button
+                        onClick={() => setShowAddSkillModal(true)}
+                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                      >
+                        <Plus className="w-5 h-5 text-purple-400" />
+                        <span className="text-white font-medium">Create Your First Skill</span>
+                      </button>
+                    </div>
                   )}
                 </div>
-                          )}
               </div>
-            </div>
+            ) : (
+              /* Skill Detail View */
+              <div>
+                <div className="flex items-center space-x-4 mb-8">
+                  <button
+                    onClick={() => {
+                      setSkillViewMode('list');
+                      setEditingSkill(null);
+                    }}
+                    className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                  >
+                    <ArrowLeft className="w-6 h-6 text-purple-400" />
+                  </button>
+                  <div>
+                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                      {editingSkill?.name}
+                    </h2>
+                    <p className="text-gray-400">Edit skill content (SKILL.md format)</p>
+                  </div>
+                </div>
+
+                <div className="glass border border-purple-500/20 rounded-2xl p-8">
+                  <div className="space-y-6">
+                    <div>
+                      <div className="flex items-center justify-between mb-2">
+                        <label className="block text-sm font-medium text-gray-300">Skill Name</label>
+                        <span className="text-xs text-gray-500">lowercase, numbers, hyphens only (max 64 chars)</span>
+                      </div>
+                      <input
+                        type="text"
+                        value={editingSkill?.name || ''}
+                        disabled
+                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-gray-500 bg-gray-800/50 cursor-not-allowed"
+                      />
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">SKILL.md Content</label>
+                      <textarea
+                        value={editingSkill?.content || ''}
+                        onChange={(e) => setEditingSkill(prev => prev ? { ...prev, content: e.target.value } : null)}
+                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                        rows={20}
+                        placeholder="---
+name: skill-name
+description: Brief description of what this Skill does and when to use it
+---
+
+# Skill Name
+
+## Instructions
+Provide clear, step-by-step guidance for Claude.
+
+## Examples
+Show concrete examples of using this Skill."
+                      />
+                    </div>
+
+                    <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                      <button
+                        onClick={() => {
+                          setSkillViewMode('list');
+                          setEditingSkill(null);
+                        }}
+                        className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveSkillDetail}
+                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Save Changes</span>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+        </div>
 
       {/* Add Server Modal */}
       {showAddServerModal && (
@@ -1847,6 +2172,79 @@ function App() {
                         </div>
             </div>
           </div>
+      )}
+
+      {/* Add Skill Modal */}
+      {showAddSkillModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Skill</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-300">Skill Name</label>
+                  <span className="text-xs text-gray-500">lowercase, numbers, hyphens only (max 64 chars)</span>
+                </div>
+                <input
+                  type="text"
+                  value={newServerForm.name}
+                  onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
+                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  placeholder="e.g., pdf-processing"
+                />
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-gray-300">SKILL.md Content</label>
+                  <button
+                    onClick={useSkillTemplate}
+                    className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                  >
+                    Use Template
+                  </button>
+                </div>
+                <textarea
+                  value={newServerForm.command}
+                  onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
+                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  rows={15}
+                  placeholder="---
+name: skill-name
+description: Brief description of what this Skill does and when to use it
+---
+
+# Skill Name
+
+## Instructions
+Provide clear, step-by-step guidance for Claude.
+
+## Examples
+Show concrete examples of using this Skill."
+                />
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-4 mt-8">
+              <button
+                onClick={() => {
+                  setShowAddSkillModal(false);
+                  setNewServerForm({ name: '', command: '', args: '', env: '' });
+                }}
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={addNewSkill}
+                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+              >
+                Add Skill
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* Add Profile Modal */}
@@ -1977,7 +2375,7 @@ function App() {
               <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
                 <Trash2 className="w-8 h-8 text-red-400" />
         </div>
-              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : 'Command'}?</h3>
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : 'Skill'}?</h3>
               <p className="text-gray-400 mb-6">
                 Are you sure you want to delete <span className="text-white font-medium">{getDeleteItemDisplayName()}</span>? This action cannot be undone.
               </p>
@@ -1999,8 +2397,10 @@ function App() {
                         deleteServer(itemToDelete);
                       } else if (activeTab === 'env') {
                         deleteProfile(itemToDelete);
-                      } else {
+                      } else if (activeTab === 'commands') {
                         deleteCommand(itemToDelete);
+                      } else if (activeTab === 'skills') {
+                        deleteSkill(itemToDelete);
                       }
                     }
                   }}
@@ -2222,6 +2622,38 @@ function App() {
                   </div>
                 </div>
               </div>
+
+              {/* Skills Progress */}
+              <div className="flex items-center space-x-3">
+                <div className="flex-shrink-0">
+                  {refreshProgress.skills === 'pending' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                  )}
+                  {refreshProgress.skills === 'loading' && (
+                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                  )}
+                  {refreshProgress.skills === 'done' && (
+                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                      <Check className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                  {refreshProgress.skills === 'error' && (
+                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                      <X className="w-4 h-4 text-white" />
+                    </div>
+                  )}
+                </div>
+                <div className="flex-1">
+                  <div className={`text-sm font-medium ${
+                    refreshProgress.skills === 'done' ? 'text-green-400' : 
+                    refreshProgress.skills === 'error' ? 'text-red-400' :
+                    refreshProgress.skills === 'loading' ? 'text-purple-400' :
+                    'text-gray-400'
+                  }`}>
+                    Personal Skills
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Progress bar */}
@@ -2233,7 +2665,8 @@ function App() {
                     width: `${
                       ((refreshProgress.mcpConfig === 'done' || refreshProgress.mcpConfig === 'error' ? 1 : 0) +
                        (refreshProgress.envProfiles === 'done' || refreshProgress.envProfiles === 'error' ? 1 : 0) +
-                       (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0)) / 3 * 100
+                       (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0) +
+                       (refreshProgress.skills === 'done' || refreshProgress.skills === 'error' ? 1 : 0)) / 4 * 100
                     }%`
                   }}
                 ></div>
@@ -2242,6 +2675,7 @@ function App() {
           </div>
         </div>
       )}
+      </div>
 
     </div>
   );
