@@ -36,6 +36,7 @@ interface EnvProfile {
   id: string;
   name: string;
   baseUrl: string;
+  apiKey: string;
   authToken: string;
   haikuModel: string;
   opusModel: string;
@@ -178,6 +179,7 @@ function App() {
   const [newProfileForm, setNewProfileForm] = useState({
     name: '',
     baseUrl: '',
+    apiKey: '',
     authToken: '',
     haikuModel: '',
     opusModel: '',
@@ -493,7 +495,7 @@ function App() {
         showNotification('Profile added successfully!');
         await loadConfig();
         setShowAddProfileModal(false);
-        setNewProfileForm({ name: '', baseUrl: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
+        setNewProfileForm({ name: '', baseUrl: '', apiKey: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
       } else {
         const data = await response.json();
         showNotification(data.error || 'Failed to add profile', 'error');
@@ -1487,10 +1489,17 @@ Show concrete examples of using this Skill.
                               {profile.baseUrl || 'No base URL'}
                             </span>
                           </div>
-                          {profile.authToken && (
+                          {profile.apiKey && (
                             <div className="flex items-center space-x-1 ml-6">
                               <div className="px-2 py-1 bg-green-500/10 rounded text-xs text-green-400">
                                 API Key Configured
+                              </div>
+                            </div>
+                          )}
+                          {profile.authToken && (
+                            <div className="flex items-center space-x-1 ml-6">
+                              <div className="px-2 py-1 bg-blue-500/10 rounded text-xs text-blue-400">
+                                Auth Token Configured
                               </div>
                             </div>
                           )}
@@ -1628,10 +1637,33 @@ Show concrete examples of using this Skill.
                       <div className="relative">
                         <input
                           type={showApiKey ? 'text' : 'password'}
+                          value={editingProfile?.apiKey || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, apiKey: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
+                          placeholder="sk-ant-..."
+                        />
+                        <button
+                          onClick={() => setShowApiKey(!showApiKey)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                        >
+                          {showApiKey ? (
+                            <EyeOff className="w-4 h-4 text-gray-400" />
+                          ) : (
+                            <Eye className="w-4 h-4 text-gray-400" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
+                      <div className="relative">
+                        <input
+                          type={showApiKey ? 'text' : 'password'}
                           value={editingProfile?.authToken || ''}
                           onChange={(e) => setEditingProfile(prev => prev ? { ...prev, authToken: e.target.value } : null)}
                           className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
-                          placeholder="sk-ant-..."
+                          placeholder="Optional auth token..."
                         />
                         <button
                           onClick={() => setShowApiKey(!showApiKey)}
@@ -2281,10 +2313,33 @@ Show concrete examples of using this Skill."
                 <div className="relative">
                   <input
                     type={showApiKey ? 'text' : 'password'}
+                    value={newProfileForm.apiKey}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, apiKey: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
+                    placeholder="sk-ant-..."
+                  />
+                  <button
+                    onClick={() => setShowApiKey(!showApiKey)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                  >
+                    {showApiKey ? (
+                      <EyeOff className="w-4 h-4 text-gray-400" />
+                    ) : (
+                      <Eye className="w-4 h-4 text-gray-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
+                <div className="relative">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
                     value={newProfileForm.authToken}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, authToken: e.target.value })}
                     className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
-                    placeholder="sk-ant-..."
+                    placeholder="Optional auth token..."
                   />
                   <button
                     onClick={() => setShowApiKey(!showApiKey)}
@@ -2350,7 +2405,7 @@ Show concrete examples of using this Skill."
               <button
                 onClick={() => {
                   setShowAddProfileModal(false);
-                  setNewProfileForm({ name: '', baseUrl: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
+                  setNewProfileForm({ name: '', baseUrl: '', apiKey: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
                 }}
                 className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
               >

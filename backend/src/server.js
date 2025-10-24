@@ -659,7 +659,33 @@ async function readProfiles() {
   try {
     await ensureFileExists(CLAUDE_PROFILES_PATH, JSON.stringify({ profiles: [], activeProfileId: null }, null, 2));
     const content = await fs.readFile(CLAUDE_PROFILES_PATH, 'utf-8');
-    return JSON.parse(content);
+    const data = JSON.parse(content);
+    
+    // Data migration: rename authToken to apiKey for backward compatibility
+    let needsSave = false;
+    if (data.profiles && Array.isArray(data.profiles)) {
+      data.profiles = data.profiles.map(profile => {
+        if (profile.authToken !== undefined && profile.apiKey === undefined) {
+          // Migrate old authToken to apiKey
+          profile.apiKey = profile.authToken;
+          delete profile.authToken;
+          needsSave = true;
+        }
+        // Ensure authToken field exists (for ANTHROPIC_AUTH_TOKEN)
+        if (profile.authToken === undefined) {
+          profile.authToken = '';
+        }
+        return profile;
+      });
+      
+      if (needsSave) {
+        // Save migrated data back to disk
+        await writeProfiles(data);
+        console.log('Migrated profile data: authToken → apiKey');
+      }
+    }
+    
+    return data;
   } catch (error) {
     return { profiles: [], activeProfileId: null };
   }
@@ -722,7 +748,7 @@ app.get('/api/env-profiles', async (req, res) => {
 // Create a new environment profile
 app.post('/api/env-profiles', async (req, res) => {
   try {
-    const { name, baseUrl, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
+    const { name, baseUrl, apiKey, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
     
     if (!name) {
       return res.status(400).json({ error: 'Profile name is required' });
@@ -742,6 +768,7 @@ app.post('/api/env-profiles', async (req, res) => {
       id,
       name,
       baseUrl: baseUrl || '',
+      apiKey: apiKey || '',
       authToken: authToken || '',
       haikuModel: haikuModel || '',
       opusModel: opusModel || '',
@@ -763,7 +790,7 @@ app.post('/api/env-profiles', async (req, res) => {
 app.put('/api/env-profiles/:id', async (req, res) => {
   try {
     const { id } = req.params;
-    const { name, baseUrl, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
+    const { name, baseUrl, apiKey, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
     
     const data = await readProfiles();
     const profileIndex = data.profiles.findIndex(p => p.id === id);
@@ -782,6 +809,7 @@ app.put('/api/env-profiles/:id', async (req, res) => {
       ...data.profiles[profileIndex],
       name: name || data.profiles[profileIndex].name,
       baseUrl: baseUrl !== undefined ? baseUrl : data.profiles[profileIndex].baseUrl,
+      apiKey: apiKey !== undefined ? apiKey : data.profiles[profileIndex].apiKey,
       authToken: authToken !== undefined ? authToken : data.profiles[profileIndex].authToken,
       haikuModel: haikuModel !== undefined ? haikuModel : data.profiles[profileIndex].haikuModel,
       opusModel: opusModel !== undefined ? opusModel : data.profiles[profileIndex].opusModel,
@@ -792,7 +820,123 @@ app.put('/api/env-profiles/:id', async (req, res) => {
     
     await writeProfiles(data);
     
-    res.json({ success: true, profile: data.profiles[profileIndex], message: 'Profile updated successfully' });
+    // If this profile is currently active, update the shell config file
+    const activeProfileId = await getCurrentActiveProfileId();
+    if (activeProfileId === id) {
+      const profile = data.profiles[profileIndex];
+      
+      if (IS_WINDOWS) {
+        // Windows: Update PowerShell Profile
+        try {
+          let profilePath;
+          try {
+            const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+            profilePath = stdout.trim();
+          } catch {
+            const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+            profilePath = stdout.trim();
+          }
+          
+          let profileContent = await fs.readFile(profilePath, 'utf-8');
+          
+          // Remove old environment variable settings
+          const varsToRemove = [
+            'ANTHROPIC_BASE_URL',
+            'ANTHROPIC_API_KEY',
+            'ANTHROPIC_AUTH_TOKEN',
+            'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+            'ANTHROPIC_DEFAULT_OPUS_MODEL',
+            'ANTHROPIC_DEFAULT_SONNET_MODEL',
+            'ANTHROPIC_DEFAULT_SMALL_FAST_MODEL',
+            'ANTHROPIC_PROFILE_ID'
+          ];
+          
+          for (const varName of varsToRemove) {
+            const regex = new RegExp(`^\\$env:${varName}\\s*=.*$`, 'gm');
+            profileContent = profileContent.replace(regex, '');
+          }
+          
+          profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
+          profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
+          
+          // Add updated environment variables
+          const newVars = [
+            '',
+            '# Claude Code Environment Variables - START',
+            `$env:ANTHROPIC_PROFILE_ID = "${id}"`,
+            profile.baseUrl ? `$env:ANTHROPIC_BASE_URL = "${profile.baseUrl}"` : '',
+            profile.apiKey ? `$env:ANTHROPIC_API_KEY = "${profile.apiKey}"` : '',
+            profile.authToken ? `$env:ANTHROPIC_AUTH_TOKEN = "${profile.authToken}"` : '',
+            profile.haikuModel ? `$env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "${profile.haikuModel}"` : '',
+            profile.opusModel ? `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = "${profile.opusModel}"` : '',
+            profile.sonnetModel ? `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = "${profile.sonnetModel}"` : '',
+            profile.smallFastModel ? `$env:ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = "${profile.smallFastModel}"` : '',
+            '# Claude Code Environment Variables - END',
+            ''
+          ].filter(line => line !== '').join('\n');
+          
+          profileContent = profileContent + '\n' + newVars;
+          await fs.writeFile(profilePath, profileContent, 'utf-8');
+          
+          // Hot reload
+          await reloadEnvFromProfile();
+        } catch (error) {
+          console.error('Failed to update shell config:', error);
+          // Don't fail the whole request if shell update fails
+        }
+      } else {
+        // Unix: Update shell config file
+        try {
+          const configPath = await getEnvConfigPath();
+          let content = await fs.readFile(configPath, 'utf-8');
+          let lines = content.split('\n');
+          
+          const startMarker = '# Claude Code Environment Variables - START';
+          const endMarker = '# Claude Code Environment Variables - END';
+          
+          let startIndex = lines.findIndex(line => line.includes(startMarker));
+          let endIndex = lines.findIndex(line => line.includes(endMarker));
+          
+          if (startIndex !== -1 && endIndex !== -1) {
+            lines.splice(startIndex, endIndex - startIndex + 1);
+          }
+          
+          const newSection = [
+            '',
+            startMarker,
+            `export ANTHROPIC_PROFILE_ID="${id}"`,
+            profile.baseUrl ? `export ANTHROPIC_BASE_URL="${profile.baseUrl}"` : '',
+            profile.apiKey ? `export ANTHROPIC_API_KEY="${profile.apiKey}"` : '',
+            profile.authToken ? `export ANTHROPIC_AUTH_TOKEN="${profile.authToken}"` : '',
+            profile.haikuModel ? `export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"` : '',
+            profile.opusModel ? `export ANTHROPIC_DEFAULT_OPUS_MODEL="${profile.opusModel}"` : '',
+            profile.sonnetModel ? `export ANTHROPIC_DEFAULT_SONNET_MODEL="${profile.sonnetModel}"` : '',
+            profile.smallFastModel ? `export ANTHROPIC_DEFAULT_SMALL_FAST_MODEL="${profile.smallFastModel}"` : '',
+            endMarker,
+            ''
+          ].filter(line => line !== '');
+          
+          lines = lines.concat(newSection);
+          content = lines.join('\n');
+          
+          await fs.writeFile(configPath, content, 'utf-8');
+          
+          // Hot reload
+          await reloadEnvFromProfile();
+        } catch (error) {
+          console.error('Failed to update shell config:', error);
+          // Don't fail the whole request if shell update fails
+        }
+      }
+    }
+    
+    res.json({ 
+      success: true, 
+      profile: data.profiles[profileIndex], 
+      message: activeProfileId === id 
+        ? 'Profile updated and shell config synchronized successfully' 
+        : 'Profile updated successfully'
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -858,9 +1002,11 @@ app.post('/api/env-profiles/:id/activate', async (req, res) => {
         const varsToRemove = [
           'ANTHROPIC_BASE_URL',
           'ANTHROPIC_API_KEY',
+          'ANTHROPIC_AUTH_TOKEN',
           'ANTHROPIC_DEFAULT_HAIKU_MODEL',
           'ANTHROPIC_DEFAULT_OPUS_MODEL',
           'ANTHROPIC_DEFAULT_SONNET_MODEL',
+          'ANTHROPIC_DEFAULT_SMALL_FAST_MODEL',
           'ANTHROPIC_PROFILE_ID'
         ];
         
@@ -877,8 +1023,9 @@ app.post('/api/env-profiles/:id/activate', async (req, res) => {
           '',
           '# Claude Code Environment Variables - START',
           `$env:ANTHROPIC_PROFILE_ID = "${id}"`,
-          `$env:ANTHROPIC_BASE_URL = "${profile.baseUrl}"`,
-          `$env:ANTHROPIC_API_KEY = "${profile.authToken}"`,
+          profile.baseUrl ? `$env:ANTHROPIC_BASE_URL = "${profile.baseUrl}"` : '',
+          profile.apiKey ? `$env:ANTHROPIC_API_KEY = "${profile.apiKey}"` : '',
+          profile.authToken ? `$env:ANTHROPIC_AUTH_TOKEN = "${profile.authToken}"` : '',
           profile.haikuModel ? `$env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "${profile.haikuModel}"` : '',
           profile.opusModel ? `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = "${profile.opusModel}"` : '',
           profile.sonnetModel ? `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = "${profile.sonnetModel}"` : '',
@@ -928,10 +1075,17 @@ app.post('/api/env-profiles/:id/activate', async (req, res) => {
         '',
         startMarker,
         `export ANTHROPIC_PROFILE_ID="${id}"`,
-        `export ANTHROPIC_BASE_URL="${profile.baseUrl}"`,
-        `export ANTHROPIC_API_KEY="${profile.authToken}"`,
       ];
       
+      if (profile.baseUrl) {
+        newSection.push(`export ANTHROPIC_BASE_URL="${profile.baseUrl}"`);
+      }
+      if (profile.apiKey) {
+        newSection.push(`export ANTHROPIC_API_KEY="${profile.apiKey}"`);
+      }
+      if (profile.authToken) {
+        newSection.push(`export ANTHROPIC_AUTH_TOKEN="${profile.authToken}"`);
+      }
       if (profile.haikuModel) {
         newSection.push(`export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"`);
       }
