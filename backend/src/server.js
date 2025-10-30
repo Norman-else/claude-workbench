@@ -177,6 +177,61 @@ app.post('/api/reload-env', async (req, res) => {
   }
 });
 
+// Get shell config file content (for viewing)
+app.get('/api/shell-config-content', async (req, res) => {
+  try {
+    let configPath = '';
+    let content = '';
+    let platform = IS_WINDOWS ? 'windows' : 'unix';
+    
+    if (IS_WINDOWS) {
+      // Windows: Read PowerShell Profile
+      try {
+        let profilePath;
+        try {
+          const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        } catch {
+          const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        }
+        configPath = profilePath;
+        
+        try {
+          content = await fs.readFile(profilePath, 'utf-8');
+        } catch (readError) {
+          // Profile doesn't exist
+          content = '# PowerShell Profile not found or empty\n# Run the following command in PowerShell to create it:\n# New-Item -Path $PROFILE -ItemType File -Force';
+        }
+      } catch (error) {
+        configPath = 'PowerShell $PROFILE';
+        content = `# Error reading PowerShell Profile: ${error.message}`;
+      }
+    } else {
+      // Unix: Read shell config file
+      try {
+        configPath = await getEnvConfigPath();
+        await ensureFileExists(configPath, '');
+        content = await fs.readFile(configPath, 'utf-8');
+        
+        if (!content.trim()) {
+          content = `# ${configPath} is empty\n# You can add environment variables here using:\n# export VARIABLE_NAME="value"`;
+        }
+      } catch (error) {
+        content = `# Error reading config file: ${error.message}`;
+      }
+    }
+    
+    res.json({ 
+      configPath,
+      content,
+      platform
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get environment variables
 app.get('/api/env-vars', async (req, res) => {
   try {

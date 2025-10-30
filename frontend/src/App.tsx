@@ -157,6 +157,10 @@ function App() {
   const [showImportJsonModal, setShowImportJsonModal] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState('');
   const [showRefreshModal, setShowRefreshModal] = useState(false);
+  const [showConfigFileModal, setShowConfigFileModal] = useState(false);
+  const [configFileContent, setConfigFileContent] = useState('');
+  const [configFilePath, setConfigFilePath] = useState('');
+  const [isLoadingConfigFile, setIsLoadingConfigFile] = useState(false);
   const [refreshProgress, setRefreshProgress] = useState<{
     mcpConfig: 'pending' | 'loading' | 'done' | 'error';
     envProfiles: 'pending' | 'loading' | 'done' | 'error';
@@ -522,6 +526,29 @@ function App() {
       }
     } catch (error) {
       showNotification('Failed to delete profile', 'error');
+    }
+  };
+
+  const viewConfigFile = async () => {
+    setIsLoadingConfigFile(true);
+    setShowConfigFileModal(true);
+    setConfigFileContent('Loading...');
+    
+    try {
+      const response = await fetch('/api/shell-config-content');
+      if (response.ok) {
+        const data = await response.json();
+        setConfigFilePath(data.configPath);
+        setConfigFileContent(data.content);
+      } else {
+        setConfigFileContent('Failed to load configuration file');
+        showNotification('Failed to load configuration file', 'error');
+      }
+    } catch (error) {
+      setConfigFileContent('Error loading configuration file');
+      showNotification('Error loading configuration file', 'error');
+    } finally {
+      setIsLoadingConfigFile(false);
     }
   };
 
@@ -1445,13 +1472,22 @@ Show concrete examples of using this Skill.
                     </h2>
                     <p className="text-gray-400">Manage your API credential profiles</p>
                   </div>
-                  <button
-                    onClick={() => setShowAddProfileModal(true)}
-                    className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
-                  >
-                    <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
-                    <span className="text-white font-medium">Add Profile</span>
-                  </button>
+                  <div className="flex items-center space-x-3">
+                    <button
+                      onClick={viewConfigFile}
+                      className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect neon-glow"
+                    >
+                      <FileText className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
+                      <span className="text-white font-medium">View Config</span>
+                    </button>
+                    <button
+                      onClick={() => setShowAddProfileModal(true)}
+                      className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
+                    >
+                      <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                      <span className="text-white font-medium">Add Profile</span>
+                    </button>
+                  </div>
                 </div>
 
                 {/* Profile cards */}
@@ -2273,6 +2309,62 @@ Show concrete examples of using this Skill."
                 className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
               >
                 Add Skill
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* View Config File Modal */}
+      {showConfigFileModal && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
+            <div className="flex items-center justify-between mb-6 flex-shrink-0">
+              <div>
+                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-2">
+                  Shell Configuration File
+                </h3>
+                <p className="text-gray-400 text-sm">
+                  {configFilePath || 'Loading...'}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(configFileContent);
+                  showNotification('Configuration copied to clipboard!');
+                }}
+                className="glass hover:border-blue-500/50 border border-blue-500/20 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group"
+                disabled={isLoadingConfigFile}
+              >
+                <Copy className="w-4 h-4 text-blue-400" />
+                <span className="text-white text-sm">Copy</span>
+              </button>
+            </div>
+            
+            <div className="flex-1 min-h-0 mb-6">
+              <div className="glass border border-blue-500/20 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
+                {isLoadingConfigFile ? (
+                  <div className="flex items-center justify-center h-full min-h-[300px]">
+                    <div className="flex flex-col items-center space-y-4">
+                      <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                      <p className="text-gray-400">Loading configuration file...</p>
+                    </div>
+                  </div>
+                ) : (
+                  <pre className="text-gray-300 whitespace-pre-wrap break-words">
+                    {configFileContent}
+                  </pre>
+                )}
+              </div>
+            </div>
+
+            <div className="flex justify-end space-x-3 flex-shrink-0 mt-auto">
+              <button
+                onClick={() => setShowConfigFileModal(false)}
+                className="glass hover:border-gray-500/50 border border-gray-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-gray-500/20 ripple-effect"
+              >
+                <X className="w-5 h-5 text-gray-400" />
+                <span className="text-white font-medium">Close</span>
               </button>
             </div>
           </div>
