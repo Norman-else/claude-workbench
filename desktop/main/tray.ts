@@ -1,11 +1,16 @@
 import { Tray, Menu, nativeImage, app } from 'electron';
 import * as path from 'path';
+import * as fs from 'fs';
 import { showWindow, toggleWindow, getWindow } from './window.js';
 
 let tray: Tray | null = null;
 
 export function createTray(): Tray {
   const iconPath = getTrayIconPath();
+  
+  console.log('[Tray] Loading icon from:', iconPath);
+  console.log('[Tray] Icon file exists:', fs.existsSync(iconPath));
+  
   const icon = nativeImage.createFromPath(iconPath);
   
   // Resize icon for better display on different platforms
@@ -59,17 +64,45 @@ export function getTray(): Tray | null {
 
 function getTrayIconPath(): string {
   // Use Template image for macOS (monochrome icon that adapts to system theme)
-  // Use regular icon for Windows/Linux
+  // Use PNG for Windows/Linux (PNG works better than ICO in Electron tray)
   let iconName: string;
   
   if (process.platform === 'darwin') {
     iconName = 'tray-iconTemplate.png';
   } else if (process.platform === 'win32') {
-    iconName = 'tray-icon.ico';
+    iconName = 'tray-icon.png';  // Changed from .ico to .png
   } else {
     iconName = 'tray-icon.png';
   }
   
-  return path.join(__dirname, '../assets', iconName);
+  // Try multiple possible paths for the icon
+  const possiblePaths = [
+    // Development path: desktop/dist/main/../assets
+    path.join(__dirname, '../assets', iconName),
+    // Packaged app path (when asar is disabled): app/desktop/dist/main/../assets
+    path.join(process.resourcesPath, 'app', 'desktop', 'assets', iconName),
+    // Alternative packaged path
+    path.join(app.getAppPath(), 'desktop', 'assets', iconName),
+  ];
+  
+  for (const possiblePath of possiblePaths) {
+    console.log('[Tray] Checking path:', possiblePath);
+    if (fs.existsSync(possiblePath)) {
+      console.log('[Tray] Found icon at:', possiblePath);
+      return possiblePath;
+    }
+  }
+  
+  // Log debug info for troubleshooting
+  console.log('[Tray] Icon search failed. Debug info:');
+  console.log('[Tray] __dirname:', __dirname);
+  console.log('[Tray] process.resourcesPath:', process.resourcesPath);
+  console.log('[Tray] app.getAppPath():', app.getAppPath());
+  console.log('[Tray] app.isPackaged:', app.isPackaged);
+  console.log('[Tray] Checked paths:', possiblePaths.join(', '));
+  
+  // Fallback to first path (will show default icon)
+  console.log('[Tray] WARNING: Icon file not found! Using fallback path');
+  return possiblePaths[0];
 }
 

@@ -31,8 +31,24 @@ function run(command, cwd = rootDir) {
 
 console.log('🚀 Building Claude Workbench Desktop App...\n');
 
+// Step 0: Generate icons if they don't exist
+console.log('📦 Step 0: Ensuring icon files are generated');
+const assetsDir = path.join(rootDir, 'desktop/assets');
+const requiredIcons = ['tray-icon.png', 'tray-iconTemplate.png', 'tray-icon.ico'];
+const missingIcons = requiredIcons.filter(icon => 
+  !fs.existsSync(path.join(assetsDir, icon))
+);
+
+if (missingIcons.length > 0) {
+  console.log(`⚠️  Missing icon files: ${missingIcons.join(', ')}`);
+  console.log('🎨 Generating icons...');
+  run('node desktop/assets/generate-icons.mjs');
+} else {
+  console.log('✅ All required icon files found');
+}
+
 // Step 1: Clean previous builds
-console.log('📦 Step 1: Cleaning previous builds');
+console.log('\n📦 Step 1: Cleaning previous builds');
 if (fs.existsSync(path.join(rootDir, 'desktop/dist'))) {
   fs.rmSync(path.join(rootDir, 'desktop/dist'), { recursive: true, force: true });
 }
@@ -42,7 +58,7 @@ if (fs.existsSync(path.join(rootDir, 'dist-electron'))) {
 
 // Step 2: Compile TypeScript for desktop
 console.log('\n📦 Step 2: Compiling Desktop TypeScript');
-run('cd desktop && npx tsc');
+run('npx tsc -p desktop/tsconfig.json');
 
 // Step 3: Build frontend
 console.log('\n📦 Step 3: Building Frontend');

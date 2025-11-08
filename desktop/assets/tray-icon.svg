@@ -1,13 +1,34 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <svg width="22" height="22" viewBox="0 0 22 22" xmlns="http://www.w3.org/2000/svg">
-  <circle cx="11" cy="11" r="8.8" fill="#8B5CF6"/>
-  <text 
-    x="50%" 
-    y="50%" 
-    font-family="Arial, sans-serif" 
-    font-size="11" 
-    font-weight="bold" 
-    fill="white" 
-    text-anchor="middle" 
-    dominant-baseline="central">C</text>
+  <defs>
+    <linearGradient id="smoothGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#a0b5f0;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6882dc;stop-opacity:1" />
+    </linearGradient>
+    <filter id="softShadow">
+      <feGaussianBlur in="SourceAlpha" stdDeviation="0.5"/>
+      <feOffset dx="0" dy="0.5" result="offsetblur"/>
+      <feComponentTransfer>
+        <feFuncA type="linear" slope="0.3"/>
+      </feComponentTransfer>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+  
+  <!-- Rounded rectangle with smooth gradient -->
+  <rect x="3.3" y="3.3" 
+        width="15.399999999999999" height="15.399999999999999" 
+        rx="3.3" ry="3.3" 
+        fill="url(#smoothGrad)" 
+        filter="url(#softShadow)"/>
+  
+  <!-- Subtle highlight overlay -->
+  <rect x="3.3" y="3.3" 
+        width="7.699999999999999" height="7.699999999999999" 
+        rx="3.3" ry="3.3" 
+        fill="white" 
+        opacity="0.2"/>
 </svg>

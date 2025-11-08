@@ -2,16 +2,20 @@ appId: com.claude.workbench
 productName: Claude Workbench
 copyright: Copyright © 2025 Claude Workbench
 
+# ASAR configuration - disabled so icon files are directly accessible
+asar: false
+
 # Directories
 directories:
   output: dist-electron
-  buildResources: desktop/assets
+  buildResources: desktop/build
 
 # Files to include
 files:
   - frontend/dist/**/*
   - backend/**/*
   - desktop/dist/**/*
+  - desktop/assets/**/*
   - desktop/package.json
   - package.json
   - "!**/{.git,.DS_Store,*.log,node_modules/.cache}"
@@ -24,7 +28,7 @@ mac:
   target:
     - dmg
     - zip
-  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  # icon: desktop/assets/icon.png  # Temporarily disabled due to format issue
   darkModeSupport: true
   hardenedRuntime: true
   gatekeeperAssess: false
@@ -49,7 +53,7 @@ win:
   target:
     - nsis
     - portable
-  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  # icon: desktop/assets/icon.png  # Temporarily disabled due to format issue
   artifactName: ${productName}-${version}-Setup.${ext}
 
 nsis:
@@ -69,7 +73,7 @@ linux:
   target:
     - AppImage
     - deb
-  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  # icon: desktop/assets/icon.png  # Temporarily disabled due to format issue
   category: Development
   executableName: claude-workbench
 
