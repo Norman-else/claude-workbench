@@ -24,6 +24,16 @@ const PORT = 3001;
 app.use(cors());
 app.use(bodyParser.json());
 
+// Serve frontend static files in Electron production mode
+// Check if we're running in Electron by looking for the electron module
+const isElectron = process.versions && process.versions.electron;
+if (isElectron) {
+  // In Electron, serve the frontend from the app resources
+  const frontendPath = path.join(__dirname, '../../frontend/dist');
+  console.log(`[Server] Serving frontend static files from: ${frontendPath}`);
+  app.use(express.static(frontendPath));
+}
+
 const HOME_DIR = os.homedir();
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
@@ -1804,8 +1814,14 @@ app.post('/api/mcp/:name/restart', async (req, res) => {
 });
 
 
-app.listen(PORT, () => {
+const server = app.listen(PORT, () => {
   console.log(`🚀 Claude Config Service backend running on http://localhost:${PORT}`);
   console.log(`📡 MCP Process Manager ready`);
+  if (isElectron) {
+    console.log(`📱 Frontend is available at http://localhost:${PORT}`);
+  }
 });
+
+// Export server for Electron to close it properly
+export default server;
 

@@ -6,6 +6,8 @@ backend/node_modules/
 # Build outputs
 frontend/dist/
 frontend/build/
+desktop/dist/
+dist-electron/
 
 # Logs
 *.log

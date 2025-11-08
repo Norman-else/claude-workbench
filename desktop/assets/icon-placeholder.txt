@@ -1,0 +1,39 @@
+# Icon Placeholder
+
+The SVG icons have been generated in this directory:
+- icon.svg (1024x1024)
+- tray-icon.svg (22x22)
+- tray-iconTemplate.svg (22x22, monochrome for macOS)
+
+For development and building, you need to convert these to PNG/ICO/ICNS formats.
+
+## Quick Setup (for development):
+
+You can use any of these methods:
+
+1. **Online converter** (easiest):
+   - Go to https://cloudconvert.com/svg-to-png
+   - Upload icon.svg and convert to 1024x1024 PNG
+   - Save as icon.png in this directory
+
+2. **Command line** (if you have ImageMagick):
+   ```bash
+   convert icon.svg -resize 1024x1024 icon.png
+   convert tray-icon.svg -resize 22x22 tray-icon.png
+   convert tray-iconTemplate.svg -resize 22x22 tray-iconTemplate.png
+   ```
+
+3. **macOS built-in tools**:
+   ```bash
+   # Convert SVG to PNG using qlmanage
+   qlmanage -t -s 1024 -o . icon.svg
+   mv icon.svg.png icon.png
+   ```
+
+4. **Let electron-builder handle it**:
+   - Just provide icon.png (1024x1024)
+   - electron-builder will auto-generate .icns and .ico
+
+## For production:
+Replace these placeholder icons with professionally designed icons that match your brand.
+

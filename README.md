@@ -2,9 +2,13 @@
 
 <div align="center">
 
-🚀 **A modern web-based workbench for Claude Code CLI**
+🚀 **A modern workbench for Claude Code CLI**
 
-Easily manage your Claude CLI configurations and custom commands through an intuitive web interface.
+Easily manage your Claude CLI configurations and custom commands through an intuitive interface.
+
+**Available as both Web App and Desktop App!**
+
+[Web Version](#web-version) • [Desktop Version](#desktop-version) • [Features](#features)
 
 </div>
 
@@ -32,13 +36,36 @@ Easily manage your Claude CLI configurations and custom commands through an intu
 - Express
 - CORS support
 
-## 📦 Installation
+## 🎯 Choose Your Version
+
+### Desktop Version (Recommended) 🖥️
+
+**Native desktop application with additional features:**
+- System tray integration
+- System notifications
+- Launch at startup
+- Better performance
+
+👉 **[Download Desktop App →](DESKTOP.md)**
+
+### Web Version 🌐
+
+**Browser-based version for quick access:**
+- No installation required
+- Cross-platform
+- Lightweight
+
+Continue reading below for web version setup.
+
+---
+
+## 📦 Web Version Installation
 
 ### Prerequisites
 - Node.js (LTS version recommended)
 - Claude Code CLI installed and accessible via `claude` command
 
-### All Platforms
+### Setup
 
 1. **Install all dependencies:**
    ```bash
@@ -277,4 +304,162 @@ MIT
 ---
 
 Made with ❤️ for easier Claude CLI configuration management
+
+## 🖥️ Desktop Version
+
+Want a native desktop experience? Check out our [Desktop App documentation](DESKTOP.md)!
+
+**Desktop-exclusive features:**
+- 🔔 System notifications
+- 🖥️ System tray integration
+- 🚀 Launch at startup
+- ⚡ Better performance
+- 📦 Standalone installer
+
+**Quick links:**
+- [Desktop Installation Guide](DESKTOP.md#installation)
+- [Desktop Quickstart (中文)](DESKTOP_QUICKSTART.md)
+- [Build from Source](#building-desktop-app-from-source)
+
+### Building Desktop App from Source
+
+#### Prerequisites
+- Node.js (LTS version recommended)
+- All project dependencies installed: `npm run install:all`
+
+#### Build for macOS
+
+```bash
+# Build macOS application (.dmg and .zip)
+npm run build:desktop:mac
+```
+
+**Output files** (in `dist-electron/` directory):
+- `Claude Workbench-1.0.0-arm64.dmg` - macOS installer (Apple Silicon)
+- `Claude Workbench-1.0.0-arm64-mac.zip` - Portable version (Apple Silicon)
+- `Claude Workbench-1.0.0-x64.dmg` - macOS installer (Intel)
+- `Claude Workbench-1.0.0-x64-mac.zip` - Portable version (Intel)
+
+**Installation:**
+1. Open the `.dmg` file
+2. Drag "Claude Workbench" to Applications folder
+3. First launch: Right-click → Open (to bypass unsigned app warning)
+
+#### Build for Windows
+
+```bash
+# Build Windows application (.exe installer and portable)
+npm run build:desktop:win
+```
+
+**Output files** (in `dist-electron/` directory):
+- `Claude Workbench-1.0.0-Setup.exe` - Windows installer (NSIS)
+- `Claude Workbench-1.0.0-Portable.exe` - Portable executable
+
+**Installation:**
+- **Installer**: Double-click `.exe` and follow setup wizard
+- **Portable**: Run directly without installation
+
+#### Build for Linux
+
+```bash
+# Build Linux application (.AppImage and .deb)
+npm run build:desktop:linux
+```
+
+**Output files** (in `dist-electron/` directory):
+- `Claude Workbench-1.0.0.AppImage` - Universal Linux package
+- `claude-workbench_1.0.0_amd64.deb` - Debian/Ubuntu package
+
+#### Build for All Platforms
+
+```bash
+# Build for all platforms (requires macOS for building .dmg)
+npm run build:desktop
+```
+
+#### Development Mode
+
+To run the desktop app in development mode with hot reload:
+
+```bash
+npm run dev:desktop
+```
+
+This will:
+1. Start the frontend dev server (http://localhost:3000)
+2. Start the backend server (http://localhost:3001)
+3. Launch Electron window with live reload
+
+#### Version Management
+
+The desktop app version is controlled by the `version` field in the root `package.json`:
+
+```json
+{
+  "version": "1.0.0"
+}
+```
+
+**To upgrade the version:**
+
+1. Edit `package.json` and change the version number:
+   ```json
+   {
+     "version": "1.1.0"  // or 2.0.0, 1.0.1, etc.
+   }
+   ```
+
+2. Rebuild the desktop app:
+   ```bash
+   npm run build:desktop:mac  # or :win, :linux
+   ```
+
+3. The output files will automatically use the new version:
+   - `Claude Workbench-1.1.0-arm64.dmg`
+   - `Claude Workbench-1.1.0-Setup.exe`
+   - etc.
+
+**Version Numbering Guidelines** (Semantic Versioning):
+
+- **Major version** (`2.0.0`) - Breaking changes, incompatible updates
+- **Minor version** (`1.1.0`) - New features, backward compatible
+- **Patch version** (`1.0.1`) - Bug fixes, backward compatible
+
+**Example upgrade scenarios:**
+
+```bash
+# Bug fix release
+1.0.0 → 1.0.1
+
+# New feature release
+1.0.1 → 1.1.0
+
+# Breaking change release
+1.1.0 → 2.0.0
+```
+
+#### Troubleshooting Build Issues
+
+**macOS Code Signing Warning:**
+```
+skipped macOS application code signing
+```
+This is normal for local builds. The app will still work, but users need to right-click → Open on first launch.
+
+**To sign the app** (requires Apple Developer account):
+```bash
+export CSC_IDENTITY_AUTO_DISCOVERY=true
+npm run build:desktop:mac
+```
+
+**Windows Smart Screen Warning:**
+Windows may show a warning for unsigned apps. Users can click "More info" → "Run anyway".
+
+**To sign Windows builds** (requires code signing certificate):
+```bash
+export WIN_CSC_LINK=/path/to/certificate.pfx
+export WIN_CSC_KEY_PASSWORD=your_password
+npm run build:desktop:win
+```
 

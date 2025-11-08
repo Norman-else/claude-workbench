@@ -1,0 +1,10 @@
+# Icon Placeholder Directory
+
+SVG icons have been generated. Convert them to PNG/ICO/ICNS for building:
+
+1. icon.svg -> icon.png (1024x1024)
+2. tray-icon.svg -> tray-icon.png (22x22)
+3. tray-iconTemplate.svg -> tray-iconTemplate.png (22x22)
+
+electron-builder can auto-generate .icns and .ico from icon.png
+
