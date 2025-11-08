@@ -1,0 +1,8 @@
+{
+  "name": "claude-workbench-desktop",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "main": "dist/main/index.js",
+  "private": true,
+  "description": "Desktop application files for Claude Workbench"
+}

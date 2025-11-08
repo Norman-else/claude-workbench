@@ -1,0 +1,78 @@
+appId: com.claude.workbench
+productName: Claude Workbench
+copyright: Copyright © 2025 Claude Workbench
+
+# Directories
+directories:
+  output: dist-electron
+  buildResources: desktop/assets
+
+# Files to include
+files:
+  - frontend/dist/**/*
+  - backend/**/*
+  - desktop/dist/**/*
+  - desktop/package.json
+  - package.json
+  - "!**/{.git,.DS_Store,*.log,node_modules/.cache}"
+extraMetadata:
+  main: desktop/dist/main/index.js
+
+# macOS configuration
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - dmg
+    - zip
+  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: desktop/build/entitlements.mac.plist
+  entitlementsInherit: desktop/build/entitlements.mac.plist
+
+dmg:
+  title: ${productName} ${version}
+  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  background: null
+  contents:
+    - x: 410
+      y: 180
+      type: link
+      path: /Applications
+    - x: 130
+      y: 180
+      type: file
+
+# Windows configuration  
+win:
+  target:
+    - nsis
+    - portable
+  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  artifactName: ${productName}-${version}-Setup.${ext}
+
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+  createDesktopShortcut: always
+  createStartMenuShortcut: true
+  shortcutName: ${productName}
+
+portable:
+  artifactName: ${productName}-${version}-Portable.${ext}
+
+# Linux configuration
+linux:
+  target:
+    - AppImage
+    - deb
+  # icon: desktop/assets/icon.png  # Commented out - using default Electron icon for now
+  category: Development
+  executableName: claude-workbench
+
+# Publish configuration (optional, for auto-updates)
+publish: null
+

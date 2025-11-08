@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Server, Terminal, Command, Save, RefreshCw, Plus, Trash2, Check, X, Eye, EyeOff, ArrowLeft, Edit2, Zap, Code, Play, Square, RotateCw, Activity, FileText, CheckCircle2, Settings, Copy } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
+import { useElectron } from './useElectron';
 
 interface McpServer {
   command: string;
@@ -122,6 +123,9 @@ function ServerLogs({ serverName }: { serverName: string }) {
 }
 
 function App() {
+  // Electron integration
+  const electron = useElectron();
+  
   const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands' | 'skills'>('mcp');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [commands, setCommands] = useState<CommandFile[]>([]);
@@ -230,6 +234,12 @@ function App() {
     setTimeout(() => {
       setNotification({ show: false, message: '', type: 'success' });
     }, 3000);
+    
+    // Also show native Electron notification if running in Electron
+    if (electron.isElectron) {
+      const title = type === 'success' ? 'Claude Workbench' : 'Error';
+      electron.showNotification(title, message);
+    }
   };
 
   const loadConfig = async (showProgress = false) => {
@@ -1026,19 +1036,19 @@ Show concrete examples of using this Skill.
         {/* Sidebar */}
         <nav className="w-72 glass-dark border-r border-purple-500/20 flex flex-col p-6 relative z-10">
           {/* Logo */}
-          <div className="mb-12 animate-float">
-            <div className="flex items-center space-x-3 mb-2">
+          <div className="mb-12 mt-8 animate-float">
+            <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center animate-glow-pulse">
                 <Zap className="w-7 h-7 text-white" />
-                </div>
-                <div>
+              </div>
+              <div>
                 <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
                   Claude Code
                 </h1>
                 <p className="text-xs text-gray-400">Workbench</p>
-                </div>
               </div>
-              </div>
+            </div>
+          </div>
 
           {/* Navigation */}
           <div className="space-y-2 flex-1">
@@ -1142,6 +1152,46 @@ Show concrete examples of using this Skill.
           <div className="mt-4">
             <ThemeToggle />
           </div>
+
+          {/* Electron-only: Auto-launch setting */}
+          {electron.isElectron && (
+            <div className="mt-4 p-3 glass border border-purple-500/20 rounded-lg">
+              <label className="flex items-center justify-between cursor-pointer">
+                <div className="flex items-center space-x-2">
+                  <Settings className="w-4 h-4 text-purple-400" />
+                  <span className="text-sm text-gray-300">Launch at Startup</span>
+                </div>
+                <input
+                  type="checkbox"
+                  checked={electron.autoLaunchEnabled}
+                  onChange={async (e) => {
+                    try {
+                      await electron.setAutoLaunch(e.target.checked);
+                      showNotification(
+                        e.target.checked 
+                          ? 'Auto-launch enabled' 
+                          : 'Auto-launch disabled',
+                        'success'
+                      );
+                    } catch (error) {
+                      showNotification('Failed to update auto-launch setting', 'error');
+                    }
+                  }}
+                  className="rounded bg-gray-800 border-purple-500/20 text-purple-500 focus:ring-purple-500"
+                />
+              </label>
+              <p className="text-xs text-gray-500 mt-1 ml-6">
+                Start Claude Workbench when you log in
+              </p>
+            </div>
+          )}
+
+          {/* Desktop app indicator */}
+          {electron.isElectron && (
+            <div className="mt-4 text-xs text-center text-purple-400/60">
+              Desktop App v1.0
+            </div>
+          )}
         </nav>
 
         {/* Main content */}

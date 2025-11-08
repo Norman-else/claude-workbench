@@ -7,7 +7,13 @@
     "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
     "dev:frontend": "cd frontend && npm run dev",
     "dev:backend": "cd backend && npm run dev",
+    "dev:desktop": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\" \"wait-on http://localhost:3000 http://localhost:3001 && electron desktop/main/index.ts\"",
     "build": "cd frontend && npm run build",
+    "build:desktop": "node desktop/build/build.mjs",
+    "build:desktop:mac": "node desktop/build/build.mjs --mac",
+    "build:desktop:win": "node desktop/build/build.mjs --win",
+    "build:desktop:linux": "node desktop/build/build.mjs --linux",
+    "compile:desktop": "cd desktop && tsc",
     "install:all": "npm install && cd frontend && npm install && cd ../backend && npm install"
   },
   "keywords": [
@@ -17,7 +23,17 @@
   ],
   "author": "",
   "license": "MIT",
+  "main": "desktop/dist/main/index.js",
   "devDependencies": {
-    "concurrently": "^8.2.2"
+    "@types/node": "^24.10.0",
+    "concurrently": "^8.2.2",
+    "electron": "^39.1.1",
+    "electron-builder": "^26.0.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "wait-on": "^9.0.1"
+  },
+  "build": {
+    "extends": "./desktop/build/electron-builder.yml"
   }
 }
