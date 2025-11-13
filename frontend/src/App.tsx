@@ -125,7 +125,12 @@ function ServerLogs({ serverName }: { serverName: string }) {
 function App() {
   // Electron integration
   const electron = useElectron();
-  
+
+  // Set document title
+  useEffect(() => {
+    document.title = 'Claude Workbench';
+  }, []);
+
   const [activeTab, setActiveTab] = useState<'mcp' | 'env' | 'commands' | 'skills'>('mcp');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [commands, setCommands] = useState<CommandFile[]>([]);
@@ -974,11 +979,11 @@ Show concrete examples of using this Skill.
   return (
     <div className="min-h-screen relative overflow-hidden">
       {/* Animated background */}
-      <div className="fixed inset-0 grid-bg opacity-30"></div>
-      <div className="fixed inset-0 scan-lines opacity-20"></div>
-      
+      <div className="fixed inset-0 grid-bg opacity-30 pointer-events-none"></div>
+      <div className="fixed inset-0 scan-lines opacity-20 pointer-events-none"></div>
+
       {/* Starlight twinkle effect */}
-      <div className="starlights">
+      <div className="starlights pointer-events-none">
         {starlights.map((star) => (
           <div
             key={star.id}
@@ -994,9 +999,9 @@ Show concrete examples of using this Skill.
           />
         ))}
       </div>
-      
+
       {/* Particle background */}
-      <div className="particles">
+      <div className="particles pointer-events-none">
         {particles.map((particle) => (
           <div
             key={particle.id}
@@ -1010,13 +1015,13 @@ Show concrete examples of using this Skill.
           />
         ))}
       </div>
-      
+
       {/* Global notification */}
       {notification.show && (
         <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] animate-slide-down">
           <div className={`glass px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 neon-glow ${
               notification.type === 'success'
-              ? 'border-l-4 border-green-500' 
+              ? 'border-l-4 border-green-500'
               : 'border-l-4 border-red-500'
           }`}>
             {notification.type === 'success' ? (
@@ -1034,9 +1039,14 @@ Show concrete examples of using this Skill.
       {/* Main layout */}
       <div className="flex h-screen">
         {/* Sidebar */}
-        <nav className="w-72 glass-dark border-r border-purple-500/20 flex flex-col p-6 relative z-10">
+        <nav className="w-72 glass-dark border-r border-purple-500/20 flex flex-col p-6 relative z-10 titlebar-no-drag">
+          {/* macOS draggable area at top of sidebar */}
+          {electron.isElectron && (
+            <div className="titlebar-drag absolute top-0 left-0 right-0 h-20 z-50 pointer-events-auto" />
+          )}
+
           {/* Logo */}
-          <div className="mb-12 mt-8 animate-float">
+          <div className="mb-12 mt-8 animate-float relative z-10 titlebar-no-drag">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center animate-glow-pulse">
                 <Zap className="w-7 h-7 text-white" />
@@ -1195,7 +1205,11 @@ Show concrete examples of using this Skill.
         </nav>
 
         {/* Main content */}
-        <div className="flex-1 overflow-y-auto relative z-10">
+        <div className="flex-1 overflow-y-auto relative z-10 titlebar-no-drag">
+          {/* macOS draggable area at top of main content */}
+          {electron.isElectron && (
+            <div className="titlebar-drag fixed top-0 left-72 right-0 h-20 z-50 pointer-events-auto" />
+          )}
           {/* MCP Servers Tab */}
           {activeTab === 'mcp' && (
             <div className="p-8">

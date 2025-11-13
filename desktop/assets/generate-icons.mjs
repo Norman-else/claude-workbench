@@ -173,13 +173,16 @@ function createAppIconSVG(size) {
 </svg>`;
 }
 
-// Create tray icon SVG - Smooth rounded square with gradient
+// Create tray icon SVG - Mac-style monochrome geometric icon
 function createTrayIconSVG(size, isTemplate = false) {
   if (isTemplate) {
-    // macOS template: monochrome rounded square
+    // macOS template: monochrome geometric hexagon
     return `<?xml version="1.0" encoding="UTF-8"?>
 <svg width="${size}" height="${size}" viewBox="0 0 ${size} ${size}" xmlns="http://www.w3.org/2000/svg">
-  <rect x="${size*0.2}" y="${size*0.2}" width="${size*0.6}" height="${size*0.6}" rx="${size*0.12}" fill="#000"/>
+  <!-- Hexagon shape -->
+  <path d="M ${size*0.25} ${size*0.38} L ${size*0.43} ${size*0.25} L ${size*0.68} ${size*0.25} L ${size*0.86} ${size*0.50} L ${size*0.68} ${size*0.75} L ${size*0.43} ${size*0.75} Z" fill="#000"/>
+  <!-- Inner diamond -->
+  <path d="M ${size*0.43} ${size*0.50} L ${size*0.56} ${size*0.37} L ${size*0.69} ${size*0.50} L ${size*0.56} ${size*0.63} Z" fill="#FFF" opacity="0.8"/>
 </svg>`;
   }
   

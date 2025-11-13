@@ -9,6 +9,7 @@ export function createWindow(): BrowserWindow {
     height: 900,
     minWidth: 1000,
     minHeight: 700,
+    title: 'Claude Workbench',
     show: false, // Don't show until ready
     backgroundColor: '#1a1a2e',
     icon: getIconPath(),
@@ -18,7 +19,8 @@ export function createWindow(): BrowserWindow {
       preload: path.join(__dirname, '../preload/index.js'),
       webSecurity: true,
     },
-    titleBarStyle: process.platform === 'darwin' ? 'hiddenInset' : 'default',
+    titleBarStyle: process.platform === 'darwin' ? 'hidden' : 'default',
+    trafficLightPosition: process.platform === 'darwin' ? { x: 16, y: 16 } : undefined,
   });
 
   // Load the app

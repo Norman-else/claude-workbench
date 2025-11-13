@@ -63,17 +63,9 @@ export function getTray(): Tray | null {
 }
 
 function getTrayIconPath(): string {
-  // Use Template image for macOS (monochrome icon that adapts to system theme)
-  // Use PNG for Windows/Linux (PNG works better than ICO in Electron tray)
-  let iconName: string;
-  
-  if (process.platform === 'darwin') {
-    iconName = 'tray-iconTemplate.png';
-  } else if (process.platform === 'win32') {
-    iconName = 'tray-icon.png';  // Changed from .ico to .png
-  } else {
-    iconName = 'tray-icon.png';
-  }
+  // Use the same icon for all platforms
+  // tray-iconTemplate.png is used on Mac, Windows, and Linux
+  const iconName = 'tray-iconTemplate.png';
   
   // Try multiple possible paths for the icon
   const possiblePaths = [

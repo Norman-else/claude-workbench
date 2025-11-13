@@ -56,6 +56,17 @@ body {
   transition: background 0.3s ease, color 0.3s ease;
 }
 
+/* macOS window draggable region */
+.titlebar-drag {
+  -webkit-app-region: drag;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.titlebar-no-drag {
+  -webkit-app-region: no-drag;
+}
+
 code {
   font-family: 'JetBrains Mono', 'Fira Code', source-code-pro, Menlo, Monaco, Consolas, monospace;
 }
