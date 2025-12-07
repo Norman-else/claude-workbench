@@ -136,25 +136,25 @@ function App() {
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
   const [showApiKey, setShowApiKey] = useState(false);
-  
+
   // MCP Status Management
   const [mcpStatuses, setMcpStatuses] = useState<Record<string, McpStatus>>({});
   const [isLoadingStatus, setIsLoadingStatus] = useState<Record<string, boolean>>({});
   const [isRefreshingConfig, setIsRefreshingConfig] = useState(false);
-  
+
   // Environment Profiles Management
   const [envProfiles, setEnvProfiles] = useState<EnvProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
   const [envViewMode, setEnvViewMode] = useState<ViewMode>('list');
   const [editingProfile, setEditingProfile] = useState<EnvProfile | null>(null);
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
-  
+
   // View mode state
   const [mcpViewMode, setMcpViewMode] = useState<ViewMode>('list');
   const [commandViewMode, setCommandViewMode] = useState<ViewMode>('list');
   const [skillViewMode, setSkillViewMode] = useState<ViewMode>('list');
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
-  
+
   // Modal state
   const [showAddServerModal, setShowAddServerModal] = useState(false);
   const [showAddCommandModal, setShowAddCommandModal] = useState(false);
@@ -176,7 +176,7 @@ function App() {
     commands: 'pending' | 'loading' | 'done' | 'error';
     skills: 'pending' | 'loading' | 'done' | 'error';
   }>({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending' });
-  
+
   // Editing state
   const [editingServer, setEditingServer] = useState<McpServer | null>(null);
   const [editingServerArgsInput, setEditingServerArgsInput] = useState('');
@@ -199,7 +199,7 @@ function App() {
     sonnetModel: '',
     smallFastModel: ''
   });
-  
+
   // Notification state
   const [notification, setNotification] = useState<{
     show: boolean;
@@ -219,8 +219,8 @@ function App() {
         if (res.ok) {
           const statuses = await res.json();
           setMcpStatuses(statuses);
-      }
-    } catch (error) {
+        }
+      } catch (error) {
         console.error('Failed to poll MCP statuses:', error);
       }
     };
@@ -239,7 +239,7 @@ function App() {
     setTimeout(() => {
       setNotification({ show: false, message: '', type: 'success' });
     }, 3000);
-    
+
     // Also show native Electron notification if running in Electron
     if (electron.isElectron) {
       const title = type === 'success' ? 'Claude Workbench' : 'Error';
@@ -249,12 +249,12 @@ function App() {
 
   const loadConfig = async (showProgress = false) => {
     setIsRefreshingConfig(true);
-    
+
     if (showProgress) {
       setShowRefreshModal(true);
       setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending' });
     }
-    
+
     try {
       // Load Claude config
       if (showProgress) setRefreshProgress(prev => ({ ...prev, mcpConfig: 'loading' }));
@@ -266,7 +266,7 @@ function App() {
       } else {
         if (showProgress) setRefreshProgress(prev => ({ ...prev, mcpConfig: 'error' }));
       }
-      
+
       // Load environment profiles
       if (showProgress) setRefreshProgress(prev => ({ ...prev, envProfiles: 'loading' }));
       const profilesRes = await fetch('/api/env-profiles');
@@ -278,7 +278,7 @@ function App() {
       } else {
         if (showProgress) setRefreshProgress(prev => ({ ...prev, envProfiles: 'error' }));
       }
-      
+
       // Load commands
       if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'loading' }));
       const cmdRes = await fetch('/api/commands');
@@ -289,7 +289,7 @@ function App() {
       } else {
         if (showProgress) setRefreshProgress(prev => ({ ...prev, commands: 'error' }));
       }
-      
+
       // Load skills
       if (showProgress) setRefreshProgress(prev => ({ ...prev, skills: 'loading' }));
       const skillsRes = await fetch('/api/skills');
@@ -300,7 +300,7 @@ function App() {
       } else {
         if (showProgress) setRefreshProgress(prev => ({ ...prev, skills: 'error' }));
       }
-      
+
       if (showProgress) {
         // Auto close modal after 1.5 seconds if all successful
         setTimeout(() => {
@@ -332,13 +332,13 @@ function App() {
 
   const saveServerDetail = () => {
     if (!selectedServer || !editingServer) return;
-    
+
     // Validate and parse args from input string
     let argsArray: string[] = [];
-    
+
     if (editingServerArgsInput.trim() !== '') {
       argsArray = editingServerArgsInput.split(',').map(a => a.trim()).filter(a => a !== '');
-      
+
       // Check if any argument is empty after trimming
       const hasInvalidArgs = editingServerArgsInput.split(',').some(a => a.trim() === '');
       if (hasInvalidArgs) {
@@ -346,10 +346,10 @@ function App() {
         return;
       }
     }
-    
+
     // Validate and parse environment variables JSON
     let envObject: Record<string, string> = {};
-    
+
     if (editingServerEnvInput.trim() !== '') {
       try {
         envObject = JSON.parse(editingServerEnvInput);
@@ -361,13 +361,13 @@ function App() {
         return;
       }
     }
-    
+
     const cleanedServer = {
       ...editingServer,
       args: argsArray,
       env: envObject
     };
-    
+
     const newConfig = {
       ...claudeConfig,
       mcpServers: {
@@ -375,14 +375,14 @@ function App() {
         [selectedServer]: cleanedServer
       }
     };
-    
+
     setClaudeConfig(newConfig);
     setMcpViewMode('list');
     setSelectedServer(null);
     setEditingServer(null);
     setEditingServerArgsInput('');
     setEditingServerEnvInput('');
-    
+
     // Auto-save
     fetch('/api/claude-config', {
       method: 'POST',
@@ -430,7 +430,7 @@ function App() {
     setClaudeConfig(newConfig);
     setShowAddServerModal(false);
     setNewServerForm({ name: '', command: '', args: '', env: '' });
-    
+
     // Auto-save
     fetch('/api/claude-config', {
       method: 'POST',
@@ -444,16 +444,16 @@ function App() {
   const deleteServer = (serverName: string) => {
     const newServers = { ...claudeConfig.mcpServers };
     delete newServers[serverName];
-    
+
     const newConfig = {
       ...claudeConfig,
       mcpServers: newServers
     };
-    
+
     setClaudeConfig(newConfig);
     setShowDeleteConfirm(false);
     setItemToDelete(null);
-    
+
     // Auto-save
     fetch('/api/claude-config', {
       method: 'POST',
@@ -475,7 +475,7 @@ function App() {
 
   const saveProfileDetail = async () => {
     if (!editingProfile) return;
-    
+
     try {
       const response = await fetch(`/api/env-profiles/${editingProfile.id}`, {
         method: 'PUT',
@@ -529,7 +529,7 @@ function App() {
       const response = await fetch(`/api/env-profiles/${profileId}`, {
         method: 'DELETE',
       });
-      
+
       if (response.ok) {
         showNotification('Profile deleted successfully!');
         await loadConfig();
@@ -548,7 +548,7 @@ function App() {
     setIsLoadingConfigFile(true);
     setShowConfigFileModal(true);
     setConfigFileContent('Loading...');
-    
+
     try {
       const response = await fetch('/api/shell-config-content');
       if (response.ok) {
@@ -616,7 +616,7 @@ function App() {
 
   const saveCommandDetail = async () => {
     if (!editingCommand) return;
-    
+
     try {
       const response = await fetch('/api/commands', {
         method: 'POST',
@@ -643,14 +643,14 @@ function App() {
 
   const saveSkillDetail = async () => {
     if (!editingSkill) return;
-    
+
     // Validate skill name format
     const nameRegex = /^[a-z0-9-]{1,64}$/;
     if (!nameRegex.test(editingSkill.name)) {
       showNotification('Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)', 'error');
       return;
     }
-    
+
     try {
       const response = await fetch('/api/skills', {
         method: 'POST',
@@ -733,7 +733,7 @@ Show concrete examples of using this Skill.
       const response = await fetch('/api/commands', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
+        body: JSON.stringify({
           name: newServerForm.name,
           content: newServerForm.command
         }),
@@ -755,7 +755,7 @@ Show concrete examples of using this Skill.
       const response = await fetch(`/api/commands/${commandName}`, {
         method: 'DELETE',
       });
-      
+
       if (response.ok) {
         showNotification('Command deleted successfully!');
         await loadConfig();
@@ -772,7 +772,7 @@ Show concrete examples of using this Skill.
       const response = await fetch(`/api/skills/${skillName}`, {
         method: 'DELETE',
       });
-      
+
       if (response.ok) {
         showNotification('Skill deleted successfully!');
         await loadConfig();
@@ -791,9 +791,9 @@ Show concrete examples of using this Skill.
       const response = await fetch(`/api/mcp/${serverName}/start`, {
         method: 'POST',
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         showNotification(`Server "${serverName}" started successfully! PID: ${data.pid}`);
         // Update status immediately
@@ -805,12 +805,12 @@ Show concrete examples of using this Skill.
         const errorMessage = data.details || data.error || 'Failed to start server';
         console.error(`Failed to start server ${serverName}:`, data);
         showNotification(`❌ Failed to start "${serverName}": ${errorMessage}`, 'error');
-        
+
         // Show logs in console for debugging
         if (data.logs && data.logs.length > 0) {
           console.error(`Server logs for ${serverName}:`, data.logs);
         }
-        
+
         // Update status to error
         setMcpStatuses(prev => ({
           ...prev,
@@ -832,9 +832,9 @@ Show concrete examples of using this Skill.
       const response = await fetch(`/api/mcp/${serverName}/stop`, {
         method: 'POST',
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         showNotification(`Server "${serverName}" stopped`);
         // Update status immediately
@@ -842,7 +842,7 @@ Show concrete examples of using this Skill.
           ...prev,
           [serverName]: { status: 'stopping', running: false }
         }));
-    } else {
+      } else {
         showNotification(data.error || 'Failed to stop server', 'error');
       }
     } catch (error) {
@@ -856,16 +856,16 @@ Show concrete examples of using this Skill.
     setIsLoadingStatus(prev => ({ ...prev, [serverName]: true }));
     try {
       showNotification(`Restarting server "${serverName}"...`, 'success');
-      
+
       const response = await fetch(`/api/mcp/${serverName}/restart`, {
         method: 'POST',
       });
-      
+
       const data = await response.json();
-      
+
       if (response.ok) {
         showNotification(`Server "${serverName}" restarted! PID: ${data.pid}`);
-    } else {
+      } else {
         showNotification(data.error || 'Failed to restart server', 'error');
       }
     } catch (error) {
@@ -883,7 +883,7 @@ Show concrete examples of using this Skill.
 
     try {
       const importedServers = JSON.parse(importJsonContent);
-      
+
       // Validate that it's an object with server configurations
       if (typeof importedServers !== 'object' || importedServers === null) {
         throw new Error('JSON must be an object');
@@ -895,7 +895,7 @@ Show concrete examples of using this Skill.
         if (typeof serverConfig !== 'object' || serverConfig === null) {
           throw new Error(`Server "${name}" must be a valid object`);
         }
-        
+
         const server = serverConfig as any;
         if (!server.command || typeof server.command !== 'string') {
           throw new Error(`Server "${name}" must have a valid "command" field`);
@@ -936,7 +936,7 @@ Show concrete examples of using this Skill.
 
   const getDeleteItemDisplayName = (): string => {
     if (!itemToDelete) return '';
-    
+
     if (activeTab === 'env') {
       // For environment profiles, get the profile name from the profiles list
       const profile = envProfiles.find(p => p.id === itemToDelete);
@@ -1019,11 +1019,10 @@ Show concrete examples of using this Skill.
       {/* Global notification */}
       {notification.show && (
         <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] animate-slide-down">
-          <div className={`glass px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 neon-glow ${
-              notification.type === 'success'
-              ? 'border-l-4 border-green-500'
-              : 'border-l-4 border-red-500'
-          }`}>
+          <div className={`glass px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 neon-glow ${notification.type === 'success'
+            ? 'border-l-4 border-green-500'
+            : 'border-l-4 border-red-500'
+            }`}>
             {notification.type === 'success' ? (
               <div className="pulse-ring">
                 <Check className="w-6 h-6 text-green-400" />
@@ -1062,40 +1061,36 @@ Show concrete examples of using this Skill.
 
           {/* Navigation */}
           <div className="space-y-2 flex-1">
-                <button
+            <button
               onClick={() => setActiveTab('mcp')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
-                activeTab === 'mcp'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
-              }`}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${activeTab === 'mcp'
+                ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
+                : 'hover:glass border border-transparent hover:border-purple-500/30'
+                }`}
             >
-              <div className={`p-2 rounded-lg transition-all ${
-                activeTab === 'mcp' 
-                  ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
-                  : 'bg-gray-800 group-hover:bg-purple-900/30'
-              }`}>
+              <div className={`p-2 rounded-lg transition-all ${activeTab === 'mcp'
+                ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
+                : 'bg-gray-800 group-hover:bg-purple-900/30'
+                }`}>
                 <Server className="w-5 h-5 text-white" />
               </div>
               <span className="font-medium text-white">MCP Servers</span>
               {activeTab === 'mcp' && (
                 <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
               )}
-                </button>
+            </button>
 
-                <button
+            <button
               onClick={() => setActiveTab('env')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
-                activeTab === 'env'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
-              }`}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${activeTab === 'env'
+                ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
+                : 'hover:glass border border-transparent hover:border-purple-500/30'
+                }`}
             >
-              <div className={`p-2 rounded-lg transition-all ${
-                activeTab === 'env' 
-                  ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
-                  : 'bg-gray-800 group-hover:bg-purple-900/30'
-              }`}>
+              <div className={`p-2 rounded-lg transition-all ${activeTab === 'env'
+                ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
+                : 'bg-gray-800 group-hover:bg-purple-900/30'
+                }`}>
                 <Terminal className="w-5 h-5 text-white" />
               </div>
               <span className="font-medium text-white">Environment</span>
@@ -1106,19 +1101,17 @@ Show concrete examples of using this Skill.
 
             <button
               onClick={() => setActiveTab('commands')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
-                activeTab === 'commands'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
-              }`}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${activeTab === 'commands'
+                ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
+                : 'hover:glass border border-transparent hover:border-purple-500/30'
+                }`}
             >
-              <div className={`p-2 rounded-lg transition-all ${
-                activeTab === 'commands' 
-                  ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
-                  : 'bg-gray-800 group-hover:bg-purple-900/30'
-              }`}>
+              <div className={`p-2 rounded-lg transition-all ${activeTab === 'commands'
+                ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
+                : 'bg-gray-800 group-hover:bg-purple-900/30'
+                }`}>
                 <Command className="w-5 h-5 text-white" />
-                </div>
+              </div>
               <span className="font-medium text-white">Commands</span>
               {activeTab === 'commands' && (
                 <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
@@ -1127,36 +1120,34 @@ Show concrete examples of using this Skill.
 
             <button
               onClick={() => setActiveTab('skills')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
-                activeTab === 'skills'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
-              }`}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${activeTab === 'skills'
+                ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
+                : 'hover:glass border border-transparent hover:border-purple-500/30'
+                }`}
             >
-              <div className={`p-2 rounded-lg transition-all ${
-                activeTab === 'skills' 
-                  ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
-                  : 'bg-gray-800 group-hover:bg-purple-900/30'
-              }`}>
+              <div className={`p-2 rounded-lg transition-all ${activeTab === 'skills'
+                ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring'
+                : 'bg-gray-800 group-hover:bg-purple-900/30'
+                }`}>
                 <Zap className="w-5 h-5 text-white" />
-                </div>
+              </div>
               <span className="font-medium text-white">Skills</span>
               {activeTab === 'skills' && (
                 <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
               )}
             </button>
-              </div>
+          </div>
 
           {/* Refresh button */}
-                <button
+          <button
             onClick={() => loadConfig(true)}
             disabled={isRefreshingConfig}
             className="mt-auto w-full glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 ripple-effect group tooltip disabled:opacity-50 disabled:cursor-not-allowed"
             data-tooltip={isRefreshingConfig ? "Refreshing..." : "Reload configuration from disk"}
-                >
+          >
             <RefreshCw className={`w-4 h-4 text-purple-400 transition-transform duration-500 ${isRefreshingConfig ? 'animate-spin' : 'group-hover:rotate-180'}`} />
             <span className="text-sm text-gray-300">{isRefreshingConfig ? 'Refreshing...' : 'Refresh Config'}</span>
-                </button>
+          </button>
 
           {/* Theme toggle */}
           <div className="mt-4">
@@ -1178,8 +1169,8 @@ Show concrete examples of using this Skill.
                     try {
                       await electron.setAutoLaunch(e.target.checked);
                       showNotification(
-                        e.target.checked 
-                          ? 'Auto-launch enabled' 
+                        e.target.checked
+                          ? 'Auto-launch enabled'
                           : 'Auto-launch disabled',
                         'success'
                       );
@@ -1222,24 +1213,24 @@ Show concrete examples of using this Skill.
                         MCP Servers
                       </h2>
                       <p className="text-gray-400">Manage your Model Context Protocol servers</p>
-              </div>
-              <div className="flex space-x-4">
-                <button
-                      onClick={() => setShowAddServerModal(true)}
-                      className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
-              >
-                      <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
-                      <span className="text-white font-medium">Add Server</span>
-              </button>
-              <button
-                      onClick={() => setShowImportJsonModal(true)}
-                      className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect"
-              >
-                      <Code className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
-                      <span className="text-white font-medium">Import JSON</span>
-              </button>
-            </div>
-            </div>
+                    </div>
+                    <div className="flex space-x-4 titlebar-no-drag relative z-[60]">
+                      <button
+                        onClick={() => setShowAddServerModal(true)}
+                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                      >
+                        <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                        <span className="text-white font-medium">Add Server</span>
+                      </button>
+                      <button
+                        onClick={() => setShowImportJsonModal(true)}
+                        className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect titlebar-no-drag"
+                      >
+                        <Code className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
+                        <span className="text-white font-medium">Import JSON</span>
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Server cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -1247,168 +1238,166 @@ Show concrete examples of using this Skill.
                       const status = mcpStatuses[name];
                       const isRunning = status?.running || false;
                       const isLoading = isLoadingStatus[name] || false;
-                      
+
                       return (
-                      <div
-                        key={name}
-                        className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col card-hover cursor-pointer"
-                      >
-                        {/* Status indicator - improved display */}
-                        <div className="mb-4 flex items-center space-x-2">
-                          <div className={`w-2 h-2 rounded-full ${
-                            isRunning ? 'bg-green-400 animate-pulse' : 
-                            status?.status === 'stopping' ? 'bg-yellow-400 animate-pulse' :
-                            status?.status === 'error' ? 'bg-red-400 animate-pulse' :
-                            'bg-gray-500'
-                          }`}></div>
-                          <span className={`text-xs font-medium ${
-                            isRunning ? 'text-green-400' : 
-                            status?.status === 'stopping' ? 'text-yellow-400' :
-                            status?.status === 'error' ? 'text-red-400' :
-                            'text-gray-500'
-                          }`}>
-                            {isRunning ? 'Running' : 
-                             status?.status === 'stopping' ? 'Stopping' :
-                             status?.status === 'error' ? 'Error' :
-                             'Stopped'}
-                          </span>
-                          {status?.pid && (
-                            <span className="text-[10px] text-gray-500 ml-1">PID: {status.pid}</span>
-                          )}
-                        </div>
-
-                        <div className="flex items-start mb-4">
-                          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
-                            <Server className="w-6 h-6 text-purple-400" />
-                          </div>
-                        </div>
-
-                        <h3 
-                          className="text-xl font-bold text-white mb-2 transition-all cursor-pointer"
-                          onClick={() => openServerDetail(name)}
+                        <div
+                          key={name}
+                          className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col card-hover cursor-pointer"
                         >
-                          {name}
-                        </h3>
-                        
-                        <div className="space-y-2 text-sm mb-4 flex-1">
-                          <div className="flex items-center space-x-2">
-                            <Code className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-400 font-mono text-xs truncate">{server.command}</span>
+                          {/* Status indicator - improved display */}
+                          <div className="mb-4 flex items-center space-x-2">
+                            <div className={`w-2 h-2 rounded-full ${isRunning ? 'bg-green-400 animate-pulse' :
+                              status?.status === 'stopping' ? 'bg-yellow-400 animate-pulse' :
+                                status?.status === 'error' ? 'bg-red-400 animate-pulse' :
+                                  'bg-gray-500'
+                              }`}></div>
+                            <span className={`text-xs font-medium ${isRunning ? 'text-green-400' :
+                              status?.status === 'stopping' ? 'text-yellow-400' :
+                                status?.status === 'error' ? 'text-red-400' :
+                                  'text-gray-500'
+                              }`}>
+                              {isRunning ? 'Running' :
+                                status?.status === 'stopping' ? 'Stopping' :
+                                  status?.status === 'error' ? 'Error' :
+                                    'Stopped'}
+                            </span>
+                            {status?.pid && (
+                              <span className="text-[10px] text-gray-500 ml-1">PID: {status.pid}</span>
+                            )}
                           </div>
-                          {server.args && server.args.length > 0 && (
-                            <div className="flex items-center space-x-1 ml-6">
-                              <div className="px-2 py-1 bg-purple-500/10 rounded text-xs text-purple-400">
-                                {server.args.length} arg{server.args.length > 1 ? 's' : ''}
-                              </div>
+
+                          <div className="flex items-start mb-4">
+                            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
+                              <Server className="w-6 h-6 text-purple-400" />
                             </div>
-                          )}
-                        </div>
+                          </div>
 
-                        {/* Control buttons */}
-                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
-                          {isRunning ? (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setLogsServerName(name);
-                                  setShowLogsModal(true);
-                                }}
-                                className="flex-1 glass hover:border-blue-500/50 border border-blue-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs"
-                                data-tooltip="View logs"
-                              >
-                                <FileText className="w-4 h-4 text-blue-400" />
-                                <span className="text-blue-400 hidden sm:inline">Logs</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  restartMcpServer(name);
-                                }}
-                                disabled={isLoading}
-                                className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
-                                data-tooltip="Restart server"
-                              >
-                                <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
-                                <span className="text-yellow-400 hidden sm:inline">Restart</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  stopMcpServer(name);
-                                }}
-                                disabled={isLoading}
-                                className="flex-1 glass hover:border-red-500/50 border border-red-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
-                                data-tooltip="Stop server"
-                              >
-                                <Square className="w-4 h-4 text-red-400" />
-                                <span className="text-red-400 hidden sm:inline">Stop</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const serverJson = JSON.stringify({ [name]: server }, null, 2);
-                                  navigator.clipboard.writeText(serverJson);
-                                  showNotification('MCP configuration copied to clipboard!');
-                                }}
-                                className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
-                                data-tooltip="Copy JSON"
-                              >
-                                <Copy className="w-4 h-4 text-cyan-400" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  startMcpServer(name);
-                                }}
-                                disabled={isLoading}
-                                className="flex-1 bg-gradient-to-r from-green-500/20 to-emerald-500/20 hover:from-green-500/30 hover:to-emerald-500/30 border border-green-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect text-xs"
-                              >
-                                <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
-                                <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  const serverJson = JSON.stringify({ [name]: server }, null, 2);
-                                  navigator.clipboard.writeText(serverJson);
-                                  showNotification('MCP configuration copied to clipboard!');
-                                }}
-                                className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
-                                data-tooltip="Copy JSON"
-                              >
-                                <Copy className="w-4 h-4 text-cyan-400" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openServerDetail(name);
-                                }}
-                                className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all tooltip"
-                                data-tooltip="Edit server"
-                              >
-                                <Edit2 className="w-4 h-4 text-purple-400" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setItemToDelete(name);
-                                  setShowDeleteConfirm(true);
-                                }}
-                                className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
-                                data-tooltip="Delete server"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-400" />
-                              </button>
-                            </>
-                          )}
-                        </div>
+                          <h3
+                            className="text-xl font-bold text-white mb-2 transition-all cursor-pointer"
+                            onClick={() => openServerDetail(name)}
+                          >
+                            {name}
+                          </h3>
 
-                        {/* Hover border effect - removed background glow for better text readability */}
-                      </div>
+                          <div className="space-y-2 text-sm mb-4 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <Code className="w-4 h-4 text-gray-500" />
+                              <span className="text-gray-400 font-mono text-xs truncate">{server.command}</span>
+                            </div>
+                            {server.args && server.args.length > 0 && (
+                              <div className="flex items-center space-x-1 ml-6">
+                                <div className="px-2 py-1 bg-purple-500/10 rounded text-xs text-purple-400">
+                                  {server.args.length} arg{server.args.length > 1 ? 's' : ''}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* Control buttons */}
+                          <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                            {isRunning ? (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setLogsServerName(name);
+                                    setShowLogsModal(true);
+                                  }}
+                                  className="flex-1 glass hover:border-blue-500/50 border border-blue-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs"
+                                  data-tooltip="View logs"
+                                >
+                                  <FileText className="w-4 h-4 text-blue-400" />
+                                  <span className="text-blue-400 hidden sm:inline">Logs</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    restartMcpServer(name);
+                                  }}
+                                  disabled={isLoading}
+                                  className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
+                                  data-tooltip="Restart server"
+                                >
+                                  <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
+                                  <span className="text-yellow-400 hidden sm:inline">Restart</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    stopMcpServer(name);
+                                  }}
+                                  disabled={isLoading}
+                                  className="flex-1 glass hover:border-red-500/50 border border-red-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
+                                  data-tooltip="Stop server"
+                                >
+                                  <Square className="w-4 h-4 text-red-400" />
+                                  <span className="text-red-400 hidden sm:inline">Stop</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const serverJson = JSON.stringify({ [name]: server }, null, 2);
+                                    navigator.clipboard.writeText(serverJson);
+                                    showNotification('MCP configuration copied to clipboard!');
+                                  }}
+                                  className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
+                                  data-tooltip="Copy JSON"
+                                >
+                                  <Copy className="w-4 h-4 text-cyan-400" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    startMcpServer(name);
+                                  }}
+                                  disabled={isLoading}
+                                  className="flex-1 bg-gradient-to-r from-green-500/20 to-emerald-500/20 hover:from-green-500/30 hover:to-emerald-500/30 border border-green-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect text-xs"
+                                >
+                                  <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
+                                  <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    const serverJson = JSON.stringify({ [name]: server }, null, 2);
+                                    navigator.clipboard.writeText(serverJson);
+                                    showNotification('MCP configuration copied to clipboard!');
+                                  }}
+                                  className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
+                                  data-tooltip="Copy JSON"
+                                >
+                                  <Copy className="w-4 h-4 text-cyan-400" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openServerDetail(name);
+                                  }}
+                                  className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all tooltip"
+                                  data-tooltip="Edit server"
+                                >
+                                  <Edit2 className="w-4 h-4 text-purple-400" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setItemToDelete(name);
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                                  data-tooltip="Delete server"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-400" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Hover border effect - removed background glow for better text readability */}
+                        </div>
                       );
                     })}
 
@@ -1417,86 +1406,86 @@ Show concrete examples of using this Skill.
                       <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
                         <Server className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                         <p className="text-gray-400 mb-4">No MCP servers configured yet</p>
-                <button
+                        <button
                           onClick={() => setShowAddServerModal(true)}
                           className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-              >
+                        >
                           <Plus className="w-5 h-5 text-purple-400" />
                           <span className="text-white font-medium">Add Your First Server</span>
-                </button>
-            </div>
+                        </button>
+                      </div>
                     )}
-              </div>
-            </div>
+                  </div>
+                </div>
               ) : (
                 /* Server Detail View */
-              <div>
+                <div>
                   <div className="flex items-center space-x-4 mb-8">
-                <button
-                  onClick={() => {
+                    <button
+                      onClick={() => {
                         setMcpViewMode('list');
                         setSelectedServer(null);
                         setEditingServer(null);
                         setEditingServerArgsInput('');
                         setEditingServerEnvInput('');
-                  }}
+                      }}
                       className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                >
+                    >
                       <ArrowLeft className="w-6 h-6 text-purple-400" />
-                </button>
-              <div className="flex-1">
+                    </button>
+                    <div className="flex-1">
                       <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
                         {selectedServer}
                       </h2>
                       <p className="text-gray-400">Edit server configuration</p>
-              </div>
-            </div>
+                    </div>
+                  </div>
 
                   <div className="glass border border-purple-500/20 rounded-2xl p-8">
                     <div className="space-y-6">
-                  <div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">Command</label>
-                    <input
-                      type="text"
+                        <input
+                          type="text"
                           value={editingServer?.command || ''}
                           onChange={(e) => setEditingServer(prev => prev ? { ...prev, command: e.target.value } : null)}
                           className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
                           placeholder="e.g., npx"
                         />
-                  </div>
+                      </div>
 
-                  <div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">Arguments (comma-separated)</label>
-                    <input
-                      type="text"
+                        <input
+                          type="text"
                           value={editingServerArgsInput}
                           onChange={(e) => setEditingServerArgsInput(e.target.value)}
                           className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
                           placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
                         />
-                  </div>
+                      </div>
 
-                  <div>
+                      <div>
                         <label className="block text-sm font-medium text-gray-300 mb-2">Environment Variables (JSON)</label>
-                    <textarea
-                      value={editingServerEnvInput}
-                      onChange={(e) => setEditingServerEnvInput(e.target.value)}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
-                      rows={6}
-                      placeholder='{\n  "KEY": "value"\n}'
-                    />
-                    <p className="text-xs text-gray-500 mt-1">Enter a valid JSON object. Validation will occur when you save.</p>
-                  </div>
+                        <textarea
+                          value={editingServerEnvInput}
+                          onChange={(e) => setEditingServerEnvInput(e.target.value)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                          rows={6}
+                          placeholder='{\n  "KEY": "value"\n}'
+                        />
+                        <p className="text-xs text-gray-500 mt-1">Enter a valid JSON object. Validation will occur when you save.</p>
+                      </div>
 
-                  {/* Server Logs Section */}
-                  {selectedServer && mcpStatuses[selectedServer]?.running && (
-                    <div className="mt-6 pt-6 border-t border-purple-500/20">
-                      <ServerLogs serverName={selectedServer} />
-                    </div>
-                  )}
+                      {/* Server Logs Section */}
+                      {selectedServer && mcpStatuses[selectedServer]?.running && (
+                        <div className="mt-6 pt-6 border-t border-purple-500/20">
+                          <ServerLogs serverName={selectedServer} />
+                        </div>
+                      )}
 
                       <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
-              <button
+                        <button
                           onClick={() => {
                             setMcpViewMode('list');
                             setSelectedServer(null);
@@ -1505,352 +1494,352 @@ Show concrete examples of using this Skill.
                             setEditingServerEnvInput('');
                           }}
                           className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
+                        >
+                          Cancel
+                        </button>
+                        <button
                           onClick={saveServerDetail}
                           className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
                         >
-                    <Save className="w-4 h-4" />
+                          <Save className="w-4 h-4" />
                           <span>Save Changes</span>
-                </button>
-              </div>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
-                          </div>
-                        </div>
-            )}
-          </div>
-        )}
+          )}
 
           {/* Environment Tab */}
-        {activeTab === 'env' && (
-          <div className="p-8">
-            {envViewMode === 'list' ? (
-              <div>
-                {/* Header */}
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
-                      Environment Profiles
-                    </h2>
-                    <p className="text-gray-400">Manage your API credential profiles</p>
-                  </div>
-                  <div className="flex items-center space-x-3">
-                    <button
-                      onClick={viewConfigFile}
-                      className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect neon-glow"
-                    >
-                      <FileText className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
-                      <span className="text-white font-medium">View Config</span>
-                    </button>
-                    <button
-                      onClick={() => setShowAddProfileModal(true)}
-                      className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
-                    >
-                      <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
-                      <span className="text-white font-medium">Add Profile</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Profile cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {envProfiles.map((profile) => {
-                    const isActive = profile.id === activeProfileId;
-                    return (
-                      <div 
-                        key={profile.id} 
-                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
-                        onClick={() => openProfileDetail(profile.id)}
-                      >
-                        {/* Active indicator */}
-                        {isActive && (
-                          <div className="absolute top-4 right-4 flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/50">
-                            <CheckCircle2 className="w-4 h-4 text-green-400" />
-                            <span className="text-xs text-green-400 font-medium">Active</span>
-                          </div>
-                        )}
-
-                        <div className="flex items-start mb-4">
-                          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
-                            <Settings className="w-6 h-6 text-purple-400" />
-                          </div>
-                        </div>
-
-                        <h3 className="text-xl font-bold text-white mb-2">
-                          {profile.name}
-                        </h3>
-                        
-                        <div className="space-y-2 text-sm mb-4 flex-1">
-                          <div className="flex items-center space-x-2">
-                            <Terminal className="w-4 h-4 text-gray-500" />
-                            <span className="text-gray-400 font-mono text-xs truncate">
-                              {profile.baseUrl || 'No base URL'}
-                            </span>
-                          </div>
-                          {profile.apiKey && (
-                            <div className="flex items-center space-x-1 ml-6">
-                              <div className="px-2 py-1 bg-green-500/10 rounded text-xs text-green-400">
-                                API Key Configured
-                              </div>
-                            </div>
-                          )}
-                          {profile.authToken && (
-                            <div className="flex items-center space-x-1 ml-6">
-                              <div className="px-2 py-1 bg-blue-500/10 rounded text-xs text-blue-400">
-                                Auth Token Configured
-                              </div>
-                            </div>
-                          )}
-                          <div className="text-xs text-gray-500 mt-2">
-                            Created: {new Date(profile.createdAt).toLocaleDateString()}
-                          </div>
-                        </div>
-
-                        {/* Control buttons */}
-                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
-                          {!isActive ? (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  activateProfile(profile.id);
-                                }}
-                                className="flex-1 glass hover:border-green-500/50 border border-green-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-green-500/20 bg-gradient-to-r from-green-500/10 to-emerald-500/10"
-                              >
-                                <Play className="w-4 h-4 text-green-400" />
-                                <span className="text-xs text-white font-medium">Activate</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openProfileDetail(profile.id);
-                                }}
-                                className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
-                              >
-                                <Edit2 className="w-4 h-4 text-purple-400" />
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setItemToDelete(profile.id);
-                                  setShowDeleteConfirm(true);
-                                }}
-                                className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
-                                data-tooltip="Delete profile"
-                              >
-                                <Trash2 className="w-4 h-4 text-red-400" />
-                              </button>
-                            </>
-                          ) : (
-                            <>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  deactivateProfile(profile.id);
-                                }}
-                                className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-yellow-500/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/10"
-                              >
-                                <Square className="w-4 h-4 text-yellow-400" />
-                                <span className="text-xs text-white font-medium">Deactivate</span>
-                              </button>
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openProfileDetail(profile.id);
-                                }}
-                                className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
-                              >
-                                <Edit2 className="w-4 h-4 text-purple-400" />
-                              </button>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-
-                {/* Empty state */}
-                {envProfiles.length === 0 && (
-                  <div className="text-center py-16">
-                    <Settings className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                    <p className="text-gray-400 mb-4">No environment profiles configured yet</p>
-                    <button
-                      onClick={() => setShowAddProfileModal(true)}
-                      className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-                    >
-                      <Plus className="w-5 h-5 text-purple-400" />
-                      <span className="text-white font-medium">Add Your First Profile</span>
-                    </button>
-                  </div>
-                )}
-              </div>
-            ) : (
-              /* Profile Detail View */
-              <div>
-                <div className="flex items-center space-x-4 mb-8">
-                  <button
-                    onClick={() => {
-                      setEnvViewMode('list');
-                      setEditingProfile(null);
-                    }}
-                    className="p-3 rounded-xl glass hover:border-purple-500/50 border border-purple-500/20 transition-all ripple-effect neon-glow"
-                  >
-                    <ArrowLeft className="w-6 h-6 text-purple-400" />
-                  </button>
-                  <div>
-                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-                      {editingProfile?.name}
-                    </h2>
-                    <p className="text-gray-400">Edit profile configuration</p>
-                  </div>
-                </div>
-
-                <div className="glass border border-purple-500/20 rounded-2xl p-8">
-                  <div className="space-y-6">
+          {activeTab === 'env' && (
+            <div className="p-8">
+              {envViewMode === 'list' ? (
+                <div>
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-8">
                     <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
-                      <input
-                        type="text"
-                        value={editingProfile?.name || ''}
-                        onChange={(e) => setEditingProfile(prev => prev ? { ...prev, name: e.target.value } : null)}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
-                        placeholder="e.g., Production, Development"
-                      />
+                      <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                        Environment Profiles
+                      </h2>
+                      <p className="text-gray-400">Manage your API credential profiles</p>
                     </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
-                      <input
-                        type="text"
-                        value={editingProfile?.baseUrl || ''}
-                        onChange={(e) => setEditingProfile(prev => prev ? { ...prev, baseUrl: e.target.value } : null)}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
-                        placeholder="https://api.anthropic.com"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
-                      <div className="relative">
-                        <input
-                          type={showApiKey ? 'text' : 'password'}
-                          value={editingProfile?.apiKey || ''}
-                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, apiKey: e.target.value } : null)}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
-                          placeholder="sk-ant-..."
-                        />
-                        <button
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="w-4 h-4 text-gray-400" />
-                          ) : (
-                            <Eye className="w-4 h-4 text-gray-400" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
-                      <div className="relative">
-                        <input
-                          type={showApiKey ? 'text' : 'password'}
-                          value={editingProfile?.authToken || ''}
-                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, authToken: e.target.value } : null)}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
-                          placeholder="Optional auth token..."
-                        />
-                        <button
-                          onClick={() => setShowApiKey(!showApiKey)}
-                          className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                        >
-                          {showApiKey ? (
-                            <EyeOff className="w-4 h-4 text-gray-400" />
-                          ) : (
-                            <Eye className="w-4 h-4 text-gray-400" />
-                          )}
-                        </button>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model</label>
-                        <input
-                          type="text"
-                          value={editingProfile?.haikuModel || ''}
-                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, haikuModel: e.target.value } : null)}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
-                          placeholder="claude-3-5-haiku-..."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model</label>
-                        <input
-                          type="text"
-                          value={editingProfile?.opusModel || ''}
-                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, opusModel: e.target.value } : null)}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
-                          placeholder="claude-3-opus-..."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model</label>
-                        <input
-                          type="text"
-                          value={editingProfile?.sonnetModel || ''}
-                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, sonnetModel: e.target.value } : null)}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
-                          placeholder="claude-3-5-sonnet-..."
-                        />
-                      </div>
-
-                      <div>
-                        <label className="block text-sm font-medium text-gray-300 mb-2">Small Fast Model</label>
-                        <input
-                          type="text"
-                          value={editingProfile?.smallFastModel || ''}
-                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, smallFastModel: e.target.value } : null)}
-                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
-                          placeholder="claude-3-5-haiku-..."
-                        />
-                      </div>
-                    </div>
-
-                    <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                    <div className="flex items-center space-x-3 titlebar-no-drag relative z-[60]">
                       <button
-                        onClick={() => {
-                          setEnvViewMode('list');
-                          setEditingProfile(null);
-                        }}
-                        className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                        onClick={viewConfigFile}
+                        className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect neon-glow titlebar-no-drag"
                       >
-                        Cancel
+                        <FileText className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
+                        <span className="text-white font-medium">View Config</span>
                       </button>
                       <button
-                        onClick={saveProfileDetail}
-                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                        onClick={() => setShowAddProfileModal(true)}
+                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
                       >
-                        <Save className="w-4 h-4" />
-                        <span>Save Changes</span>
+                        <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                        <span className="text-white font-medium">Add Profile</span>
                       </button>
                     </div>
                   </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
 
-        {/* Commands Tab */}
-        {activeTab === 'commands' && (
+                  {/* Profile cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {envProfiles.map((profile) => {
+                      const isActive = profile.id === activeProfileId;
+                      return (
+                        <div
+                          key={profile.id}
+                          className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
+                          onClick={() => openProfileDetail(profile.id)}
+                        >
+                          {/* Active indicator */}
+                          {isActive && (
+                            <div className="absolute top-4 right-4 flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/50">
+                              <CheckCircle2 className="w-4 h-4 text-green-400" />
+                              <span className="text-xs text-green-400 font-medium">Active</span>
+                            </div>
+                          )}
+
+                          <div className="flex items-start mb-4">
+                            <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
+                              <Settings className="w-6 h-6 text-purple-400" />
+                            </div>
+                          </div>
+
+                          <h3 className="text-xl font-bold text-white mb-2">
+                            {profile.name}
+                          </h3>
+
+                          <div className="space-y-2 text-sm mb-4 flex-1">
+                            <div className="flex items-center space-x-2">
+                              <Terminal className="w-4 h-4 text-gray-500" />
+                              <span className="text-gray-400 font-mono text-xs truncate">
+                                {profile.baseUrl || 'No base URL'}
+                              </span>
+                            </div>
+                            {profile.apiKey && (
+                              <div className="flex items-center space-x-1 ml-6">
+                                <div className="px-2 py-1 bg-green-500/10 rounded text-xs text-green-400">
+                                  API Key Configured
+                                </div>
+                              </div>
+                            )}
+                            {profile.authToken && (
+                              <div className="flex items-center space-x-1 ml-6">
+                                <div className="px-2 py-1 bg-blue-500/10 rounded text-xs text-blue-400">
+                                  Auth Token Configured
+                                </div>
+                              </div>
+                            )}
+                            <div className="text-xs text-gray-500 mt-2">
+                              Created: {new Date(profile.createdAt).toLocaleDateString()}
+                            </div>
+                          </div>
+
+                          {/* Control buttons */}
+                          <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                            {!isActive ? (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    activateProfile(profile.id);
+                                  }}
+                                  className="flex-1 glass hover:border-green-500/50 border border-green-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-green-500/20 bg-gradient-to-r from-green-500/10 to-emerald-500/10"
+                                >
+                                  <Play className="w-4 h-4 text-green-400" />
+                                  <span className="text-xs text-white font-medium">Activate</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openProfileDetail(profile.id);
+                                  }}
+                                  className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
+                                >
+                                  <Edit2 className="w-4 h-4 text-purple-400" />
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setItemToDelete(profile.id);
+                                    setShowDeleteConfirm(true);
+                                  }}
+                                  className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                                  data-tooltip="Delete profile"
+                                >
+                                  <Trash2 className="w-4 h-4 text-red-400" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    deactivateProfile(profile.id);
+                                  }}
+                                  className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-yellow-500/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/10"
+                                >
+                                  <Square className="w-4 h-4 text-yellow-400" />
+                                  <span className="text-xs text-white font-medium">Deactivate</span>
+                                </button>
+                                <button
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openProfileDetail(profile.id);
+                                  }}
+                                  className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
+                                >
+                                  <Edit2 className="w-4 h-4 text-purple-400" />
+                                </button>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Empty state */}
+                  {envProfiles.length === 0 && (
+                    <div className="text-center py-16">
+                      <Settings className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 mb-4">No environment profiles configured yet</p>
+                      <button
+                        onClick={() => setShowAddProfileModal(true)}
+                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                      >
+                        <Plus className="w-5 h-5 text-purple-400" />
+                        <span className="text-white font-medium">Add Your First Profile</span>
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Profile Detail View */
+                <div>
+                  <div className="flex items-center space-x-4 mb-8">
+                    <button
+                      onClick={() => {
+                        setEnvViewMode('list');
+                        setEditingProfile(null);
+                      }}
+                      className="p-3 rounded-xl glass hover:border-purple-500/50 border border-purple-500/20 transition-all ripple-effect neon-glow"
+                    >
+                      <ArrowLeft className="w-6 h-6 text-purple-400" />
+                    </button>
+                    <div>
+                      <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                        {editingProfile?.name}
+                      </h2>
+                      <p className="text-gray-400">Edit profile configuration</p>
+                    </div>
+                  </div>
+
+                  <div className="glass border border-purple-500/20 rounded-2xl p-8">
+                    <div className="space-y-6">
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
+                        <input
+                          type="text"
+                          value={editingProfile?.name || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, name: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                          placeholder="e.g., Production, Development"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
+                        <input
+                          type="text"
+                          value={editingProfile?.baseUrl || ''}
+                          onChange={(e) => setEditingProfile(prev => prev ? { ...prev, baseUrl: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                          placeholder="https://api.anthropic.com"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
+                        <div className="relative">
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={editingProfile?.apiKey || ''}
+                            onChange={(e) => setEditingProfile(prev => prev ? { ...prev, apiKey: e.target.value } : null)}
+                            className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
+                            placeholder="sk-ant-..."
+                          />
+                          <button
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                          >
+                            {showApiKey ? (
+                              <EyeOff className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <Eye className="w-4 h-4 text-gray-400" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
+                        <div className="relative">
+                          <input
+                            type={showApiKey ? 'text' : 'password'}
+                            value={editingProfile?.authToken || ''}
+                            onChange={(e) => setEditingProfile(prev => prev ? { ...prev, authToken: e.target.value } : null)}
+                            className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
+                            placeholder="Optional auth token..."
+                          />
+                          <button
+                            onClick={() => setShowApiKey(!showApiKey)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                          >
+                            {showApiKey ? (
+                              <EyeOff className="w-4 h-4 text-gray-400" />
+                            ) : (
+                              <Eye className="w-4 h-4 text-gray-400" />
+                            )}
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model</label>
+                          <input
+                            type="text"
+                            value={editingProfile?.haikuModel || ''}
+                            onChange={(e) => setEditingProfile(prev => prev ? { ...prev, haikuModel: e.target.value } : null)}
+                            className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                            placeholder="claude-3-5-haiku-..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model</label>
+                          <input
+                            type="text"
+                            value={editingProfile?.opusModel || ''}
+                            onChange={(e) => setEditingProfile(prev => prev ? { ...prev, opusModel: e.target.value } : null)}
+                            className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                            placeholder="claude-3-opus-..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model</label>
+                          <input
+                            type="text"
+                            value={editingProfile?.sonnetModel || ''}
+                            onChange={(e) => setEditingProfile(prev => prev ? { ...prev, sonnetModel: e.target.value } : null)}
+                            className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                            placeholder="claude-3-5-sonnet-..."
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">Small Fast Model</label>
+                          <input
+                            type="text"
+                            value={editingProfile?.smallFastModel || ''}
+                            onChange={(e) => setEditingProfile(prev => prev ? { ...prev, smallFastModel: e.target.value } : null)}
+                            className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                            placeholder="claude-3-5-haiku-..."
+                          />
+                        </div>
+                      </div>
+
+                      <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                        <button
+                          onClick={() => {
+                            setEnvViewMode('list');
+                            setEditingProfile(null);
+                          }}
+                          className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveProfileDetail}
+                          className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Save Changes</span>
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Commands Tab */}
+          {activeTab === 'commands' && (
             <div className="p-8">
               {commandViewMode === 'list' ? (
                 <div>
@@ -1862,20 +1851,22 @@ Show concrete examples of using this Skill.
                       </h2>
                       <p className="text-gray-400">Manage your custom command scripts</p>
                     </div>
-              <button
-                      onClick={() => setShowAddCommandModal(true)}
-                      className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
-              >
-                      <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
-                      <span className="text-white font-medium">Add Command</span>
-              </button>
-            </div>
+                    <div className="relative z-[60]">
+                      <button
+                        onClick={() => setShowAddCommandModal(true)}
+                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                      >
+                        <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                        <span className="text-white font-medium">Add Command</span>
+                      </button>
+                    </div>
+                  </div>
 
                   {/* Command cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
                     {commands.map((cmd) => (
-                  <div 
-                    key={cmd.name} 
+                      <div
+                        key={cmd.name}
                         className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
                         onClick={() => openCommandDetail(cmd.name)}
                       >
@@ -1889,12 +1880,12 @@ Show concrete examples of using this Skill.
                           <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
                             <Command className="w-6 h-6 text-purple-400" />
                           </div>
-                    </div>
+                        </div>
 
                         <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">
                           {cmd.name.replace(/\.md$/, '')}
                         </h3>
-                        
+
                         <div className="space-y-2 text-sm mb-4 flex-1">
                           <p className="text-gray-400 line-clamp-3 font-mono text-xs">
                             {cmd.content.substring(0, 100)}...
@@ -1926,9 +1917,9 @@ Show concrete examples of using this Skill.
                         </div>
 
                         {/* Hover border effect - removed background glow for better text readability */}
-              </div>
+                      </div>
                     ))}
-            
+
                     {/* Empty state */}
                     {commands.length === 0 && (
                       <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
@@ -1949,22 +1940,22 @@ Show concrete examples of using this Skill.
                 /* Command Detail View */
                 <div>
                   <div className="flex items-center space-x-4 mb-8">
-                            <button
-                              onClick={() => {
+                    <button
+                      onClick={() => {
                         setCommandViewMode('list');
                         setEditingCommand(null);
                       }}
                       className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
                     >
                       <ArrowLeft className="w-6 h-6 text-purple-400" />
-                            </button>
+                    </button>
                     <div>
                       <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
                         {editingCommand?.name.replace(/\.md$/, '')}
                       </h2>
                       <p className="text-gray-400">Edit command content</p>
-                              </div>
-                              </div>
+                    </div>
+                  </div>
 
                   <div className="glass border border-purple-500/20 rounded-2xl p-8">
                     <div className="space-y-6">
@@ -1977,19 +1968,19 @@ Show concrete examples of using this Skill.
                           rows={20}
                           placeholder="Enter your command script here..."
                         />
-              </div>
+                      </div>
 
                       <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
-                            <button
-                              onClick={() => {
-                          setCommandViewMode('list');
-                          setEditingCommand(null);
-                        }}
+                        <button
+                          onClick={() => {
+                            setCommandViewMode('list');
+                            setEditingCommand(null);
+                          }}
                           className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
                         >
                           Cancel
-                            </button>
-                            <button
+                        </button>
+                        <button
                           onClick={saveCommandDetail}
                           className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
                         >
@@ -2007,141 +1998,143 @@ Show concrete examples of using this Skill.
           {/* Skills Tab */}
           {activeTab === 'skills' && (
             <div className="p-8">
-            {skillViewMode === 'list' ? (
-              <div>
-                {/* Header */}
-                <div className="flex items-center justify-between mb-8">
-                  <div>
-                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
-                      Personal Skills
-                    </h2>
-                    <p className="text-gray-400">Create and manage your Agent Skills</p>
-                  </div>
-                  <button
-                    onClick={() => setShowAddSkillModal(true)}
-                    className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow"
-                  >
-                    <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
-                    <span className="text-white font-medium">Add Skill</span>
-                  </button>
-                </div>
-
-                {/* Skill cards */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {skills.map((skill) => (
-                    <div 
-                      key={skill.name} 
-                      className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
-                      onClick={() => openSkillDetail(skill)}
-                    >
-                      {/* Status indicator */}
-                      <div className="flex items-center space-x-2 mb-4">
-                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                        <span className="text-xs font-medium text-blue-400">Skill</span>
-                      </div>
-
-                      <div className="flex items-start mb-4">
-                        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
-                          <Zap className="w-6 h-6 text-purple-400" />
-                        </div>
-                      </div>
-
-                      <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">
-                        {skill.name}
-                      </h3>
-                      
-                      <div className="space-y-2 text-sm mb-4 flex-1">
-                        <p className="text-gray-400 line-clamp-3 text-xs">
-                          {skill.description || skill.content.substring(0, 100) + '...'}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openSkillDetail(skill);
-                          }}
-                          className="flex-1 glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                        >
-                          <Edit2 className="w-4 h-4 text-purple-400" />
-                          <span className="text-xs text-white font-medium">Edit</span>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setItemToDelete(skill.name);
-                            setShowDeleteConfirm(true);
-                          }}
-                          className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
-                          data-tooltip="Delete skill"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
+              {skillViewMode === 'list' ? (
+                <div>
+                  {/* Header */}
+                  <div className="flex items-center justify-between mb-8">
+                    <div>
+                      <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                        Personal Skills
+                      </h2>
+                      <p className="text-gray-400">Create and manage your Agent Skills</p>
                     </div>
-                  ))}
-          
-                  {/* Empty state */}
-                  {skills.length === 0 && (
-                    <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
-                      <Zap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400 mb-4">No skills yet</p>
+                    <div className="relative z-[60]">
                       <button
                         onClick={() => setShowAddSkillModal(true)}
-                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                        className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
                       >
-                        <Plus className="w-5 h-5 text-purple-400" />
-                        <span className="text-white font-medium">Create Your First Skill</span>
+                        <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                        <span className="text-white font-medium">Add Skill</span>
                       </button>
                     </div>
-                  )}
-                </div>
-              </div>
-            ) : (
-              /* Skill Detail View */
-              <div>
-                <div className="flex items-center space-x-4 mb-8">
-                  <button
-                    onClick={() => {
-                      setSkillViewMode('list');
-                      setEditingSkill(null);
-                    }}
-                    className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                  >
-                    <ArrowLeft className="w-6 h-6 text-purple-400" />
-                  </button>
-                  <div>
-                    <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
-                      {editingSkill?.name}
-                    </h2>
-                    <p className="text-gray-400">Edit skill content (SKILL.md format)</p>
+                  </div>
+
+                  {/* Skill cards */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                    {skills.map((skill) => (
+                      <div
+                        key={skill.name}
+                        className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
+                        onClick={() => openSkillDetail(skill)}
+                      >
+                        {/* Status indicator */}
+                        <div className="flex items-center space-x-2 mb-4">
+                          <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+                          <span className="text-xs font-medium text-blue-400">Skill</span>
+                        </div>
+
+                        <div className="flex items-start mb-4">
+                          <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
+                            <Zap className="w-6 h-6 text-purple-400" />
+                          </div>
+                        </div>
+
+                        <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">
+                          {skill.name}
+                        </h3>
+
+                        <div className="space-y-2 text-sm mb-4 flex-1">
+                          <p className="text-gray-400 line-clamp-3 text-xs">
+                            {skill.description || skill.content.substring(0, 100) + '...'}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              openSkillDetail(skill);
+                            }}
+                            className="flex-1 glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                          >
+                            <Edit2 className="w-4 h-4 text-purple-400" />
+                            <span className="text-xs text-white font-medium">Edit</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setItemToDelete(skill.name);
+                              setShowDeleteConfirm(true);
+                            }}
+                            className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                            data-tooltip="Delete skill"
+                          >
+                            <Trash2 className="w-4 h-4 text-red-400" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {/* Empty state */}
+                    {skills.length === 0 && (
+                      <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
+                        <Zap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 mb-4">No skills yet</p>
+                        <button
+                          onClick={() => setShowAddSkillModal(true)}
+                          className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                        >
+                          <Plus className="w-5 h-5 text-purple-400" />
+                          <span className="text-white font-medium">Create Your First Skill</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
-
-                <div className="glass border border-purple-500/20 rounded-2xl p-8">
-                  <div className="space-y-6">
+              ) : (
+                /* Skill Detail View */
+                <div>
+                  <div className="flex items-center space-x-4 mb-8">
+                    <button
+                      onClick={() => {
+                        setSkillViewMode('list');
+                        setEditingSkill(null);
+                      }}
+                      className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    >
+                      <ArrowLeft className="w-6 h-6 text-purple-400" />
+                    </button>
                     <div>
-                      <div className="flex items-center justify-between mb-2">
-                        <label className="block text-sm font-medium text-gray-300">Skill Name</label>
-                        <span className="text-xs text-gray-500">lowercase, numbers, hyphens only (max 64 chars)</span>
-                      </div>
-                      <input
-                        type="text"
-                        value={editingSkill?.name || ''}
-                        disabled
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-gray-500 bg-gray-800/50 cursor-not-allowed"
-                      />
+                      <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                        {editingSkill?.name}
+                      </h2>
+                      <p className="text-gray-400">Edit skill content (SKILL.md format)</p>
                     </div>
+                  </div>
 
-                    <div>
-                      <label className="block text-sm font-medium text-gray-300 mb-2">SKILL.md Content</label>
-                      <textarea
-                        value={editingSkill?.content || ''}
-                        onChange={(e) => setEditingSkill(prev => prev ? { ...prev, content: e.target.value } : null)}
-                        className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                        rows={20}
-                        placeholder="---
+                  <div className="glass border border-purple-500/20 rounded-2xl p-8">
+                    <div className="space-y-6">
+                      <div>
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="block text-sm font-medium text-gray-300">Skill Name</label>
+                          <span className="text-xs text-gray-500">lowercase, numbers, hyphens only (max 64 chars)</span>
+                        </div>
+                        <input
+                          type="text"
+                          value={editingSkill?.name || ''}
+                          disabled
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-gray-500 bg-gray-800/50 cursor-not-allowed"
+                        />
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">SKILL.md Content</label>
+                        <textarea
+                          value={editingSkill?.content || ''}
+                          onChange={(e) => setEditingSkill(prev => prev ? { ...prev, content: e.target.value } : null)}
+                          className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                          rows={20}
+                          placeholder="---
 name: skill-name
 description: Brief description of what this Skill does and when to use it
 ---
@@ -2153,539 +2146,539 @@ Provide clear, step-by-step guidance for Claude.
 
 ## Examples
 Show concrete examples of using this Skill."
-                      />
-                    </div>
+                        />
+                      </div>
 
-                    <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
-                      <button
-                        onClick={() => {
-                          setSkillViewMode('list');
-                          setEditingSkill(null);
-                        }}
-                        className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
-                      >
-                        Cancel
-                      </button>
-                      <button
-                        onClick={saveSkillDetail}
-                        className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
-                      >
-                        <Save className="w-4 h-4" />
-                        <span>Save Changes</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-        </div>
-
-      {/* Add Server Modal */}
-      {showAddServerModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Server</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Server Name</label>
-                <input
-                  type="text"
-                  value={newServerForm.name}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="e.g., mcp-filesystem"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Command</label>
-                <input
-                  type="text"
-                  value={newServerForm.command}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="e.g., npx"
-                />
-                  </div>
-                  
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Arguments (comma-separated)</label>
-                <input
-                  type="text"
-                  value={newServerForm.args}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, args: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
-                />
-                        </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Environment Variables (JSON)</label>
-                <textarea
-                  value={newServerForm.env}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, env: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  rows={4}
-                  placeholder='{"KEY": "value"}'
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-4 mt-8">
-              <button
-                onClick={() => {
-                  setShowAddServerModal(false);
-                  setNewServerForm({ name: '', command: '', args: '', env: '' });
-                }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addNewServer}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
-              >
-                Add Server
-              </button>
-            </div>
-            </div>
-          </div>
-        )}
-
-      {/* Add Command Modal */}
-      {showAddCommandModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Command</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Command Name</label>
-                    <input
-                      type="text"
-                  value={newServerForm.name}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="e.g., deploy.md"
-                />
-                </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Command Content</label>
-                <textarea
-                  value={newServerForm.command}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  rows={12}
-                  placeholder="Enter your command script here..."
-                />
+                      <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                        <button
+                          onClick={() => {
+                            setSkillViewMode('list');
+                            setEditingSkill(null);
+                          }}
+                          className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                        >
+                          Cancel
+                        </button>
+                        <button
+                          onClick={saveSkillDetail}
+                          className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                        >
+                          <Save className="w-4 h-4" />
+                          <span>Save Changes</span>
+                        </button>
                       </div>
                     </div>
-
-            <div className="flex justify-end space-x-4 mt-8">
-                        <button
-                onClick={() => {
-                  setShowAddCommandModal(false);
-                  setNewServerForm({ name: '', command: '', args: '', env: '' });
-                }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
-              >
-                Cancel
-                        </button>
-                        <button
-                onClick={addNewCommand}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
-                  >
-                Add Command
-                        </button>
-                        </div>
-            </div>
-          </div>
-      )}
-
-      {/* Add Skill Modal */}
-      {showAddSkillModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Skill</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-300">Skill Name</label>
-                  <span className="text-xs text-gray-500">lowercase, numbers, hyphens only (max 64 chars)</span>
-                </div>
-                <input
-                  type="text"
-                  value={newServerForm.name}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="e.g., pdf-processing"
-                />
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <label className="block text-sm font-medium text-gray-300">SKILL.md Content</label>
-                  <button
-                    onClick={useSkillTemplate}
-                    className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
-                  >
-                    Use Template
-                  </button>
-                </div>
-                <textarea
-                  value={newServerForm.command}
-                  onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  rows={15}
-                  placeholder="---
-name: skill-name
-description: Brief description of what this Skill does and when to use it
----
-
-# Skill Name
-
-## Instructions
-Provide clear, step-by-step guidance for Claude.
-
-## Examples
-Show concrete examples of using this Skill."
-                />
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-4 mt-8">
-              <button
-                onClick={() => {
-                  setShowAddSkillModal(false);
-                  setNewServerForm({ name: '', command: '', args: '', env: '' });
-                }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addNewSkill}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
-              >
-                Add Skill
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* View Config File Modal */}
-      {showConfigFileModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
-            <div className="flex items-center justify-between mb-6 flex-shrink-0">
-              <div>
-                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-2">
-                  Shell Configuration File
-                </h3>
-                <p className="text-gray-400 text-sm">
-                  {configFilePath || 'Loading...'}
-                </p>
-              </div>
-              <button
-                onClick={() => {
-                  navigator.clipboard.writeText(configFileContent);
-                  showNotification('Configuration copied to clipboard!');
-                }}
-                className="glass hover:border-blue-500/50 border border-blue-500/20 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group"
-                disabled={isLoadingConfigFile}
-              >
-                <Copy className="w-4 h-4 text-blue-400" />
-                <span className="text-white text-sm">Copy</span>
-              </button>
-            </div>
-            
-            <div className="flex-1 min-h-0 mb-6">
-              <div className="glass border border-blue-500/20 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
-                {isLoadingConfigFile ? (
-                  <div className="flex items-center justify-center h-full min-h-[300px]">
-                    <div className="flex flex-col items-center space-y-4">
-                      <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
-                      <p className="text-gray-400">Loading configuration file...</p>
-                    </div>
                   </div>
-                ) : (
-                  <pre className="text-gray-300 whitespace-pre-wrap break-words">
-                    {configFileContent}
-                  </pre>
-                )}
-              </div>
+                </div>
+              )}
             </div>
-
-            <div className="flex justify-end space-x-3 flex-shrink-0 mt-auto">
-              <button
-                onClick={() => setShowConfigFileModal(false)}
-                className="glass hover:border-gray-500/50 border border-gray-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-gray-500/20 ripple-effect"
-              >
-                <X className="w-5 h-5 text-gray-400" />
-                <span className="text-white font-medium">Close</span>
-              </button>
-            </div>
-          </div>
+          )}
         </div>
-      )}
 
-      {/* Add Profile Modal */}
-      {showAddProfileModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Environment Profile</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
-                <input
-                  type="text"
-                  value={newProfileForm.name}
-                  onChange={(e) => setNewProfileForm({ ...newProfileForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="e.g., Production, Development, Testing"
-                />
-              </div>
+        {/* Add Server Modal */}
+        {showAddServerModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Server</h3>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
-                <input
-                  type="text"
-                  value={newProfileForm.baseUrl}
-                  onChange={(e) => setNewProfileForm({ ...newProfileForm, baseUrl: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                  placeholder="https://api.anthropic.com"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={newProfileForm.apiKey}
-                    onChange={(e) => setNewProfileForm({ ...newProfileForm, apiKey: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
-                    placeholder="sk-ant-..."
-                  />
-                  <button
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                  >
-                    {showApiKey ? (
-                      <EyeOff className="w-4 h-4 text-gray-400" />
-                    ) : (
-                      <Eye className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
-                <div className="relative">
-                  <input
-                    type={showApiKey ? 'text' : 'password'}
-                    value={newProfileForm.authToken}
-                    onChange={(e) => setNewProfileForm({ ...newProfileForm, authToken: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
-                    placeholder="Optional auth token..."
-                  />
-                  <button
-                    onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
-                  >
-                    {showApiKey ? (
-                      <EyeOff className="w-4 h-4 text-gray-400" />
-                    ) : (
-                      <Eye className="w-4 h-4 text-gray-400" />
-                    )}
-                  </button>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Server Name</label>
                   <input
                     type="text"
-                    value={newProfileForm.haikuModel}
-                    onChange={(e) => setNewProfileForm({ ...newProfileForm, haikuModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-5-haiku-..."
+                    value={newServerForm.name}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="e.g., mcp-filesystem"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Command</label>
                   <input
                     type="text"
-                    value={newProfileForm.opusModel}
-                    onChange={(e) => setNewProfileForm({ ...newProfileForm, opusModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-opus-..."
+                    value={newServerForm.command}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="e.g., npx"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model (Optional)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Arguments (comma-separated)</label>
                   <input
                     type="text"
-                    value={newProfileForm.sonnetModel}
-                    onChange={(e) => setNewProfileForm({ ...newProfileForm, sonnetModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-5-sonnet-..."
+                    value={newServerForm.args}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, args: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
                   />
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Small Fast Model (Optional)</label>
-                  <input
-                    type="text"
-                    value={newProfileForm.smallFastModel}
-                    onChange={(e) => setNewProfileForm({ ...newProfileForm, smallFastModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-5-haiku-..."
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Environment Variables (JSON)</label>
+                  <textarea
+                    value={newServerForm.env}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, env: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    rows={4}
+                    placeholder='{"KEY": "value"}'
                   />
                 </div>
               </div>
-            </div>
 
-            <div className="flex justify-end space-x-4 mt-8">
-              <button
-                onClick={() => {
-                  setShowAddProfileModal(false);
-                  setNewProfileForm({ name: '', baseUrl: '', apiKey: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
-                }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={addNewProfile}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
-              >
-                Add Profile
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-red-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-red-500/20 neon-glow">
-            <div className="text-center">
-              <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
-                <Trash2 className="w-8 h-8 text-red-400" />
-        </div>
-              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : 'Skill'}?</h3>
-              <p className="text-gray-400 mb-6">
-                Are you sure you want to delete <span className="text-white font-medium">{getDeleteItemDisplayName()}</span>? This action cannot be undone.
-              </p>
-              
-              <div className="flex justify-center space-x-4">
-              <button
-                        onClick={() => {
-                    setShowDeleteConfirm(false);
-                    setItemToDelete(null);
+              <div className="flex justify-end space-x-4 mt-8">
+                <button
+                  onClick={() => {
+                    setShowAddServerModal(false);
+                    setNewServerForm({ name: '', command: '', args: '', env: '' });
                   }}
                   className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
                 >
                   Cancel
-              </button>
-                        <button
-                          onClick={() => {
-                    if (itemToDelete) {
-                      if (activeTab === 'mcp') {
-                        deleteServer(itemToDelete);
-                      } else if (activeTab === 'env') {
-                        deleteProfile(itemToDelete);
-                      } else if (activeTab === 'commands') {
-                        deleteCommand(itemToDelete);
-                      } else if (activeTab === 'skills') {
-                        deleteSkill(itemToDelete);
-                      }
-                    }
-                  }}
-                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-pink-500 text-white font-medium hover:shadow-lg hover:shadow-red-500/50 transition-all ripple-effect pulse-ring"
+                </button>
+                <button
+                  onClick={addNewServer}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
                 >
-                  Delete
+                  Add Server
                 </button>
               </div>
-              </div>
             </div>
-        </div>
-      )}
-
-      {/* Logs Viewer Modal */}
-      {showLogsModal && logsServerName && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-4xl w-full h-[600px] animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow flex flex-col">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center pulse-ring">
-                  <FileText className="w-6 h-6 text-blue-400" />
-              </div>
-                <div>
-                  <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
-                    Server Logs
-                  </h3>
-                  <p className="text-gray-400 text-sm">{logsServerName}</p>
-            </div>
-            </div>
-                      <button
-                        onClick={() => {
-                  setShowLogsModal(false);
-                  setLogsServerName(null);
-                }}
-                className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
-              >
-                <X className="w-6 h-6 text-gray-400" />
-                      </button>
-            </div>
-            
-            <div className="flex-1 overflow-hidden">
-              <ServerLogs serverName={logsServerName} />
-            </div>
-
-            <div className="flex justify-end pt-4 border-t border-blue-500/20 mt-4">
-                        <button
-                          onClick={() => {
-                  setShowLogsModal(false);
-                  setLogsServerName(null);
-                }}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect"
-              >
-                Close
-                        </button>
-                        </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* Import MCP Config from JSON Modal */}
-      {showImportJsonModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-6">Import MCP Servers from JSON</h3>
-            
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">MCP Configuration (JSON)</label>
-                <textarea
-                  value={importJsonContent}
-                  onChange={(e) => setImportJsonContent(e.target.value)}
-                  className="w-full glass border border-blue-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-blue-500/50 focus:outline-none transition-all input-focus"
-                  rows={10}
-                  placeholder={`{
+        {/* Add Command Modal */}
+        {showAddCommandModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Command</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Command Name</label>
+                  <input
+                    type="text"
+                    value={newServerForm.name}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="e.g., deploy.md"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Command Content</label>
+                  <textarea
+                    value={newServerForm.command}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    rows={12}
+                    placeholder="Enter your command script here..."
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-4 mt-8">
+                <button
+                  onClick={() => {
+                    setShowAddCommandModal(false);
+                    setNewServerForm({ name: '', command: '', args: '', env: '' });
+                  }}
+                  className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addNewCommand}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+                >
+                  Add Command
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Skill Modal */}
+        {showAddSkillModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Skill</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-300">Skill Name</label>
+                    <span className="text-xs text-gray-500">lowercase, numbers, hyphens only (max 64 chars)</span>
+                  </div>
+                  <input
+                    type="text"
+                    value={newServerForm.name}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="e.g., pdf-processing"
+                  />
+                </div>
+
+                <div>
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-medium text-gray-300">SKILL.md Content</label>
+                    <button
+                      onClick={useSkillTemplate}
+                      className="text-xs text-purple-400 hover:text-purple-300 transition-colors"
+                    >
+                      Use Template
+                    </button>
+                  </div>
+                  <textarea
+                    value={newServerForm.command}
+                    onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    rows={15}
+                    placeholder="---
+name: skill-name
+description: Brief description of what this Skill does and when to use it
+---
+
+# Skill Name
+
+## Instructions
+Provide clear, step-by-step guidance for Claude.
+
+## Examples
+Show concrete examples of using this Skill."
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-4 mt-8">
+                <button
+                  onClick={() => {
+                    setShowAddSkillModal(false);
+                    setNewServerForm({ name: '', command: '', args: '', env: '' });
+                  }}
+                  className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addNewSkill}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+                >
+                  Add Skill
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* View Config File Modal */}
+        {showConfigFileModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
+              <div className="flex items-center justify-between mb-6 flex-shrink-0">
+                <div>
+                  <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-2">
+                    Shell Configuration File
+                  </h3>
+                  <p className="text-gray-400 text-sm">
+                    {configFilePath || 'Loading...'}
+                  </p>
+                </div>
+                <button
+                  onClick={() => {
+                    navigator.clipboard.writeText(configFileContent);
+                    showNotification('Configuration copied to clipboard!');
+                  }}
+                  className="glass hover:border-blue-500/50 border border-blue-500/20 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group"
+                  disabled={isLoadingConfigFile}
+                >
+                  <Copy className="w-4 h-4 text-blue-400" />
+                  <span className="text-white text-sm">Copy</span>
+                </button>
+              </div>
+
+              <div className="flex-1 min-h-0 mb-6">
+                <div className="glass border border-blue-500/20 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
+                  {isLoadingConfigFile ? (
+                    <div className="flex items-center justify-center h-full min-h-[300px]">
+                      <div className="flex flex-col items-center space-y-4">
+                        <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                        <p className="text-gray-400">Loading configuration file...</p>
+                      </div>
+                    </div>
+                  ) : (
+                    <pre className="text-gray-300 whitespace-pre-wrap break-words">
+                      {configFileContent}
+                    </pre>
+                  )}
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-3 flex-shrink-0 mt-auto">
+                <button
+                  onClick={() => setShowConfigFileModal(false)}
+                  className="glass hover:border-gray-500/50 border border-gray-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-gray-500/20 ripple-effect"
+                >
+                  <X className="w-5 h-5 text-gray-400" />
+                  <span className="text-white font-medium">Close</span>
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Add Profile Modal */}
+        {showAddProfileModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Environment Profile</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
+                  <input
+                    type="text"
+                    value={newProfileForm.name}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, name: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="e.g., Production, Development, Testing"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_BASE_URL</label>
+                  <input
+                    type="text"
+                    value={newProfileForm.baseUrl}
+                    onChange={(e) => setNewProfileForm({ ...newProfileForm, baseUrl: e.target.value })}
+                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    placeholder="https://api.anthropic.com"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_API_KEY</label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={newProfileForm.apiKey}
+                      onChange={(e) => setNewProfileForm({ ...newProfileForm, apiKey: e.target.value })}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
+                      placeholder="sk-ant-..."
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="w-4 h-4 text-gray-400" />
+                      ) : (
+                        <Eye className="w-4 h-4 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
+                  <div className="relative">
+                    <input
+                      type={showApiKey ? 'text' : 'password'}
+                      value={newProfileForm.authToken}
+                      onChange={(e) => setNewProfileForm({ ...newProfileForm, authToken: e.target.value })}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
+                      placeholder="Optional auth token..."
+                    />
+                    <button
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    >
+                      {showApiKey ? (
+                        <EyeOff className="w-4 h-4 text-gray-400" />
+                      ) : (
+                        <Eye className="w-4 h-4 text-gray-400" />
+                      )}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Haiku Model (Optional)</label>
+                    <input
+                      type="text"
+                      value={newProfileForm.haikuModel}
+                      onChange={(e) => setNewProfileForm({ ...newProfileForm, haikuModel: e.target.value })}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                      placeholder="claude-3-5-haiku-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Opus Model (Optional)</label>
+                    <input
+                      type="text"
+                      value={newProfileForm.opusModel}
+                      onChange={(e) => setNewProfileForm({ ...newProfileForm, opusModel: e.target.value })}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                      placeholder="claude-3-opus-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Sonnet Model (Optional)</label>
+                    <input
+                      type="text"
+                      value={newProfileForm.sonnetModel}
+                      onChange={(e) => setNewProfileForm({ ...newProfileForm, sonnetModel: e.target.value })}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                      placeholder="claude-3-5-sonnet-..."
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">Small Fast Model (Optional)</label>
+                    <input
+                      type="text"
+                      value={newProfileForm.smallFastModel}
+                      onChange={(e) => setNewProfileForm({ ...newProfileForm, smallFastModel: e.target.value })}
+                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                      placeholder="claude-3-5-haiku-..."
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex justify-end space-x-4 mt-8">
+                <button
+                  onClick={() => {
+                    setShowAddProfileModal(false);
+                    setNewProfileForm({ name: '', baseUrl: '', apiKey: '', authToken: '', haikuModel: '', opusModel: '', sonnetModel: '', smallFastModel: '' });
+                  }}
+                  className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={addNewProfile}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+                >
+                  Add Profile
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Delete Confirmation Modal */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-red-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-red-500/20 neon-glow">
+              <div className="text-center">
+                <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
+                  <Trash2 className="w-8 h-8 text-red-400" />
+                </div>
+                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : 'Skill'}?</h3>
+                <p className="text-gray-400 mb-6">
+                  Are you sure you want to delete <span className="text-white font-medium">{getDeleteItemDisplayName()}</span>? This action cannot be undone.
+                </p>
+
+                <div className="flex justify-center space-x-4">
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setItemToDelete(null);
+                    }}
+                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={() => {
+                      if (itemToDelete) {
+                        if (activeTab === 'mcp') {
+                          deleteServer(itemToDelete);
+                        } else if (activeTab === 'env') {
+                          deleteProfile(itemToDelete);
+                        } else if (activeTab === 'commands') {
+                          deleteCommand(itemToDelete);
+                        } else if (activeTab === 'skills') {
+                          deleteSkill(itemToDelete);
+                        }
+                      }
+                    }}
+                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-pink-500 text-white font-medium hover:shadow-lg hover:shadow-red-500/50 transition-all ripple-effect pulse-ring"
+                  >
+                    Delete
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Logs Viewer Modal */}
+        {showLogsModal && logsServerName && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-4xl w-full h-[600px] animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow flex flex-col">
+              <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center space-x-3">
+                  <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center pulse-ring">
+                    <FileText className="w-6 h-6 text-blue-400" />
+                  </div>
+                  <div>
+                    <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">
+                      Server Logs
+                    </h3>
+                    <p className="text-gray-400 text-sm">{logsServerName}</p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => {
+                    setShowLogsModal(false);
+                    setLogsServerName(null);
+                  }}
+                  className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                >
+                  <X className="w-6 h-6 text-gray-400" />
+                </button>
+              </div>
+
+              <div className="flex-1 overflow-hidden">
+                <ServerLogs serverName={logsServerName} />
+              </div>
+
+              <div className="flex justify-end pt-4 border-t border-blue-500/20 mt-4">
+                <button
+                  onClick={() => {
+                    setShowLogsModal(false);
+                    setLogsServerName(null);
+                  }}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect"
+                >
+                  Close
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Import MCP Config from JSON Modal */}
+        {showImportJsonModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
+              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-6">Import MCP Servers from JSON</h3>
+
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">MCP Configuration (JSON)</label>
+                  <textarea
+                    value={importJsonContent}
+                    onChange={(e) => setImportJsonContent(e.target.value)}
+                    className="w-full glass border border-blue-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-blue-500/50 focus:outline-none transition-all input-focus"
+                    rows={10}
+                    placeholder={`{
   "server-name-1": {
     "command": "npx",
     "args": ["-y", "@modelcontextprotocol/server-filesystem"],
@@ -2697,195 +2690,190 @@ Show concrete examples of using this Skill."
     "env": {"DEBUG": "true"}
   }
 }`}
-                />
-                <p className="text-xs text-gray-500 mt-2">Each server must have a "command" field. "args" and "env" are optional.</p>
-              </div>
-            </div>
-
-            <div className="flex justify-end space-x-4 mt-8">
-              <button
-                onClick={() => {
-                  setShowImportJsonModal(false);
-                  setImportJsonContent('');
-                }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={importMcpConfigFromJson}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect neon-glow"
-              >
-                Import
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Refresh Progress Modal */}
-      {showRefreshModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <div className="text-center mb-6">
-              <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
-                <RefreshCw className="w-8 h-8 text-purple-400 animate-spin" />
-              </div>
-              <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
-                Refreshing Configuration
-              </h3>
-              <p className="text-gray-400 text-sm">Loading configuration from disk...</p>
-            </div>
-
-            <div className="space-y-4">
-              {/* MCP Config Progress */}
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  {refreshProgress.mcpConfig === 'pending' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
-                  )}
-                  {refreshProgress.mcpConfig === 'loading' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
-                  )}
-                  {refreshProgress.mcpConfig === 'done' && (
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                  {refreshProgress.mcpConfig === 'error' && (
-                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
-                      <X className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className={`text-sm font-medium ${
-                    refreshProgress.mcpConfig === 'done' ? 'text-green-400' : 
-                    refreshProgress.mcpConfig === 'error' ? 'text-red-400' :
-                    refreshProgress.mcpConfig === 'loading' ? 'text-purple-400' :
-                    'text-gray-400'
-                  }`}>
-                    MCP Servers Configuration
-                  </div>
+                  />
+                  <p className="text-xs text-gray-500 mt-2">Each server must have a "command" field. "args" and "env" are optional.</p>
                 </div>
               </div>
 
-              {/* Environment Profiles Progress */}
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  {refreshProgress.envProfiles === 'pending' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
-                  )}
-                  {refreshProgress.envProfiles === 'loading' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
-                  )}
-                  {refreshProgress.envProfiles === 'done' && (
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                  {refreshProgress.envProfiles === 'error' && (
-                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
-                      <X className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className={`text-sm font-medium ${
-                    refreshProgress.envProfiles === 'done' ? 'text-green-400' : 
-                    refreshProgress.envProfiles === 'error' ? 'text-red-400' :
-                    refreshProgress.envProfiles === 'loading' ? 'text-purple-400' :
-                    'text-gray-400'
-                  }`}>
-                    Environment Profiles
-                  </div>
-                </div>
-              </div>
-
-              {/* Commands Progress */}
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  {refreshProgress.commands === 'pending' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
-                  )}
-                  {refreshProgress.commands === 'loading' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
-                  )}
-                  {refreshProgress.commands === 'done' && (
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                  {refreshProgress.commands === 'error' && (
-                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
-                      <X className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className={`text-sm font-medium ${
-                    refreshProgress.commands === 'done' ? 'text-green-400' : 
-                    refreshProgress.commands === 'error' ? 'text-red-400' :
-                    refreshProgress.commands === 'loading' ? 'text-purple-400' :
-                    'text-gray-400'
-                  }`}>
-                    Custom Commands
-                  </div>
-                </div>
-              </div>
-
-              {/* Skills Progress */}
-              <div className="flex items-center space-x-3">
-                <div className="flex-shrink-0">
-                  {refreshProgress.skills === 'pending' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
-                  )}
-                  {refreshProgress.skills === 'loading' && (
-                    <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
-                  )}
-                  {refreshProgress.skills === 'done' && (
-                    <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
-                      <Check className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                  {refreshProgress.skills === 'error' && (
-                    <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
-                      <X className="w-4 h-4 text-white" />
-                    </div>
-                  )}
-                </div>
-                <div className="flex-1">
-                  <div className={`text-sm font-medium ${
-                    refreshProgress.skills === 'done' ? 'text-green-400' : 
-                    refreshProgress.skills === 'error' ? 'text-red-400' :
-                    refreshProgress.skills === 'loading' ? 'text-purple-400' :
-                    'text-gray-400'
-                  }`}>
-                    Personal Skills
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Progress bar */}
-            <div className="mt-6">
-              <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out"
-                  style={{
-                    width: `${
-                      ((refreshProgress.mcpConfig === 'done' || refreshProgress.mcpConfig === 'error' ? 1 : 0) +
-                       (refreshProgress.envProfiles === 'done' || refreshProgress.envProfiles === 'error' ? 1 : 0) +
-                       (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0) +
-                       (refreshProgress.skills === 'done' || refreshProgress.skills === 'error' ? 1 : 0)) / 4 * 100
-                    }%`
+              <div className="flex justify-end space-x-4 mt-8">
+                <button
+                  onClick={() => {
+                    setShowImportJsonModal(false);
+                    setImportJsonContent('');
                   }}
-                ></div>
+                  className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={importMcpConfigFromJson}
+                  className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect neon-glow"
+                >
+                  Import
+                </button>
               </div>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* Refresh Progress Modal */}
+        {showRefreshModal && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
+            <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+              <div className="text-center mb-6">
+                <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
+                  <RefreshCw className="w-8 h-8 text-purple-400 animate-spin" />
+                </div>
+                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                  Refreshing Configuration
+                </h3>
+                <p className="text-gray-400 text-sm">Loading configuration from disk...</p>
+              </div>
+
+              <div className="space-y-4">
+                {/* MCP Config Progress */}
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    {refreshProgress.mcpConfig === 'pending' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                    )}
+                    {refreshProgress.mcpConfig === 'loading' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                    )}
+                    {refreshProgress.mcpConfig === 'done' && (
+                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    {refreshProgress.mcpConfig === 'error' && (
+                      <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                        <X className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className={`text-sm font-medium ${refreshProgress.mcpConfig === 'done' ? 'text-green-400' :
+                      refreshProgress.mcpConfig === 'error' ? 'text-red-400' :
+                        refreshProgress.mcpConfig === 'loading' ? 'text-purple-400' :
+                          'text-gray-400'
+                      }`}>
+                      MCP Servers Configuration
+                    </div>
+                  </div>
+                </div>
+
+                {/* Environment Profiles Progress */}
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    {refreshProgress.envProfiles === 'pending' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                    )}
+                    {refreshProgress.envProfiles === 'loading' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                    )}
+                    {refreshProgress.envProfiles === 'done' && (
+                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    {refreshProgress.envProfiles === 'error' && (
+                      <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                        <X className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className={`text-sm font-medium ${refreshProgress.envProfiles === 'done' ? 'text-green-400' :
+                      refreshProgress.envProfiles === 'error' ? 'text-red-400' :
+                        refreshProgress.envProfiles === 'loading' ? 'text-purple-400' :
+                          'text-gray-400'
+                      }`}>
+                      Environment Profiles
+                    </div>
+                  </div>
+                </div>
+
+                {/* Commands Progress */}
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    {refreshProgress.commands === 'pending' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                    )}
+                    {refreshProgress.commands === 'loading' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                    )}
+                    {refreshProgress.commands === 'done' && (
+                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    {refreshProgress.commands === 'error' && (
+                      <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                        <X className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className={`text-sm font-medium ${refreshProgress.commands === 'done' ? 'text-green-400' :
+                      refreshProgress.commands === 'error' ? 'text-red-400' :
+                        refreshProgress.commands === 'loading' ? 'text-purple-400' :
+                          'text-gray-400'
+                      }`}>
+                      Custom Commands
+                    </div>
+                  </div>
+                </div>
+
+                {/* Skills Progress */}
+                <div className="flex items-center space-x-3">
+                  <div className="flex-shrink-0">
+                    {refreshProgress.skills === 'pending' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>
+                    )}
+                    {refreshProgress.skills === 'loading' && (
+                      <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
+                    )}
+                    {refreshProgress.skills === 'done' && (
+                      <div className="w-6 h-6 rounded-full bg-green-500 flex items-center justify-center">
+                        <Check className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                    {refreshProgress.skills === 'error' && (
+                      <div className="w-6 h-6 rounded-full bg-red-500 flex items-center justify-center">
+                        <X className="w-4 h-4 text-white" />
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <div className={`text-sm font-medium ${refreshProgress.skills === 'done' ? 'text-green-400' :
+                      refreshProgress.skills === 'error' ? 'text-red-400' :
+                        refreshProgress.skills === 'loading' ? 'text-purple-400' :
+                          'text-gray-400'
+                      }`}>
+                      Personal Skills
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Progress bar */}
+              <div className="mt-6">
+                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out"
+                    style={{
+                      width: `${((refreshProgress.mcpConfig === 'done' || refreshProgress.mcpConfig === 'error' ? 1 : 0) +
+                        (refreshProgress.envProfiles === 'done' || refreshProgress.envProfiles === 'error' ? 1 : 0) +
+                        (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0) +
+                        (refreshProgress.skills === 'done' || refreshProgress.skills === 'error' ? 1 : 0)) / 4 * 100
+                        }%`
+                    }}
+                  ></div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
     </div>
