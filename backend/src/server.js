@@ -39,6 +39,8 @@ const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
+const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+
 
 // Platform-specific configuration
 const IS_WINDOWS = os.platform() === 'win32';
@@ -52,7 +54,7 @@ const getEnvConfigPath = async () => {
     // macOS/Linux: Use .zshrc or .bashrc
     const zshrcPath = path.join(HOME_DIR, '.zshrc');
     const bashrcPath = path.join(HOME_DIR, '.bashrc');
-    
+
     // Check which shell config exists, prefer .zshrc
     try {
       await fs.access(zshrcPath);
@@ -75,6 +77,69 @@ async function ensureFileExists(filePath, defaultContent = '') {
     await fs.writeFile(filePath, defaultContent);
   }
 }
+
+// Helper functions for settings.json env management
+async function settingsJsonExists() {
+  try {
+    await fs.access(CLAUDE_SETTINGS_PATH);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function readSettingsEnv() {
+  try {
+    const content = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+    const settings = JSON.parse(content);
+    return settings.env || null;
+  } catch (error) {
+    console.error('Failed to read settings.json env:', error);
+    return null;
+  }
+}
+
+async function writeSettingsEnv(envVars) {
+  try {
+    let settings = {};
+
+    // Read existing settings if file exists
+    if (await settingsJsonExists()) {
+      const content = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      settings = JSON.parse(content);
+    }
+
+    // Update env property
+    settings.env = envVars;
+
+    // Write back to file (no comments, pure JSON)
+    await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+    return true;
+  } catch (error) {
+    console.error('Failed to write settings.json env:', error);
+    throw error;
+  }
+}
+
+async function clearSettingsEnv() {
+  try {
+    if (await settingsJsonExists()) {
+      const content = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      const settings = JSON.parse(content);
+
+      // Remove env property
+      delete settings.env;
+
+      // Write back to file
+      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+    }
+    return true;
+  } catch (error) {
+    console.error('Failed to clear settings.json env:', error);
+    throw error;
+  }
+}
+
 
 // Get Claude JSON configuration
 app.get('/api/claude-config', async (req, res) => {
@@ -101,6 +166,25 @@ app.post('/api/claude-config', async (req, res) => {
 
 // Helper function to reload environment variables from shell profile
 async function reloadEnvFromProfile() {
+  try {
+    // Priority 1: Load from settings.json
+    if (await settingsJsonExists()) {
+      const env = await readSettingsEnv();
+      if (env) {
+        // Apply all environment variables from settings.json
+        Object.assign(process.env, env);
+        console.log('Environment variables loaded from settings.json');
+        return true;
+      }
+    }
+
+    // Priority 2: Fallback to shell config file
+    console.log('Settings.json not found or empty, falling back to shell config');
+  } catch (error) {
+    console.error('Failed to load from settings.json, falling back to shell config:', error);
+  }
+
+  // Shell config fallback logic
   if (IS_WINDOWS) {
     try {
       // Get PowerShell Profile path
@@ -112,11 +196,11 @@ async function reloadEnvFromProfile() {
         const { stdout } = await execPromise('powershell -Command "$PROFILE"');
         profilePath = stdout.trim();
       }
-      
+
       // Read profile and extract environment variables
       const profileContent = await fs.readFile(profilePath, 'utf-8');
       const lines = profileContent.split('\n');
-      
+
       for (const line of lines) {
         // Match PowerShell environment variable syntax: $env:VAR_NAME = "value"
         const match = line.match(/\$env:(\w+)\s*=\s*["']([^"']+)["']/);
@@ -125,7 +209,7 @@ async function reloadEnvFromProfile() {
           process.env[varName] = value;
         }
       }
-      
+
       return true;
     } catch (error) {
       console.error('Failed to reload env from PowerShell profile:', error);
@@ -137,7 +221,7 @@ async function reloadEnvFromProfile() {
       const configPath = await getEnvConfigPath();
       const content = await fs.readFile(configPath, 'utf-8');
       const lines = content.split('\n');
-      
+
       for (const line of lines) {
         // Match bash/zsh export syntax: export VAR_NAME="value" or export VAR_NAME='value'
         const match = line.match(/^\s*export\s+(\w+)=["']?([^"'\n]+)["']?/);
@@ -148,7 +232,7 @@ async function reloadEnvFromProfile() {
           process.env[varName] = cleanValue;
         }
       }
-      
+
       return true;
     } catch (error) {
       console.error('Failed to reload env from shell config:', error);
@@ -161,7 +245,7 @@ async function reloadEnvFromProfile() {
 app.post('/api/reload-env', async (req, res) => {
   try {
     const success = await reloadEnvFromProfile();
-    
+
     if (success) {
       const configSource = IS_WINDOWS ? 'PowerShell Profile' : 'Shell config file (.zshrc or .bashrc)';
       res.json({
@@ -193,7 +277,7 @@ app.get('/api/shell-config-content', async (req, res) => {
     let configPath = '';
     let content = '';
     let platform = IS_WINDOWS ? 'windows' : 'unix';
-    
+
     if (IS_WINDOWS) {
       // Windows: Read PowerShell Profile
       try {
@@ -206,7 +290,7 @@ app.get('/api/shell-config-content', async (req, res) => {
           profilePath = stdout.trim();
         }
         configPath = profilePath;
-        
+
         try {
           content = await fs.readFile(profilePath, 'utf-8');
         } catch (readError) {
@@ -223,7 +307,7 @@ app.get('/api/shell-config-content', async (req, res) => {
         configPath = await getEnvConfigPath();
         await ensureFileExists(configPath, '');
         content = await fs.readFile(configPath, 'utf-8');
-        
+
         if (!content.trim()) {
           content = `# ${configPath} is empty\n# You can add environment variables here using:\n# export VARIABLE_NAME="value"`;
         }
@@ -231,8 +315,8 @@ app.get('/api/shell-config-content', async (req, res) => {
         content = `# Error reading config file: ${error.message}`;
       }
     }
-    
-    res.json({ 
+
+    res.json({
       configPath,
       content,
       platform
@@ -250,7 +334,7 @@ app.get('/api/env-vars', async (req, res) => {
     let haikuModel = '';
     let opusModel = '';
     let sonnetModel = '';
-    
+
     if (IS_WINDOWS) {
       // Windows: Read from PowerShell Profile
       try {
@@ -265,12 +349,12 @@ app.get('/api/env-vars', async (req, res) => {
           profilePath = stdout.trim();
         }
         const trimmedProfilePath = profilePath;
-        
+
         // Check if profile exists and read it
         try {
           const profileContent = await fs.readFile(trimmedProfilePath, 'utf-8');
           const lines = profileContent.split('\n');
-          
+
           for (const line of lines) {
             // Match PowerShell environment variable syntax: $env:VAR_NAME = "value"
             if (line.includes('$env:ANTHROPIC_BASE_URL')) {
@@ -294,9 +378,9 @@ app.get('/api/env-vars', async (req, res) => {
               if (match) sonnetModel = match[1];
             }
           }
-          
-          res.json({ 
-            baseUrl, 
+
+          res.json({
+            baseUrl,
             authToken,
             haikuModel,
             opusModel,
@@ -307,8 +391,8 @@ app.get('/api/env-vars', async (req, res) => {
           });
         } catch (readError) {
           // Profile doesn't exist or can't be read - return empty values
-          res.json({ 
-            baseUrl: '', 
+          res.json({
+            baseUrl: '',
             authToken: '',
             haikuModel: '',
             opusModel: '',
@@ -327,9 +411,9 @@ app.get('/api/env-vars', async (req, res) => {
         haikuModel = process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || '';
         opusModel = process.env.ANTHROPIC_DEFAULT_OPUS_MODEL || '';
         sonnetModel = process.env.ANTHROPIC_DEFAULT_SONNET_MODEL || '';
-        
-        res.json({ 
-          baseUrl, 
+
+        res.json({
+          baseUrl,
           authToken,
           haikuModel,
           opusModel,
@@ -345,7 +429,7 @@ app.get('/api/env-vars', async (req, res) => {
       await ensureFileExists(ENV_CONFIG_PATH, '');
       const content = await fs.readFile(ENV_CONFIG_PATH, 'utf-8');
       const lines = content.split('\n');
-      
+
       for (const line of lines) {
         if (line.includes('ANTHROPIC_BASE_URL')) {
           const match = line.match(/export ANTHROPIC_BASE_URL=["']?([^"'\n]+)["']?/);
@@ -368,14 +452,14 @@ app.get('/api/env-vars', async (req, res) => {
           if (match) sonnetModel = match[1];
         }
       }
-      
-      res.json({ 
-        baseUrl, 
+
+      res.json({
+        baseUrl,
         authToken,
         haikuModel,
         opusModel,
         sonnetModel,
-        platform: 'unix', 
+        platform: 'unix',
         configFile: ENV_CONFIG_PATH,
         source: 'Shell configuration file'
       });
@@ -389,7 +473,7 @@ app.get('/api/env-vars', async (req, res) => {
 app.post('/api/env-vars', async (req, res) => {
   try {
     const { baseUrl, authToken, haikuModel, opusModel, sonnetModel } = req.body;
-    
+
     if (IS_WINDOWS) {
       // Windows: Write to PowerShell Profile (similar to .zshrc on Unix)
       try {
@@ -404,17 +488,17 @@ app.post('/api/env-vars', async (req, res) => {
           profilePath = stdout.trim();
         }
         const trimmedProfilePath = profilePath;
-        
+
         // Ensure the profile directory exists
         const profileDir = path.dirname(trimmedProfilePath);
         await fs.mkdir(profileDir, { recursive: true });
-        
+
         // Ensure profile file exists
         await ensureFileExists(trimmedProfilePath, '');
-        
+
         // Read existing profile content
         let profileContent = await fs.readFile(trimmedProfilePath, 'utf-8');
-        
+
         // Remove old environment variable settings (if any)
         const varsToRemove = [
           'ANTHROPIC_BASE_URL',
@@ -423,18 +507,18 @@ app.post('/api/env-vars', async (req, res) => {
           'ANTHROPIC_DEFAULT_OPUS_MODEL',
           'ANTHROPIC_DEFAULT_SONNET_MODEL'
         ];
-        
+
         for (const varName of varsToRemove) {
           const regex = new RegExp(`^\\$env:${varName}\\s*=.*$`, 'gm');
           profileContent = profileContent.replace(regex, '');
         }
-        
+
         // Remove Claude environment variables section marker if exists
         profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
-        
+
         // Clean up multiple blank lines
         profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
-        
+
         // Add new environment variables at the end
         const newVars = [
           '',
@@ -447,15 +531,15 @@ app.post('/api/env-vars', async (req, res) => {
           '# Claude Code Environment Variables - END',
           ''
         ].filter(line => line !== '').join('\n');
-        
+
         profileContent = profileContent + '\n' + newVars;
-        
+
         // Write updated profile
         await fs.writeFile(trimmedProfilePath, profileContent, 'utf-8');
-        
+
         // Immediately reload environment variables from the updated profile (hot reload)
         await reloadEnvFromProfile();
-        
+
         res.json({
           success: true,
           message: `Environment variables saved and reloaded! Profile: ${trimmedProfilePath}`,
@@ -467,11 +551,11 @@ app.post('/api/env-vars', async (req, res) => {
         });
       } catch (error) {
         console.error('Failed to update PowerShell Profile:', error);
-        
+
         // Fallback: write to a reference file
         ENV_CONFIG_PATH = await getEnvConfigPath();
         await ensureFileExists(ENV_CONFIG_PATH, '');
-        
+
         const refContent = [
           '# Claude Code Environment Variables',
           '# Add these lines to your PowerShell $PROFILE file',
@@ -483,11 +567,11 @@ app.post('/api/env-vars', async (req, res) => {
           opusModel ? `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = "${opusModel}"` : '',
           sonnetModel ? `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = "${sonnetModel}"` : '',
         ].filter(line => line !== '').join('\n');
-        
+
         await fs.writeFile(ENV_CONFIG_PATH, refContent);
-        
-        res.json({ 
-          success: true, 
+
+        res.json({
+          success: true,
           message: `Failed to update PowerShell Profile automatically. Reference saved to ${ENV_CONFIG_PATH}`,
           instructions: 'Please add the environment variables manually to your PowerShell $PROFILE file. Run "$PROFILE" in PowerShell to find its location.',
           platform: 'windows',
@@ -501,19 +585,19 @@ app.post('/api/env-vars', async (req, res) => {
       await ensureFileExists(ENV_CONFIG_PATH, '');
       let content = await fs.readFile(ENV_CONFIG_PATH, 'utf-8');
       let lines = content.split('\n');
-      
+
       // Find the section markers
       const startMarker = '# Claude Code Environment Variables - START';
       const endMarker = '# Claude Code Environment Variables - END';
-      
+
       let startIndex = lines.findIndex(line => line.includes(startMarker));
       let endIndex = lines.findIndex(line => line.includes(endMarker));
-      
+
       // Remove old section if exists
       if (startIndex !== -1 && endIndex !== -1) {
         lines.splice(startIndex, endIndex - startIndex + 1);
       }
-      
+
       // Add new section (use ANTHROPIC_API_KEY as per official documentation)
       const newSection = [
         '',
@@ -521,7 +605,7 @@ app.post('/api/env-vars', async (req, res) => {
         `export ANTHROPIC_BASE_URL="${baseUrl}"`,
         `export ANTHROPIC_API_KEY="${authToken}"`,
       ];
-      
+
       // Add model defaults if provided
       if (haikuModel) {
         newSection.push(`export ANTHROPIC_DEFAULT_HAIKU_MODEL="${haikuModel}"`);
@@ -532,17 +616,17 @@ app.post('/api/env-vars', async (req, res) => {
       if (sonnetModel) {
         newSection.push(`export ANTHROPIC_DEFAULT_SONNET_MODEL="${sonnetModel}"`);
       }
-      
+
       newSection.push(endMarker);
-      
+
       lines.push(...newSection);
       await fs.writeFile(ENV_CONFIG_PATH, lines.join('\n'));
-      
+
       // Immediately reload environment variables from the updated config (hot reload)
       await reloadEnvFromProfile();
-      
-      res.json({ 
-        success: true, 
+
+      res.json({
+        success: true,
         message: `Environment variables saved and reloaded! Config: ${ENV_CONFIG_PATH}`,
         instructions: 'Environment variables are now active. No restart needed! New terminal sessions will also load these variables automatically.',
         platform: 'unix',
@@ -562,13 +646,13 @@ app.get('/api/commands', async (req, res) => {
     await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
     const files = await fs.readdir(CLAUDE_COMMANDS_DIR);
     const commands = [];
-    
+
     for (const file of files) {
       const filePath = path.join(CLAUDE_COMMANDS_DIR, file);
       const content = await fs.readFile(filePath, 'utf-8');
       commands.push({ name: file, content });
     }
-    
+
     res.json(commands);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -608,14 +692,14 @@ app.delete('/api/commands/:name', async (req, res) => {
 function parseFrontmatter(content) {
   const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
   const match = content.match(frontmatterRegex);
-  
+
   if (!match) {
     return { frontmatter: {}, body: content };
   }
-  
+
   const [, frontmatterText, body] = match;
   const frontmatter = {};
-  
+
   // Simple YAML parser for key-value pairs
   const lines = frontmatterText.split('\n');
   for (const line of lines) {
@@ -626,7 +710,7 @@ function parseFrontmatter(content) {
       frontmatter[key] = value;
     }
   }
-  
+
   return { frontmatter, body };
 }
 
@@ -643,16 +727,16 @@ app.get('/api/skills', async (req, res) => {
     await fs.mkdir(CLAUDE_SKILLS_DIR, { recursive: true });
     const dirs = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true });
     const skills = [];
-    
+
     for (const dir of dirs) {
       if (dir.isDirectory()) {
         const skillPath = path.join(CLAUDE_SKILLS_DIR, dir.name);
         const skillFilePath = path.join(skillPath, 'SKILL.md');
-        
+
         try {
           const content = await fs.readFile(skillFilePath, 'utf-8');
           const { frontmatter } = parseFrontmatter(content);
-          
+
           skills.push({
             name: dir.name,
             content,
@@ -665,7 +749,7 @@ app.get('/api/skills', async (req, res) => {
         }
       }
     }
-    
+
     res.json(skills);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -676,24 +760,24 @@ app.get('/api/skills', async (req, res) => {
 app.post('/api/skills', async (req, res) => {
   try {
     const { name, content } = req.body;
-    
+
     if (!name || !content) {
       return res.status(400).json({ error: 'Name and content are required' });
     }
-    
+
     // Validate skill name format
     if (!validateSkillName(name)) {
-      return res.status(400).json({ 
-        error: 'Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)' 
+      return res.status(400).json({
+        error: 'Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)'
       });
     }
-    
+
     const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
     await fs.mkdir(skillPath, { recursive: true });
-    
+
     const skillFilePath = path.join(skillPath, 'SKILL.md');
     await fs.writeFile(skillFilePath, content, 'utf-8');
-    
+
     res.json({ success: true, message: 'Skill saved successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -705,10 +789,10 @@ app.delete('/api/skills/:name', async (req, res) => {
   try {
     const { name } = req.params;
     const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
-    
+
     // Remove entire skill directory
     await fs.rm(skillPath, { recursive: true, force: true });
-    
+
     res.json({ success: true, message: 'Skill deleted successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -725,7 +809,7 @@ async function readProfiles() {
     await ensureFileExists(CLAUDE_PROFILES_PATH, JSON.stringify({ profiles: [], activeProfileId: null }, null, 2));
     const content = await fs.readFile(CLAUDE_PROFILES_PATH, 'utf-8');
     const data = JSON.parse(content);
-    
+
     // Data migration: rename authToken to apiKey for backward compatibility
     let needsSave = false;
     if (data.profiles && Array.isArray(data.profiles)) {
@@ -742,14 +826,14 @@ async function readProfiles() {
         }
         return profile;
       });
-      
+
       if (needsSave) {
         // Save migrated data back to disk
         await writeProfiles(data);
         console.log('Migrated profile data: authToken → apiKey');
       }
     }
-    
+
     return data;
   } catch (error) {
     return { profiles: [], activeProfileId: null };
@@ -766,7 +850,16 @@ async function writeProfiles(data) {
 // Helper: Get current active profile ID from environment
 async function getCurrentActiveProfileId() {
   try {
-    // Always read from shell config file (source of truth)
+    // Priority 1: Check settings.json first
+    if (await settingsJsonExists()) {
+      const env = await readSettingsEnv();
+      if (env && env.ANTHROPIC_PROFILE_ID) {
+        console.log('Active profile ID from settings.json:', env.ANTHROPIC_PROFILE_ID);
+        return env.ANTHROPIC_PROFILE_ID;
+      }
+    }
+
+    // Priority 2: Fallback to shell config file (source of truth for legacy configs)
     // Never rely on process.env to avoid caching issues
     if (IS_WINDOWS) {
       let profilePath;
@@ -777,7 +870,7 @@ async function getCurrentActiveProfileId() {
         const { stdout } = await execPromise('powershell -Command "$PROFILE"');
         profilePath = stdout.trim();
       }
-      
+
       const content = await fs.readFile(profilePath, 'utf-8');
       const match = content.match(/\$env:ANTHROPIC_PROFILE_ID\s*=\s*"([^"]+)"/);
       if (match) return match[1];
@@ -800,7 +893,7 @@ app.get('/api/env-profiles', async (req, res) => {
     // IMPORTANT: Always trust the system config file (shell profile) as source of truth
     // If ANTHROPIC_PROFILE_ID is not in the shell config, it means no profile is active
     const activeProfileId = await getCurrentActiveProfileId();
-    
+
     res.json({
       profiles: data.profiles || [],
       activeProfileId: activeProfileId  // Return exactly what getCurrentActiveProfileId returns (or null)
@@ -814,21 +907,21 @@ app.get('/api/env-profiles', async (req, res) => {
 app.post('/api/env-profiles', async (req, res) => {
   try {
     const { name, baseUrl, apiKey, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
-    
+
     if (!name) {
       return res.status(400).json({ error: 'Profile name is required' });
     }
-    
+
     const data = await readProfiles();
-    
+
     // Check for duplicate names
     if (data.profiles.some(p => p.name === name)) {
       return res.status(400).json({ error: 'Profile name already exists' });
     }
-    
+
     // Generate unique ID
     const id = crypto.randomUUID();
-    
+
     const newProfile = {
       id,
       name,
@@ -841,10 +934,10 @@ app.post('/api/env-profiles', async (req, res) => {
       smallFastModel: smallFastModel || '',
       createdAt: new Date().toISOString()
     };
-    
+
     data.profiles.push(newProfile);
     await writeProfiles(data);
-    
+
     res.json({ success: true, profile: newProfile, message: 'Profile created successfully' });
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -856,19 +949,19 @@ app.put('/api/env-profiles/:id', async (req, res) => {
   try {
     const { id } = req.params;
     const { name, baseUrl, apiKey, authToken, haikuModel, opusModel, sonnetModel, smallFastModel } = req.body;
-    
+
     const data = await readProfiles();
     const profileIndex = data.profiles.findIndex(p => p.id === id);
-    
+
     if (profileIndex === -1) {
       return res.status(404).json({ error: 'Profile not found' });
     }
-    
+
     // Check for duplicate names (excluding current profile)
     if (name && data.profiles.some((p, idx) => p.name === name && idx !== profileIndex)) {
       return res.status(400).json({ error: 'Profile name already exists' });
     }
-    
+
     // Update profile
     data.profiles[profileIndex] = {
       ...data.profiles[profileIndex],
@@ -882,16 +975,230 @@ app.put('/api/env-profiles/:id', async (req, res) => {
       smallFastModel: smallFastModel !== undefined ? smallFastModel : data.profiles[profileIndex].smallFastModel,
       updatedAt: new Date().toISOString()
     };
-    
+
     await writeProfiles(data);
-    
-    // If this profile is currently active, update the shell config file
+
+    // If this profile is currently active, update the storage
     const activeProfileId = await getCurrentActiveProfileId();
     if (activeProfileId === id) {
       const profile = data.profiles[profileIndex];
-      
+
+      // Build environment variables object
+      const envVars = {
+        ANTHROPIC_PROFILE_ID: id
+      };
+      if (profile.baseUrl) envVars.ANTHROPIC_BASE_URL = profile.baseUrl;
+      if (profile.apiKey) envVars.ANTHROPIC_API_KEY = profile.apiKey;
+      if (profile.authToken) envVars.ANTHROPIC_AUTH_TOKEN = profile.authToken;
+      if (profile.haikuModel) envVars.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.haikuModel;
+      if (profile.opusModel) envVars.ANTHROPIC_DEFAULT_OPUS_MODEL = profile.opusModel;
+      if (profile.sonnetModel) envVars.ANTHROPIC_DEFAULT_SONNET_MODEL = profile.sonnetModel;
+      if (profile.smallFastModel) envVars.ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = profile.smallFastModel;
+
+      // Priority 1: Update settings.json if it exists
+      if (await settingsJsonExists()) {
+        try {
+          await writeSettingsEnv(envVars);
+          await reloadEnvFromProfile();
+          console.log('Updated active profile in settings.json');
+        } catch (error) {
+          console.error('Failed to update settings.json, falling back to shell config:', error);
+          // Fallback to shell config update below
+        }
+      } else {
+        // Priority 2: Update shell config if settings.json doesn't exist
+        if (IS_WINDOWS) {
+          // Windows: Update PowerShell Profile
+          try {
+            let profilePath;
+            try {
+              const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+              profilePath = stdout.trim();
+            } catch {
+              const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+              profilePath = stdout.trim();
+            }
+
+            let profileContent = await fs.readFile(profilePath, 'utf-8');
+
+            // Remove old environment variable settings
+            const varsToRemove = [
+              'ANTHROPIC_BASE_URL',
+              'ANTHROPIC_API_KEY',
+              'ANTHROPIC_AUTH_TOKEN',
+              'ANTHROPIC_DEFAULT_HAIKU_MODEL',
+              'ANTHROPIC_DEFAULT_OPUS_MODEL',
+              'ANTHROPIC_DEFAULT_SONNET_MODEL',
+              'ANTHROPIC_DEFAULT_SMALL_FAST_MODEL',
+              'ANTHROPIC_PROFILE_ID'
+            ];
+
+            for (const varName of varsToRemove) {
+              const regex = new RegExp(`^\\$env:${varName}\\s*=.*$`, 'gm');
+              profileContent = profileContent.replace(regex, '');
+            }
+
+            profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
+            profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
+
+            // Add updated environment variables
+            const newVars = [
+              '',
+              '# Claude Code Environment Variables - START',
+              `$env:ANTHROPIC_PROFILE_ID = "${id}"`,
+              profile.baseUrl ? `$env:ANTHROPIC_BASE_URL = "${profile.baseUrl}"` : '',
+              profile.apiKey ? `$env:ANTHROPIC_API_KEY = "${profile.apiKey}"` : '',
+              profile.authToken ? `$env:ANTHROPIC_AUTH_TOKEN = "${profile.authToken}"` : '',
+              profile.haikuModel ? `$env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "${profile.haikuModel}"` : '',
+              profile.opusModel ? `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = "${profile.opusModel}"` : '',
+              profile.sonnetModel ? `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = "${profile.sonnetModel}"` : '',
+              profile.smallFastModel ? `$env:ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = "${profile.smallFastModel}"` : '',
+              '# Claude Code Environment Variables - END',
+              ''
+            ].filter(line => line !== '').join('\n');
+
+            profileContent = profileContent + '\n' + newVars;
+            await fs.writeFile(profilePath, profileContent, 'utf-8');
+
+            // Hot reload
+            await reloadEnvFromProfile();
+          } catch (error) {
+            console.error('Failed to update shell config:', error);
+            // Don't fail the whole request if shell update fails
+          }
+        } else {
+          // Unix: Update shell config file
+          try {
+            const configPath = await getEnvConfigPath();
+            let content = await fs.readFile(configPath, 'utf-8');
+            let lines = content.split('\n');
+
+            const startMarker = '# Claude Code Environment Variables - START';
+            const endMarker = '# Claude Code Environment Variables - END';
+
+            let startIndex = lines.findIndex(line => line.includes(startMarker));
+            let endIndex = lines.findIndex(line => line.includes(endMarker));
+
+            if (startIndex !== -1 && endIndex !== -1) {
+              lines.splice(startIndex, endIndex - startIndex + 1);
+            }
+
+            const newSection = [
+              '',
+              startMarker,
+              `export ANTHROPIC_PROFILE_ID="${id}"`,
+              profile.baseUrl ? `export ANTHROPIC_BASE_URL="${profile.baseUrl}"` : '',
+              profile.apiKey ? `export ANTHROPIC_API_KEY="${profile.apiKey}"` : '',
+              profile.authToken ? `export ANTHROPIC_AUTH_TOKEN="${profile.authToken}"` : '',
+              profile.haikuModel ? `export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"` : '',
+              profile.opusModel ? `export ANTHROPIC_DEFAULT_OPUS_MODEL="${profile.opusModel}"` : '',
+              profile.sonnetModel ? `export ANTHROPIC_DEFAULT_SONNET_MODEL="${profile.sonnetModel}"` : '',
+              profile.smallFastModel ? `export ANTHROPIC_DEFAULT_SMALL_FAST_MODEL="${profile.smallFastModel}"` : '',
+              endMarker,
+              ''
+            ].filter(line => line !== '');
+
+            lines = lines.concat(newSection);
+            content = lines.join('\n');
+
+            await fs.writeFile(configPath, content, 'utf-8');
+
+            // Hot reload
+            await reloadEnvFromProfile();
+          } catch (error) {
+            console.error('Failed to update shell config:', error);
+            // Don't fail the whole request if shell update fails
+          }
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      profile: data.profiles[profileIndex],
+      message: activeProfileId === id
+        ? 'Profile updated and shell config synchronized successfully'
+        : 'Profile updated successfully'
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Delete an environment profile
+app.delete('/api/env-profiles/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await readProfiles();
+
+    const profileIndex = data.profiles.findIndex(p => p.id === id);
+    if (profileIndex === -1) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    // Don't allow deleting the active profile
+    const activeProfileId = await getCurrentActiveProfileId();
+    if (activeProfileId === id) {
+      return res.status(400).json({ error: 'Cannot delete the active profile. Please activate another profile first.' });
+    }
+
+    data.profiles.splice(profileIndex, 1);
+    await writeProfiles(data);
+
+    res.json({ success: true, message: 'Profile deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// Activate an environment profile (apply to system)
+app.post('/api/env-profiles/:id/activate', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const data = await readProfiles();
+
+    const profile = data.profiles.find(p => p.id === id);
+    if (!profile) {
+      return res.status(404).json({ error: 'Profile not found' });
+    }
+
+    // Build environment variables object
+    const envVars = {
+      ANTHROPIC_PROFILE_ID: id
+    };
+    if (profile.baseUrl) envVars.ANTHROPIC_BASE_URL = profile.baseUrl;
+    if (profile.apiKey) envVars.ANTHROPIC_API_KEY = profile.apiKey;
+    if (profile.authToken) envVars.ANTHROPIC_AUTH_TOKEN = profile.authToken;
+    if (profile.haikuModel) envVars.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.haikuModel;
+    if (profile.opusModel) envVars.ANTHROPIC_DEFAULT_OPUS_MODEL = profile.opusModel;
+    if (profile.sonnetModel) envVars.ANTHROPIC_DEFAULT_SONNET_MODEL = profile.sonnetModel;
+    if (profile.smallFastModel) envVars.ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = profile.smallFastModel;
+
+    // Priority 1: Try to write to settings.json
+    const settingsDir = path.dirname(CLAUDE_SETTINGS_PATH);
+    await fs.mkdir(settingsDir, { recursive: true });
+
+    try {
+      await writeSettingsEnv(envVars);
+      await reloadEnvFromProfile();
+
+      // Update active profile in data
+      data.activeProfileId = id;
+      await writeProfiles(data);
+
+      return res.json({
+        success: true,
+        message: `Profile "${profile.name}" activated and reloaded!`,
+        method: 'settings.json',
+        settingsPath: CLAUDE_SETTINGS_PATH,
+        hotReloaded: true
+      });
+    } catch (settingsError) {
+      console.warn('Failed to write to settings.json, falling back to shell config:', settingsError);
+
+      // Priority 2: Fallback to shell config
       if (IS_WINDOWS) {
-        // Windows: Update PowerShell Profile
+        // Windows: Write to PowerShell Profile
         try {
           let profilePath;
           try {
@@ -901,9 +1208,13 @@ app.put('/api/env-profiles/:id', async (req, res) => {
             const { stdout } = await execPromise('powershell -Command "$PROFILE"');
             profilePath = stdout.trim();
           }
-          
+
+          const profileDir = path.dirname(profilePath);
+          await fs.mkdir(profileDir, { recursive: true });
+          await ensureFileExists(profilePath, '');
+
           let profileContent = await fs.readFile(profilePath, 'utf-8');
-          
+
           // Remove old environment variable settings
           const varsToRemove = [
             'ANTHROPIC_BASE_URL',
@@ -915,16 +1226,16 @@ app.put('/api/env-profiles/:id', async (req, res) => {
             'ANTHROPIC_DEFAULT_SMALL_FAST_MODEL',
             'ANTHROPIC_PROFILE_ID'
           ];
-          
+
           for (const varName of varsToRemove) {
             const regex = new RegExp(`^\\$env:${varName}\\s*=.*$`, 'gm');
             profileContent = profileContent.replace(regex, '');
           }
-          
+
           profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
           profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
-          
-          // Add updated environment variables
+
+          // Add new environment variables
           const newVars = [
             '',
             '# Claude Code Environment Variables - START',
@@ -939,248 +1250,97 @@ app.put('/api/env-profiles/:id', async (req, res) => {
             '# Claude Code Environment Variables - END',
             ''
           ].filter(line => line !== '').join('\n');
-          
+
           profileContent = profileContent + '\n' + newVars;
           await fs.writeFile(profilePath, profileContent, 'utf-8');
-          
+
           // Hot reload
           await reloadEnvFromProfile();
+
+          // Update active profile in data
+          data.activeProfileId = id;
+          await writeProfiles(data);
+
+          res.json({
+            success: true,
+            message: `Profile "${profile.name}" activated and reloaded!`,
+            method: 'PowerShell Profile (fallback)',
+            profilePath,
+            hotReloaded: true
+          });
         } catch (error) {
-          console.error('Failed to update shell config:', error);
-          // Don't fail the whole request if shell update fails
+          console.error('Failed to activate profile:', error);
+          res.status(500).json({ error: error.message });
         }
       } else {
-        // Unix: Update shell config file
+        // Unix: Write to shell config file
         try {
           const configPath = await getEnvConfigPath();
+          await ensureFileExists(configPath, '');
           let content = await fs.readFile(configPath, 'utf-8');
           let lines = content.split('\n');
-          
+
           const startMarker = '# Claude Code Environment Variables - START';
           const endMarker = '# Claude Code Environment Variables - END';
-          
+
           let startIndex = lines.findIndex(line => line.includes(startMarker));
           let endIndex = lines.findIndex(line => line.includes(endMarker));
-          
+
           if (startIndex !== -1 && endIndex !== -1) {
             lines.splice(startIndex, endIndex - startIndex + 1);
           }
-          
+
           const newSection = [
             '',
             startMarker,
             `export ANTHROPIC_PROFILE_ID="${id}"`,
-            profile.baseUrl ? `export ANTHROPIC_BASE_URL="${profile.baseUrl}"` : '',
-            profile.apiKey ? `export ANTHROPIC_API_KEY="${profile.apiKey}"` : '',
-            profile.authToken ? `export ANTHROPIC_AUTH_TOKEN="${profile.authToken}"` : '',
-            profile.haikuModel ? `export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"` : '',
-            profile.opusModel ? `export ANTHROPIC_DEFAULT_OPUS_MODEL="${profile.opusModel}"` : '',
-            profile.sonnetModel ? `export ANTHROPIC_DEFAULT_SONNET_MODEL="${profile.sonnetModel}"` : '',
-            profile.smallFastModel ? `export ANTHROPIC_DEFAULT_SMALL_FAST_MODEL="${profile.smallFastModel}"` : '',
-            endMarker,
-            ''
-          ].filter(line => line !== '');
-          
-          lines = lines.concat(newSection);
-          content = lines.join('\n');
-          
-          await fs.writeFile(configPath, content, 'utf-8');
-          
+          ];
+
+          if (profile.baseUrl) {
+            newSection.push(`export ANTHROPIC_BASE_URL="${profile.baseUrl}"`);
+          }
+          if (profile.apiKey) {
+            newSection.push(`export ANTHROPIC_API_KEY="${profile.apiKey}"`);
+          }
+          if (profile.authToken) {
+            newSection.push(`export ANTHROPIC_AUTH_TOKEN="${profile.authToken}"`);
+          }
+          if (profile.haikuModel) {
+            newSection.push(`export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"`);
+          }
+          if (profile.opusModel) {
+            newSection.push(`export ANTHROPIC_DEFAULT_OPUS_MODEL="${profile.opusModel}"`);
+          }
+          if (profile.sonnetModel) {
+            newSection.push(`export ANTHROPIC_DEFAULT_SONNET_MODEL="${profile.sonnetModel}"`);
+          }
+          if (profile.smallFastModel) {
+            newSection.push(`export ANTHROPIC_DEFAULT_SMALL_FAST_MODEL="${profile.smallFastModel}"`);
+          }
+
+          newSection.push(endMarker);
+          lines.push(...newSection);
+          await fs.writeFile(configPath, lines.join('\n'));
+
           // Hot reload
           await reloadEnvFromProfile();
+
+          // Update active profile in data
+          data.activeProfileId = id;
+          await writeProfiles(data);
+
+          res.json({
+            success: true,
+            message: `Profile "${profile.name}" activated and reloaded!`,
+            method: 'Shell config (fallback)',
+            configPath,
+            hotReloaded: true
+          });
         } catch (error) {
-          console.error('Failed to update shell config:', error);
-          // Don't fail the whole request if shell update fails
+          console.error('Failed to activate profile:', error);
+          res.status(500).json({ error: error.message });
         }
       }
-    }
-    
-    res.json({ 
-      success: true, 
-      profile: data.profiles[profileIndex], 
-      message: activeProfileId === id 
-        ? 'Profile updated and shell config synchronized successfully' 
-        : 'Profile updated successfully'
-    });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Delete an environment profile
-app.delete('/api/env-profiles/:id', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = await readProfiles();
-    
-    const profileIndex = data.profiles.findIndex(p => p.id === id);
-    if (profileIndex === -1) {
-      return res.status(404).json({ error: 'Profile not found' });
-    }
-    
-    // Don't allow deleting the active profile
-    const activeProfileId = await getCurrentActiveProfileId();
-    if (activeProfileId === id) {
-      return res.status(400).json({ error: 'Cannot delete the active profile. Please activate another profile first.' });
-    }
-    
-    data.profiles.splice(profileIndex, 1);
-    await writeProfiles(data);
-    
-    res.json({ success: true, message: 'Profile deleted successfully' });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
-});
-
-// Activate an environment profile (apply to system)
-app.post('/api/env-profiles/:id/activate', async (req, res) => {
-  try {
-    const { id } = req.params;
-    const data = await readProfiles();
-    
-    const profile = data.profiles.find(p => p.id === id);
-    if (!profile) {
-      return res.status(404).json({ error: 'Profile not found' });
-    }
-    
-    // Apply environment variables to system
-    if (IS_WINDOWS) {
-      // Windows: Write to PowerShell Profile
-      try {
-        let profilePath;
-        try {
-          const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
-          profilePath = stdout.trim();
-        } catch {
-          const { stdout } = await execPromise('powershell -Command "$PROFILE"');
-          profilePath = stdout.trim();
-        }
-        
-        const profileDir = path.dirname(profilePath);
-        await fs.mkdir(profileDir, { recursive: true });
-        await ensureFileExists(profilePath, '');
-        
-        let profileContent = await fs.readFile(profilePath, 'utf-8');
-        
-        // Remove old environment variable settings
-        const varsToRemove = [
-          'ANTHROPIC_BASE_URL',
-          'ANTHROPIC_API_KEY',
-          'ANTHROPIC_AUTH_TOKEN',
-          'ANTHROPIC_DEFAULT_HAIKU_MODEL',
-          'ANTHROPIC_DEFAULT_OPUS_MODEL',
-          'ANTHROPIC_DEFAULT_SONNET_MODEL',
-          'ANTHROPIC_DEFAULT_SMALL_FAST_MODEL',
-          'ANTHROPIC_PROFILE_ID'
-        ];
-        
-        for (const varName of varsToRemove) {
-          const regex = new RegExp(`^\\$env:${varName}\\s*=.*$`, 'gm');
-          profileContent = profileContent.replace(regex, '');
-        }
-        
-        profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
-        profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
-        
-        // Add new environment variables
-        const newVars = [
-          '',
-          '# Claude Code Environment Variables - START',
-          `$env:ANTHROPIC_PROFILE_ID = "${id}"`,
-          profile.baseUrl ? `$env:ANTHROPIC_BASE_URL = "${profile.baseUrl}"` : '',
-          profile.apiKey ? `$env:ANTHROPIC_API_KEY = "${profile.apiKey}"` : '',
-          profile.authToken ? `$env:ANTHROPIC_AUTH_TOKEN = "${profile.authToken}"` : '',
-          profile.haikuModel ? `$env:ANTHROPIC_DEFAULT_HAIKU_MODEL = "${profile.haikuModel}"` : '',
-          profile.opusModel ? `$env:ANTHROPIC_DEFAULT_OPUS_MODEL = "${profile.opusModel}"` : '',
-          profile.sonnetModel ? `$env:ANTHROPIC_DEFAULT_SONNET_MODEL = "${profile.sonnetModel}"` : '',
-          profile.smallFastModel ? `$env:ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = "${profile.smallFastModel}"` : '',
-          '# Claude Code Environment Variables - END',
-          ''
-        ].filter(line => line !== '').join('\n');
-        
-        profileContent = profileContent + '\n' + newVars;
-        await fs.writeFile(profilePath, profileContent, 'utf-8');
-        
-        // Hot reload
-        await reloadEnvFromProfile();
-        
-        // Update active profile in data
-        data.activeProfileId = id;
-        await writeProfiles(data);
-        
-        res.json({
-          success: true,
-          message: `Profile "${profile.name}" activated and reloaded!`,
-          profilePath,
-          hotReloaded: true
-        });
-      } catch (error) {
-        console.error('Failed to activate profile:', error);
-        res.status(500).json({ error: error.message });
-      }
-    } else {
-      // Unix: Write to shell config file
-      const configPath = await getEnvConfigPath();
-      await ensureFileExists(configPath, '');
-      let content = await fs.readFile(configPath, 'utf-8');
-      let lines = content.split('\n');
-      
-      const startMarker = '# Claude Code Environment Variables - START';
-      const endMarker = '# Claude Code Environment Variables - END';
-      
-      let startIndex = lines.findIndex(line => line.includes(startMarker));
-      let endIndex = lines.findIndex(line => line.includes(endMarker));
-      
-      if (startIndex !== -1 && endIndex !== -1) {
-        lines.splice(startIndex, endIndex - startIndex + 1);
-      }
-      
-      const newSection = [
-        '',
-        startMarker,
-        `export ANTHROPIC_PROFILE_ID="${id}"`,
-      ];
-      
-      if (profile.baseUrl) {
-        newSection.push(`export ANTHROPIC_BASE_URL="${profile.baseUrl}"`);
-      }
-      if (profile.apiKey) {
-        newSection.push(`export ANTHROPIC_API_KEY="${profile.apiKey}"`);
-      }
-      if (profile.authToken) {
-        newSection.push(`export ANTHROPIC_AUTH_TOKEN="${profile.authToken}"`);
-      }
-      if (profile.haikuModel) {
-        newSection.push(`export ANTHROPIC_DEFAULT_HAIKU_MODEL="${profile.haikuModel}"`);
-      }
-      if (profile.opusModel) {
-        newSection.push(`export ANTHROPIC_DEFAULT_OPUS_MODEL="${profile.opusModel}"`);
-      }
-      if (profile.sonnetModel) {
-        newSection.push(`export ANTHROPIC_DEFAULT_SONNET_MODEL="${profile.sonnetModel}"`);
-      }
-      if (profile.smallFastModel) {
-        newSection.push(`export ANTHROPIC_DEFAULT_SMALL_FAST_MODEL="${profile.smallFastModel}"`);
-      }
-      
-      newSection.push(endMarker);
-      lines.push(...newSection);
-      await fs.writeFile(configPath, lines.join('\n'));
-      
-      // Hot reload
-      await reloadEnvFromProfile();
-      
-      // Update active profile in data
-      data.activeProfileId = id;
-      await writeProfiles(data);
-      
-      res.json({
-        success: true,
-        message: `Profile "${profile.name}" activated and reloaded!`,
-        configPath,
-        hotReloaded: true
-      });
     }
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1192,13 +1352,23 @@ app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
   try {
     const { id } = req.params;
     const data = await readProfiles();
-    
+
     const profile = data.profiles.find(p => p.id === id);
     if (!profile) {
       return res.status(404).json({ error: 'Profile not found' });
     }
-    
-    // Remove environment variables from system
+
+    // Priority 1: Clear from settings.json
+    if (await settingsJsonExists()) {
+      try {
+        await clearSettingsEnv();
+        console.log('Cleared environment variables from settings.json');
+      } catch (error) {
+        console.error('Failed to clear settings.json:', error);
+      }
+    }
+
+    // Priority 2: Also clear from shell config (for cleanup)
     if (IS_WINDOWS) {
       // Windows: Remove from PowerShell Profile
       try {
@@ -1210,70 +1380,58 @@ app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
           const { stdout } = await execPromise('powershell -Command "$PROFILE"');
           profilePath = stdout.trim();
         }
-        
+
         let profileContent = await fs.readFile(profilePath, 'utf-8');
-        
+
         // Remove Claude Code environment variables section
         profileContent = profileContent.replace(/# Claude Code Environment Variables - START[\s\S]*?# Claude Code Environment Variables - END\n?/g, '');
-        
+
         // Clean up multiple blank lines
         profileContent = profileContent.replace(/\n{3,}/g, '\n\n').trim();
-        
+
         await fs.writeFile(profilePath, profileContent, 'utf-8');
-        
-        // Hot reload
-        await reloadEnvFromProfile();
-        
-        // Update active profile in data
-        data.activeProfileId = null;
-        await writeProfiles(data);
-        
-        res.json({
-          success: true,
-          message: `Profile "${profile.name}" deactivated!`,
-          profilePath,
-          hotReloaded: true
-        });
       } catch (error) {
-        console.error('Failed to deactivate profile:', error);
-        res.status(500).json({ error: error.message });
+        console.error('Failed to clean PowerShell Profile:', error);
       }
     } else {
       // Unix: Remove from shell config file
-      const configPath = await getEnvConfigPath();
-      let content = await fs.readFile(configPath, 'utf-8');
-      let lines = content.split('\n');
-      
-      const startMarker = '# Claude Code Environment Variables - START';
-      const endMarker = '# Claude Code Environment Variables - END';
-      
-      let startIndex = lines.findIndex(line => line.includes(startMarker));
-      let endIndex = lines.findIndex(line => line.includes(endMarker));
-      
-      // Remove the section if it exists
-      if (startIndex !== -1 && endIndex !== -1) {
-        lines.splice(startIndex, endIndex - startIndex + 1);
+      try {
+        const configPath = await getEnvConfigPath();
+        let content = await fs.readFile(configPath, 'utf-8');
+        let lines = content.split('\n');
+
+        const startMarker = '# Claude Code Environment Variables - START';
+        const endMarker = '# Claude Code Environment Variables - END';
+
+        let startIndex = lines.findIndex(line => line.includes(startMarker));
+        let endIndex = lines.findIndex(line => line.includes(endMarker));
+
+        // Remove the section if it exists
+        if (startIndex !== -1 && endIndex !== -1) {
+          lines.splice(startIndex, endIndex - startIndex + 1);
+        }
+
+        // Clean up multiple blank lines
+        const cleanedLines = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+
+        await fs.writeFile(configPath, cleanedLines);
+      } catch (error) {
+        console.error('Failed to clean shell config:', error);
       }
-      
-      // Clean up multiple blank lines
-      const cleanedLines = lines.join('\n').replace(/\n{3,}/g, '\n\n').trim();
-      
-      await fs.writeFile(configPath, cleanedLines);
-      
-      // Hot reload
-      await reloadEnvFromProfile();
-      
-      // Update active profile in data
-      data.activeProfileId = null;
-      await writeProfiles(data);
-      
-      res.json({
-        success: true,
-        message: `Profile "${profile.name}" deactivated!`,
-        configPath,
-        hotReloaded: true
-      });
     }
+
+    // Hot reload
+    await reloadEnvFromProfile();
+
+    // Update active profile in data
+    data.activeProfileId = null;
+    await writeProfiles(data);
+
+    res.json({
+      success: true,
+      message: `Profile "${profile.name}" deactivated!`,
+      hotReloaded: true
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1282,34 +1440,34 @@ app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
 // Helper function to expand path placeholders (cross-platform)
 function expandPath(inputPath) {
   let expandedPath = inputPath;
-  
+
   // Handle ~ for Unix-like systems
   if (expandedPath.startsWith('~')) {
     expandedPath = expandedPath.replace('~', os.homedir());
   }
-  
+
   // Handle Windows environment variables like %USERPROFILE%, %APPDATA%, etc.
   if (IS_WINDOWS && expandedPath.includes('%')) {
     expandedPath = expandedPath.replace(/%([^%]+)%/g, (_, envVar) => {
       return process.env[envVar] || `%${envVar}%`;
     });
   }
-  
+
   // Normalize path separators for the current platform
   expandedPath = path.normalize(expandedPath);
-  
+
   return expandedPath;
 }
 
 // Get available drives on Windows
 async function getWindowsDrives() {
   if (!IS_WINDOWS) return [];
-  
+
   try {
     const drives = [];
     // Check common drive letters
     const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('');
-    
+
     for (const letter of letters) {
       const drivePath = `${letter}:\\`;
       try {
@@ -1319,7 +1477,7 @@ async function getWindowsDrives() {
         // Drive doesn't exist or not accessible
       }
     }
-    
+
     return drives;
   } catch (error) {
     console.error('Error getting Windows drives:', error);
@@ -1356,7 +1514,7 @@ app.get('/api/default-paths', async (req, res) => {
         root: '/',
       };
     }
-    
+
     res.json(response);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1368,14 +1526,14 @@ app.get('/api/default-paths', async (req, res) => {
 app.post('/api/list-files', async (req, res) => {
   try {
     const { directory } = req.body;
-    
+
     if (!directory) {
       return res.status(400).json({ error: 'Directory is required' });
     }
-    
+
     // Expand path (handles ~, environment variables, etc.)
     const expandedDir = expandPath(directory);
-    
+
     // Check if directory exists and is accessible
     try {
       const stats = await fs.stat(expandedDir);
@@ -1385,24 +1543,24 @@ app.post('/api/list-files', async (req, res) => {
     } catch (err) {
       return res.status(404).json({ error: `Directory not found: ${expandedDir}` });
     }
-    
+
     // Read directory contents
     const files = await fs.readdir(expandedDir, { withFileTypes: true });
-    
+
     // Format the file list
     const fileList = files.map(file => ({
       name: file.name,
       isDirectory: file.isDirectory(),
       path: path.join(expandedDir, file.name)
     }));
-    
+
     // Sort: directories first, then files, alphabetically
     fileList.sort((a, b) => {
       if (a.isDirectory && !b.isDirectory) return -1;
       if (!a.isDirectory && b.isDirectory) return 1;
       return a.name.localeCompare(b.name);
     });
-    
+
     res.json({ files: fileList, directory: expandedDir });
   } catch (error) {
     res.status(500).json({ error: error.message, files: [] });
@@ -1433,7 +1591,7 @@ function addLog(serverName, type, message) {
 // Start MCP Server
 app.post('/api/mcp/:name/start', async (req, res) => {
   const serverName = req.params.name;
-  
+
   try {
     // Check if already running
     if (mcpProcesses.has(serverName)) {
@@ -1447,14 +1605,14 @@ app.post('/api/mcp/:name/start', async (req, res) => {
     const configContent = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
     const config = JSON.parse(configContent);
     const serverConfig = config.mcpServers?.[serverName];
-    
+
     if (!serverConfig) {
       return res.status(404).json({ error: 'Server not found in config' });
     }
 
     // Prepare command
     const { command, args = [], env = {} } = serverConfig;
-    
+
     addLog(serverName, 'info', `Starting MCP server: ${serverName}`);
     addLog(serverName, 'info', `Command: ${command} ${args.join(' ')}`);
     addLog(serverName, 'info', `Environment variables: ${Object.keys(env).join(', ') || 'none'}`);
@@ -1472,7 +1630,7 @@ app.post('/api/mcp/:name/start', async (req, res) => {
     } catch (spawnError) {
       startError = spawnError;
       addLog(serverName, 'error', `Failed to spawn process: ${spawnError.message}`);
-      
+
       // Store process info with error
       mcpProcesses.set(serverName, {
         process: null,
@@ -1484,7 +1642,7 @@ app.post('/api/mcp/:name/start', async (req, res) => {
         error: spawnError.message
       });
 
-      return res.status(500).json({ 
+      return res.status(500).json({
         error: `Failed to start server: ${spawnError.message}`,
         details: spawnError.message
       });
@@ -1522,13 +1680,13 @@ app.post('/api/mcp/:name/start', async (req, res) => {
     childProcess.on('exit', (code, signal) => {
       const message = `Process exited with code ${code} ${signal ? `and signal ${signal}` : ''}`;
       addLog(serverName, 'info', message);
-      
+
       if (mcpProcesses.has(serverName)) {
         const info = mcpProcesses.get(serverName);
         info.status = 'stopped';
         info.exitCode = code;
         info.exitSignal = signal;
-        
+
         // Clear keep-alive timer when process exits
         if (info.keepAliveInterval) {
           clearInterval(info.keepAliveInterval);
@@ -1544,7 +1702,7 @@ app.post('/api/mcp/:name/start', async (req, res) => {
         const info = mcpProcesses.get(serverName);
         info.status = 'error';
         info.error = error.message;
-        
+
         // Clear keep-alive timer on error
         if (info.keepAliveInterval) {
           clearInterval(info.keepAliveInterval);
@@ -1602,7 +1760,7 @@ app.post('/api/mcp/:name/start', async (req, res) => {
   } catch (error) {
     addLog(serverName, 'error', `Failed to start: ${error.message}`);
     console.error(`Error starting MCP server ${serverName}:`, error);
-    res.status(500).json({ 
+    res.status(500).json({
       error: error.message,
       details: error.stack
     });
@@ -1612,14 +1770,14 @@ app.post('/api/mcp/:name/start', async (req, res) => {
 // Stop MCP Server
 app.post('/api/mcp/:name/stop', (req, res) => {
   const serverName = req.params.name;
-  
+
   try {
     if (!mcpProcesses.has(serverName)) {
       return res.status(404).json({ error: 'Server not running' });
     }
 
     const processInfo = mcpProcesses.get(serverName);
-    
+
     if (processInfo.status !== 'running') {
       return res.status(400).json({ error: 'Server is not running' });
     }
@@ -1666,7 +1824,7 @@ app.post('/api/mcp/:name/stop', (req, res) => {
           info.process.kill('SIGKILL');
           info.status = 'stopped';
         }
-        
+
         // Ensure interval is cleared
         if (info.keepAliveInterval) {
           clearInterval(info.keepAliveInterval);
@@ -1686,7 +1844,7 @@ app.post('/api/mcp/:name/stop', (req, res) => {
 // Get MCP Server Status
 app.get('/api/mcp/:name/status', (req, res) => {
   const serverName = req.params.name;
-  
+
   if (!mcpProcesses.has(serverName)) {
     return res.json({
       status: 'stopped',
@@ -1695,7 +1853,7 @@ app.get('/api/mcp/:name/status', (req, res) => {
   }
 
   const processInfo = mcpProcesses.get(serverName);
-  
+
   res.json({
     status: processInfo.status,
     running: processInfo.status === 'running',
@@ -1715,9 +1873,9 @@ app.get('/api/mcp/status/all', async (req, res) => {
     const configContent = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
     const config = JSON.parse(configContent);
     const servers = config.mcpServers || {};
-    
+
     const statuses = {};
-    
+
     for (const serverName of Object.keys(servers)) {
       if (mcpProcesses.has(serverName)) {
         const processInfo = mcpProcesses.get(serverName);
@@ -1726,15 +1884,15 @@ app.get('/api/mcp/status/all', async (req, res) => {
           running: processInfo.status === 'running',
           pid: processInfo.pid,
           startTime: processInfo.startTime
-      };
-    } else {
+        };
+      } else {
         statuses[serverName] = {
           status: 'stopped',
           running: false
         };
       }
     }
-    
+
     res.json(statuses);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -1745,15 +1903,15 @@ app.get('/api/mcp/status/all', async (req, res) => {
 app.get('/api/mcp/:name/logs', (req, res) => {
   const serverName = req.params.name;
   const limit = parseInt(req.query.limit) || 50;
-  
+
   if (!mcpLogs.has(serverName)) {
     return res.json({ logs: [], message: 'No logs available for this server yet' });
   }
 
   const logs = mcpLogs.get(serverName);
   const recentLogs = logs.slice(-limit);
-  
-  res.json({ 
+
+  res.json({
     logs: recentLogs,
     total: logs.length,
     displayed: recentLogs.length
@@ -1763,18 +1921,18 @@ app.get('/api/mcp/:name/logs', (req, res) => {
 // Clear MCP Server Logs
 app.post('/api/mcp/:name/logs/clear', (req, res) => {
   const serverName = req.params.name;
-  
+
   if (mcpLogs.has(serverName)) {
     mcpLogs.delete(serverName);
   }
-  
+
   res.json({ success: true, message: 'Logs cleared for server' });
 });
 
 // Restart MCP Server
 app.post('/api/mcp/:name/restart', async (req, res) => {
   const serverName = req.params.name;
-  
+
   try {
     // Stop if running
     if (mcpProcesses.has(serverName)) {
@@ -1785,7 +1943,7 @@ app.post('/api/mcp/:name/restart', async (req, res) => {
           clearInterval(processInfo.keepAliveInterval);
           processInfo.keepAliveInterval = null;
         }
-        
+
         // Close stdin gracefully
         try {
           if (processInfo.process && processInfo.process.stdin) {
@@ -1794,7 +1952,7 @@ app.post('/api/mcp/:name/restart', async (req, res) => {
         } catch (error) {
           // Ignore
         }
-        
+
         processInfo.process.kill('SIGTERM');
         await new Promise(resolve => setTimeout(resolve, 2000));
       }
@@ -1804,10 +1962,10 @@ app.post('/api/mcp/:name/restart', async (req, res) => {
     const response = await fetch(`http://localhost:${PORT}/api/mcp/${serverName}/start`, {
       method: 'POST'
     });
-    
+
     const result = await response.json();
     res.json(result);
-    
+
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
