@@ -364,8 +364,17 @@ html[data-theme="light"] nav.glass-dark {
 }
 
 /* Active tab icon bg */
+html[data-theme="light"] .bg-zinc-700 {
+  background-color: #e4e4e7 !important;
+}
+
 html[data-theme="light"] .bg-zinc-700.pulse-ring {
-  background-color: #18181b !important;
+  background-color: #27272a !important;
+}
+
+/* Icon inside active tab stays white for contrast on dark bg */
+html[data-theme="light"] .bg-zinc-700.pulse-ring svg {
+  color: #ffffff !important;
 }
 
 /* Non-active icon bg */
