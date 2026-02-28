@@ -326,6 +326,20 @@ app.get('/api/shell-config-content', async (req, res) => {
   }
 });
 
+app.get('/api/claude-settings-content', async (req, res) => {
+  try {
+    let content = '';
+    try {
+      content = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+    } catch {
+      content = '# ~/.claude/settings.json not found or empty';
+    }
+    res.json({ configPath: CLAUDE_SETTINGS_PATH, content });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Get environment variables
 app.get('/api/env-vars', async (req, res) => {
   try {
@@ -1432,6 +1446,23 @@ app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
       message: `Profile "${profile.name}" deactivated!`,
       hotReloaded: true
     });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/env-profiles/reorder', async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+    if (!Array.isArray(orderedIds)) return res.status(400).json({ error: 'orderedIds must be an array' });
+
+    const data = await readProfiles();
+    const profileMap = new Map(data.profiles.map((p) => [p.id, p]));
+    const reordered = orderedIds.map((id) => profileMap.get(id)).filter((p) => p !== undefined);
+    const remaining = data.profiles.filter((p) => !orderedIds.includes(p.id));
+    data.profiles = [...reordered, ...remaining];
+    await writeProfiles(data);
+    res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
