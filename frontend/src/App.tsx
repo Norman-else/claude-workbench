@@ -326,8 +326,8 @@ function App() {
             className="mt-auto w-full glass hover:border-zinc-600 border border-zinc-800 px-4 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20  group tooltip disabled:opacity-50 disabled:cursor-not-allowed"
             data-tooltip={isRefreshingConfig ? 'Refreshing...' : 'Reload configuration from disk'}
           >
-            <RefreshCw className={`w-4 h-4 text-zinc-100 transition-transform duration-500 ${isRefreshingConfig ? 'animate-spin' : 'group-hover:rotate-180'}`} />
-            <span className="text-sm text-gray-300">{isRefreshingConfig ? 'Refreshing...' : 'Refresh Config'}</span>
+            <RefreshCw className={`w-4 h-4 text-zinc-500 transition-transform duration-500 ${isRefreshingConfig ? 'animate-spin' : 'group-hover:rotate-180'}`} />
+            <span className="text-sm text-zinc-500">{isRefreshingConfig ? 'Refreshing...' : 'Refresh Config'}</span>
           </button>
 
           <div className="mt-4">
