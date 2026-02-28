@@ -1,0 +1,32 @@
+changelog:
+  categories:
+    - title: "New Features"
+      labels:
+        - feat
+        - feature
+      exclude:
+        labels:
+          - ignore
+    - title: "Bug Fixes"
+      labels:
+        - fix
+        - bugfix
+        - bug
+    - title: "Performance Improvements"
+      labels:
+        - perf
+        - performance
+    - title: "Refactoring"
+      labels:
+        - refactor
+    - title: "Documentation"
+      labels:
+        - docs
+        - documentation
+    - title: "Maintenance"
+      labels:
+        - chore
+        - ci
+        - build
+        - deps
+    - title: "Other Changes"
