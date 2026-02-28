@@ -1,0 +1,5 @@
+# Code Owners
+# These owners will be required reviewers for pull requests that modify matched files.
+
+# GitHub Actions workflows - only Norman-else can approve changes
+.github/workflows/ @Norman-else
