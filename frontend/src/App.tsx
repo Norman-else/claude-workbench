@@ -26,7 +26,7 @@ function App() {
     document.title = 'Claude Workbench';
   }, []);
 
-  const [activeTab, setActiveTab] = useState<TabType>('mcp');
+  const [activeTab, setActiveTab] = useState<TabType>('env');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
@@ -244,25 +244,6 @@ function App() {
 
           <div className="space-y-2 flex-1">
             <button
-              onClick={() => setActiveTab('mcp')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'mcp'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'mcp' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
-              >
-                <Server className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">MCP Servers</span>
-              {activeTab === 'mcp' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
-
-            <button
               onClick={() => setActiveTab('env')}
               className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
                 activeTab === 'env'
@@ -279,6 +260,25 @@ function App() {
               </div>
               <span className="font-medium text-white">Environment</span>
               {activeTab === 'env' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
+            </button>
+
+            <button
+              onClick={() => setActiveTab('mcp')}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
+                activeTab === 'mcp'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
+              }`}
+            >
+              <div
+                className={`p-2 rounded-lg transition-all ${
+                  activeTab === 'mcp' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                }`}
+              >
+                <Server className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-white">MCP Servers</span>
+              {activeTab === 'mcp' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
             </button>
 
             <button
