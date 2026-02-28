@@ -230,7 +230,7 @@ function App() {
 
           <div className="mb-12 mt-8  relative z-10 titlebar-no-drag">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-xl bg-white text-black flex items-center justify-center ">
+              <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center ">
                 <Zap className="w-7 h-7 text-white" />
               </div>
               <div>
