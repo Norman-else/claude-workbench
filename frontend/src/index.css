@@ -309,6 +309,9 @@ html[data-theme="light"] .prose pre::-webkit-scrollbar-thumb {
 html[data-theme="light"] .text-white {
   color: #111111 !important;
 }
+html[data-theme="light"] .text-gray-300 {
+  color: #374151 !important; /* gray-700 - clearly readable label text */
+}
 html[data-theme="light"] .text-zinc-100,
 html[data-theme="light"] .text-zinc-200,
 html[data-theme="light"] .text-zinc-300 {
