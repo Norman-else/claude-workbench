@@ -181,7 +181,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
     const reordered = arrayMove(localProfiles, oldIndex, newIndex);
     setLocalProfiles(reordered);
     try {
-      await reorderEnvProfiles(reordered.map((p) => p.id));
+      await reorderEnvProfiles(reordered.map((p: EnvProfile) => p.id));
     } catch {
       showNotification('Failed to save order', 'error');
       setLocalProfiles(envProfiles); // revert on error
