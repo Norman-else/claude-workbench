@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Check, Command, RefreshCw, Server, Settings, Terminal, Trash2, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
@@ -202,75 +202,13 @@ function App() {
     return itemToDelete;
   };
 
-  const starlights = useMemo(() => {
-    return [...Array(30)].map((_, i) => {
-      const size = Math.random() < 0.7 ? 2 + Math.random() * 3 : 4 + Math.random() * 4;
-      const isLarge = size > 5;
-      return {
-        id: i,
-        size,
-        isLarge,
-        top: Math.random() * 100,
-        left: Math.random() * 100,
-        duration1: 2 + Math.random() * 3,
-        duration2: 2 + Math.random() * 3,
-        delay1: Math.random() * 5,
-        delay2: Math.random() * 5,
-      };
-    });
-  }, []);
-
-  const particles = useMemo(() => {
-    return [...Array(20)].map((_, i) => ({
-      id: i,
-      left: Math.random() * 100,
-      top: Math.random() * 100,
-      delay: Math.random() * 6,
-      duration: 6 + Math.random() * 4,
-    }));
-  }, []);
 
   return (
     <div className="min-h-screen relative overflow-hidden">
-      <div className="fixed inset-0 grid-bg opacity-30 pointer-events-none"></div>
-      <div className="fixed inset-0 scan-lines opacity-20 pointer-events-none"></div>
-
-      <div className="starlights pointer-events-none">
-        {starlights.map((star) => (
-          <div
-            key={star.id}
-            className={`starlight ${star.isLarge ? 'large' : ''}`}
-            style={{
-              top: `${star.top}%`,
-              left: `${star.left}%`,
-              width: `${star.size}px`,
-              height: `${star.size}px`,
-              animationDuration: `${star.duration1}s, ${star.duration2}s`,
-              animationDelay: `${star.delay1}s, ${star.delay2}s`,
-            }}
-          />
-        ))}
-      </div>
-
-      <div className="particles pointer-events-none">
-        {particles.map((particle) => (
-          <div
-            key={particle.id}
-            className="particle"
-            style={{
-              left: `${particle.left}%`,
-              top: `${particle.top}%`,
-              animationDelay: `${particle.delay}s`,
-              animationDuration: `${particle.duration}s`,
-            }}
-          />
-        ))}
-      </div>
-
       {notification.show && (
         <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] animate-slide-down">
           <div
-            className={`glass px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-3 neon-glow ${
+            className={`glass px-8 py-4 rounded-2xl shadow-2xl flex items-center space-x-3  ${
               notification.type === 'success' ? 'border-l-4 border-green-500' : 'border-l-4 border-red-500'
             }`}
           >
@@ -287,16 +225,16 @@ function App() {
       )}
 
       <div className="flex h-screen">
-        <nav className="w-72 glass-dark border-r border-purple-500/20 flex flex-col p-6 relative z-10 titlebar-no-drag">
+        <nav className="w-72 glass-dark border-r border-zinc-800 flex flex-col p-6 relative z-10 titlebar-no-drag">
           {electron.isElectron && <div className="titlebar-drag absolute top-0 left-0 right-0 h-20 z-50 pointer-events-auto" />}
 
-          <div className="mb-12 mt-8 animate-float relative z-10 titlebar-no-drag">
+          <div className="mb-12 mt-8  relative z-10 titlebar-no-drag">
             <div className="flex items-center space-x-3">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-purple-500 to-blue-500 flex items-center justify-center animate-glow-pulse">
+              <div className="w-12 h-12 rounded-xl bg-white text-black flex items-center justify-center ">
                 <Zap className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                <h1 className="text-2xl font-bold  text-white">
                   Claude Code
                 </h1>
                 <p className="text-xs text-gray-400">Workbench</p>
@@ -307,15 +245,15 @@ function App() {
           <div className="space-y-2 flex-1">
             <button
               onClick={() => setActiveTab('mcp')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
                 activeTab === 'mcp'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
               }`}
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'mcp' ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring' : 'bg-gray-800 group-hover:bg-purple-900/30'
+                  activeTab === 'mcp' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Server className="w-5 h-5 text-white" />
@@ -326,15 +264,15 @@ function App() {
 
             <button
               onClick={() => setActiveTab('env')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
                 activeTab === 'env'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
               }`}
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'env' ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring' : 'bg-gray-800 group-hover:bg-purple-900/30'
+                  activeTab === 'env' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Terminal className="w-5 h-5 text-white" />
@@ -345,15 +283,15 @@ function App() {
 
             <button
               onClick={() => setActiveTab('commands')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
                 activeTab === 'commands'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
               }`}
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'commands' ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring' : 'bg-gray-800 group-hover:bg-purple-900/30'
+                  activeTab === 'commands' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Command className="w-5 h-5 text-white" />
@@ -364,15 +302,15 @@ function App() {
 
             <button
               onClick={() => setActiveTab('skills')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group ripple-effect ${
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
                 activeTab === 'skills'
-                  ? 'glass border border-purple-500/50 shadow-lg shadow-purple-500/20 gradient-border'
-                  : 'hover:glass border border-transparent hover:border-purple-500/30'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
               }`}
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'skills' ? 'bg-gradient-to-br from-purple-500 to-blue-500 pulse-ring' : 'bg-gray-800 group-hover:bg-purple-900/30'
+                  activeTab === 'skills' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Zap className="w-5 h-5 text-white" />
@@ -385,10 +323,10 @@ function App() {
           <button
             onClick={() => loadConfig(true)}
             disabled={isRefreshingConfig}
-            className="mt-auto w-full glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 ripple-effect group tooltip disabled:opacity-50 disabled:cursor-not-allowed"
+            className="mt-auto w-full glass hover:border-zinc-600 border border-zinc-800 px-4 py-3 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20  group tooltip disabled:opacity-50 disabled:cursor-not-allowed"
             data-tooltip={isRefreshingConfig ? 'Refreshing...' : 'Reload configuration from disk'}
           >
-            <RefreshCw className={`w-4 h-4 text-purple-400 transition-transform duration-500 ${isRefreshingConfig ? 'animate-spin' : 'group-hover:rotate-180'}`} />
+            <RefreshCw className={`w-4 h-4 text-zinc-100 transition-transform duration-500 ${isRefreshingConfig ? 'animate-spin' : 'group-hover:rotate-180'}`} />
             <span className="text-sm text-gray-300">{isRefreshingConfig ? 'Refreshing...' : 'Refresh Config'}</span>
           </button>
 
@@ -397,10 +335,10 @@ function App() {
           </div>
 
           {electron.isElectron && (
-            <div className="mt-4 p-3 glass border border-purple-500/20 rounded-lg">
+            <div className="mt-4 p-3 glass border border-zinc-800 rounded-lg">
               <label className="flex items-center justify-between cursor-pointer">
                 <div className="flex items-center space-x-2">
-                  <Settings className="w-4 h-4 text-purple-400" />
+                  <Settings className="w-4 h-4 text-zinc-100" />
                   <span className="text-sm text-gray-300">Launch at Startup</span>
                 </div>
                 <input
@@ -414,14 +352,14 @@ function App() {
                       showNotification('Failed to update auto-launch setting', 'error');
                     }
                   }}
-                  className="rounded bg-gray-800 border-purple-500/20 text-purple-500 focus:ring-purple-500"
+                  className="rounded bg-zinc-900 border-zinc-800 text-purple-500 focus:ring-purple-500"
                 />
               </label>
               <p className="text-xs text-gray-500 mt-1 ml-6">Start Claude Workbench when you log in</p>
             </div>
           )}
 
-          {electron.isElectron && <div className="mt-4 text-xs text-center text-purple-400/60">Desktop App v1.0</div>}
+          {electron.isElectron && <div className="mt-4 text-xs text-center text-zinc-100/60">Desktop App v1.0</div>}
         </nav>
 
         <div className="flex-1 overflow-y-auto relative z-10 titlebar-no-drag">
@@ -471,12 +409,12 @@ function App() {
 
         {showDeleteConfirm && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="glass-dark border border-red-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-red-500/20 neon-glow">
+            <div className="glass-dark border border-red-800/50 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-black/20 ">
               <div className="text-center">
-                <div className="w-16 h-16 bg-red-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
+                <div className="w-16 h-16 bg-red-900/30 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
                   <Trash2 className="w-8 h-8 text-red-400" />
                 </div>
-                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-400 mb-2">
+                <h3 className="text-2xl font-bold  text-white mb-2">
                   Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : 'Skill'}?
                 </h3>
                 <p className="text-gray-400 mb-6">
@@ -489,13 +427,13 @@ function App() {
                       setShowDeleteConfirm(false);
                       setItemToDelete(null);
                     }}
-                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-all "
                   >
                     Cancel
                   </button>
                   <button
                     onClick={confirmDelete}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-red-500 to-pink-500 text-white font-medium hover:shadow-lg hover:shadow-red-500/50 transition-all ripple-effect pulse-ring"
+                    className="px-6 py-3 rounded-xl bg-red-900 text-red-100 hover:bg-red-800 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all  pulse-ring"
                   >
                     Delete
                   </button>
@@ -507,12 +445,12 @@ function App() {
 
         {showRefreshModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
+            <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-black/20 ">
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-purple-500/20 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
-                  <RefreshCw className="w-8 h-8 text-purple-400 animate-spin" />
+                <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
+                  <RefreshCw className="w-8 h-8 text-zinc-100 animate-spin" />
                 </div>
-                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                <h3 className="text-2xl font-bold  text-white mb-2">
                   Refreshing Configuration
                 </h3>
                 <p className="text-gray-400 text-sm">Loading configuration from disk...</p>
@@ -552,7 +490,7 @@ function App() {
                             : refreshProgress[key] === 'error'
                               ? 'text-red-400'
                               : refreshProgress[key] === 'loading'
-                                ? 'text-purple-400'
+                                ? 'text-zinc-100'
                                 : 'text-gray-400'
                         }`}
                       >
@@ -564,9 +502,9 @@ function App() {
               </div>
 
               <div className="mt-6">
-                <div className="h-2 bg-gray-800 rounded-full overflow-hidden">
+                <div className="h-2 bg-zinc-900 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-purple-500 to-blue-500 transition-all duration-500 ease-out"
+                    className="h-full bg-white text-black hover:bg-zinc-200 transition-all duration-500 ease-out"
                     style={{
                       width: `${
                         ((refreshProgress.mcpConfig === 'done' || refreshProgress.mcpConfig === 'error' ? 1 : 0) +

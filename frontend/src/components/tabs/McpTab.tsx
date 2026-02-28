@@ -247,7 +247,7 @@ export function McpTab({
           <div>
             <div className="flex items-center justify-between mb-8 titlebar-no-drag">
               <div>
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                <h2 className="text-3xl font-bold  text-white mb-2">
                   MCP Servers
                 </h2>
                 <p className="text-gray-400">Manage your Model Context Protocol servers</p>
@@ -255,16 +255,16 @@ export function McpTab({
               <div className="flex space-x-4 titlebar-no-drag">
                 <button
                   onClick={() => setShowAddServerModal(true)}
-                  className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
                 >
-                  <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                  <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
                   <span className="text-white font-medium">Add Server</span>
                 </button>
                 <button
                   onClick={() => setShowImportJsonModal(true)}
-                  className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group  titlebar-no-drag"
                 >
-                  <Code className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
+                  <Code className="w-5 h-5 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
                   <span className="text-white font-medium">Import JSON</span>
                 </button>
               </div>
@@ -280,7 +280,7 @@ export function McpTab({
                   <div
                     key={name}
                     onClick={() => openServerDetail(name)}
-                    className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col card-hover cursor-pointer">
+                    className="glass border border-zinc-800 rounded-2xl p-6 group  relative h-[320px] flex flex-col card-hover cursor-pointer">
                     <div className="mb-4 flex items-center space-x-2">
                       <div
                         className={`w-2 h-2 rounded-full ${
@@ -316,8 +316,8 @@ export function McpTab({
                     </div>
 
                     <div className="flex items-start mb-4">
-                      <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
-                        <Server className="w-6 h-6 text-purple-400" />
+                      <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
+                        <Server className="w-6 h-6 text-zinc-100" />
                       </div>
                     </div>
 
@@ -332,14 +332,14 @@ export function McpTab({
                       </div>
                       {server.args && server.args.length > 0 && (
                         <div className="flex items-center space-x-1 ml-6">
-                          <div className="px-2 py-1 bg-purple-500/10 rounded text-xs text-purple-400">
+                          <div className="px-2 py-1 bg-zinc-800/50 rounded text-xs text-zinc-100">
                             {server.args.length} arg{server.args.length > 1 ? 's' : ''}
                           </div>
                         </div>
                       )}
                     </div>
 
-                    <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                    <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
                       {isRunning ? (
                         <>
                           <button
@@ -348,11 +348,11 @@ export function McpTab({
                               setLogsServerName(name);
                               setShowLogsModal(true);
                             }}
-                            className="flex-1 glass hover:border-blue-500/50 border border-blue-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs"
+                            className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  tooltip text-xs"
                             data-tooltip="View logs"
                           >
-                            <FileText className="w-4 h-4 text-blue-400" />
-                            <span className="text-blue-400 hidden sm:inline">Logs</span>
+                            <FileText className="w-4 h-4 text-zinc-300" />
+                            <span className="text-zinc-300 hidden sm:inline">Logs</span>
                           </button>
                           <button
                             onClick={(e) => {
@@ -360,7 +360,7 @@ export function McpTab({
                               restartServer(name);
                             }}
                             disabled={isLoading}
-                            className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
+                            className="flex-1 glass hover:border-yellow-700/50 border border-yellow-900/50 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  tooltip text-xs disabled:opacity-50"
                             data-tooltip="Restart server"
                           >
                             <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
@@ -372,7 +372,7 @@ export function McpTab({
                               stopServer(name);
                             }}
                             disabled={isLoading}
-                            className="flex-1 glass hover:border-red-500/50 border border-red-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect tooltip text-xs disabled:opacity-50"
+                            className="flex-1 glass hover:border-red-700/50 border border-red-900/50 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  tooltip text-xs disabled:opacity-50"
                             data-tooltip="Stop server"
                           >
                             <Square className="w-4 h-4 text-red-400" />
@@ -385,10 +385,10 @@ export function McpTab({
                               navigator.clipboard.writeText(serverJson);
                               showNotification('MCP configuration copied to clipboard!');
                             }}
-                            className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
+                            className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
                             data-tooltip="Copy JSON"
                           >
-                            <Copy className="w-4 h-4 text-cyan-400" />
+                            <Copy className="w-4 h-4 text-zinc-300" />
                           </button>
                         </>
                       ) : (
@@ -399,7 +399,7 @@ export function McpTab({
                               startServer(name);
                             }}
                             disabled={isLoading}
-                            className="flex-1 bg-gradient-to-r from-green-500/20 to-emerald-500/20 hover:from-green-500/30 hover:to-emerald-500/30 border border-green-500/20 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all ripple-effect text-xs"
+                            className="flex-1 bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-800 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  text-xs"
                           >
                             <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
                             <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
@@ -411,27 +411,27 @@ export function McpTab({
                               navigator.clipboard.writeText(serverJson);
                               showNotification('MCP configuration copied to clipboard!');
                             }}
-                            className="p-2 glass hover:border-cyan-500/50 border border-cyan-500/20 rounded-xl transition-all tooltip"
+                            className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
                             data-tooltip="Copy JSON"
                           >
-                            <Copy className="w-4 h-4 text-cyan-400" />
+                            <Copy className="w-4 h-4 text-zinc-300" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               openServerDetail(name);
                             }}
-                            className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all tooltip"
+                            className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
                             data-tooltip="Edit server"
                           >
-                            <Edit2 className="w-4 h-4 text-purple-400" />
+                            <Edit2 className="w-4 h-4 text-zinc-100" />
                           </button>
                           <button
                             onClick={(e) => {
                               e.stopPropagation();
                               requestDelete(name);
                             }}
-                            className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                            className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
                             data-tooltip="Delete server"
                           >
                             <Trash2 className="w-4 h-4 text-red-400" />
@@ -444,14 +444,14 @@ export function McpTab({
               })}
 
               {Object.keys(claudeConfig.mcpServers || {}).length === 0 && (
-                <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
+                <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
                   <Server className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                   <p className="text-gray-400 mb-4">No MCP servers configured yet</p>
                   <button
                     onClick={() => setShowAddServerModal(true)}
-                    className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                    className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
                   >
-                    <Plus className="w-5 h-5 text-purple-400" />
+                    <Plus className="w-5 h-5 text-zinc-100" />
                     <span className="text-white font-medium">Add Your First Server</span>
                   </button>
                 </div>
@@ -461,18 +461,18 @@ export function McpTab({
         ) : (
           <div>
             <div className="flex items-center space-x-4 mb-8 relative z-[60]">
-              <button onClick={closeServerDetail} className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors titlebar-no-drag">
-                <ArrowLeft className="w-6 h-6 text-purple-400" />
+              <button onClick={closeServerDetail} className="p-2 rounded-lg hover:bg-zinc-800 transition-colors titlebar-no-drag">
+                <ArrowLeft className="w-6 h-6 text-zinc-100" />
               </button>
               <div className="flex-1">
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                <h2 className="text-3xl font-bold  text-white">
                   {selectedServer}
                 </h2>
                 <p className="text-gray-400">Edit server configuration</p>
               </div>
             </div>
 
-            <div className="glass border border-purple-500/20 rounded-2xl p-8">
+            <div className="glass border border-zinc-800 rounded-2xl p-8">
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Command</label>
@@ -480,7 +480,7 @@ export function McpTab({
                     type="text"
                     value={editingServer?.command || ''}
                     onChange={(e) => setEditingServer((prev) => (prev ? { ...prev, command: e.target.value } : null))}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-colors"
                     placeholder="e.g., npx"
                   />
                 </div>
@@ -491,7 +491,7 @@ export function McpTab({
                     type="text"
                     value={editingServerArgsInput}
                     onChange={(e) => setEditingServerArgsInput(e.target.value)}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-colors"
                     placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
                   />
                 </div>
@@ -501,7 +501,7 @@ export function McpTab({
                   <textarea
                     value={editingServerEnvInput}
                     onChange={(e) => setEditingServerEnvInput(e.target.value)}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-colors"
                     rows={6}
                     placeholder={'{\n  "KEY": "value"\n}'}
                   />
@@ -509,18 +509,18 @@ export function McpTab({
                 </div>
 
                 {selectedServer && mcpStatuses[selectedServer]?.running && (
-                  <div className="mt-6 pt-6 border-t border-purple-500/20">
+                  <div className="mt-6 pt-6 border-t border-zinc-800">
                     <ServerLogs serverName={selectedServer} />
                   </div>
                 )}
 
-                <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
-                  <button onClick={closeServerDetail} className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors">
+                <div className="flex justify-end space-x-4 pt-6 border-t border-zinc-800">
+                  <button onClick={closeServerDetail} className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors">
                     Cancel
                   </button>
                   <button
                     onClick={saveServerDetail}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                    className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
                   >
                     <Save className="w-4 h-4" />
                     <span>Save Changes</span>
@@ -534,8 +534,8 @@ export function McpTab({
 
       {showAddServerModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Server</h3>
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-black/20 ">
+            <h3 className="text-2xl font-bold  text-white mb-6">Add New Server</h3>
 
             <div className="space-y-4">
               <div>
@@ -544,7 +544,7 @@ export function McpTab({
                   type="text"
                   value={newServerForm.name}
                   onChange={(e) => setNewServerForm({ ...newServerForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   placeholder="e.g., mcp-filesystem"
                 />
               </div>
@@ -555,7 +555,7 @@ export function McpTab({
                   type="text"
                   value={newServerForm.command}
                   onChange={(e) => setNewServerForm({ ...newServerForm, command: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   placeholder="e.g., npx"
                 />
               </div>
@@ -566,7 +566,7 @@ export function McpTab({
                   type="text"
                   value={newServerForm.args}
                   onChange={(e) => setNewServerForm({ ...newServerForm, args: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   placeholder="e.g., -y, @modelcontextprotocol/server-filesystem"
                 />
               </div>
@@ -576,7 +576,7 @@ export function McpTab({
                 <textarea
                   value={newServerForm.env}
                   onChange={(e) => setNewServerForm({ ...newServerForm, env: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   rows={4}
                   placeholder='{"KEY": "value"}'
                 />
@@ -589,13 +589,13 @@ export function McpTab({
                   setShowAddServerModal(false);
                   setNewServerForm({ name: '', command: '', args: '', env: '' });
                 }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-all "
               >
                 Cancel
               </button>
               <button
                 onClick={addNewServer}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all  pulse-ring "
               >
                 Add Server
               </button>
@@ -606,14 +606,14 @@ export function McpTab({
 
       {showLogsModal && logsServerName && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-4xl w-full h-[600px] animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow flex flex-col">
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-4xl w-full h-[600px] animate-slide-up shadow-2xl shadow-black/20  flex flex-col">
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center space-x-3">
-                <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center pulse-ring">
-                  <FileText className="w-6 h-6 text-blue-400" />
+                <div className="w-12 h-12 bg-zinc-800 rounded-full flex items-center justify-center pulse-ring">
+                  <FileText className="w-6 h-6 text-zinc-300" />
                 </div>
                 <div>
-                  <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400">Server Logs</h3>
+                  <h3 className="text-2xl font-bold  text-white">Server Logs</h3>
                   <p className="text-gray-400 text-sm">{logsServerName}</p>
                 </div>
               </div>
@@ -622,7 +622,7 @@ export function McpTab({
                   setShowLogsModal(false);
                   setLogsServerName(null);
                 }}
-                className="p-2 rounded-lg hover:bg-gray-800 transition-colors"
+                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors"
               >
                 <X className="w-6 h-6 text-gray-400" />
               </button>
@@ -632,13 +632,13 @@ export function McpTab({
               <ServerLogs serverName={logsServerName} />
             </div>
 
-            <div className="flex justify-end pt-4 border-t border-blue-500/20 mt-4">
+            <div className="flex justify-end pt-4 border-t border-zinc-800 mt-4">
               <button
                 onClick={() => {
                   setShowLogsModal(false);
                   setLogsServerName(null);
                 }}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all "
               >
                 Close
               </button>
@@ -649,8 +649,8 @@ export function McpTab({
 
       {showImportJsonModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-cyan-400 mb-6">Import MCP Servers from JSON</h3>
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-black/20 ">
+            <h3 className="text-2xl font-bold  text-white mb-6">Import MCP Servers from JSON</h3>
 
             <div className="space-y-4">
               <div>
@@ -658,7 +658,7 @@ export function McpTab({
                 <textarea
                   value={importJsonContent}
                   onChange={(e) => setImportJsonContent(e.target.value)}
-                  className="w-full glass border border-blue-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-blue-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   rows={10}
                   placeholder={`{
   "server-name-1": {
@@ -683,13 +683,13 @@ export function McpTab({
                   setShowImportJsonModal(false);
                   setImportJsonContent('');
                 }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-all "
               >
                 Cancel
               </button>
               <button
                 onClick={importMcpConfigFromJson}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-blue-500 to-cyan-500 text-white font-medium hover:shadow-lg hover:shadow-blue-500/50 transition-all ripple-effect neon-glow"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all  "
               >
                 Import
               </button>

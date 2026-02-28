@@ -69,18 +69,18 @@ function SortableProfileCard({ profile, isActive, onOpen, onActivate, onDeactiva
       {...attributes}
       {...listeners}
       onClick={() => onOpen(profile.id)}
-      className="glass border border-purple-500/20 rounded-2xl p-6 card-hover group gradient-border relative h-[320px] flex flex-col cursor-pointer"
+      className="glass border border-zinc-800 rounded-2xl p-6 card-hover group  relative h-[320px] flex flex-col cursor-pointer"
     >
       {isActive && (
-        <div className="absolute top-4 right-4 flex items-center space-x-2 bg-green-500/20 px-3 py-1 rounded-full border border-green-500/50">
+        <div className="absolute top-4 right-4 flex items-center space-x-2 bg-green-900/30 px-3 py-1 rounded-full border border-zinc-600">
           <CheckCircle2 className="w-4 h-4 text-green-400" />
           <span className="text-xs text-green-400 font-medium">Active</span>
         </div>
       )}
 
       <div className="flex items-start mb-4">
-        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
-          <Settings className="w-6 h-6 text-purple-400" />
+        <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
+          <Settings className="w-6 h-6 text-zinc-100" />
         </div>
       </div>
 
@@ -93,36 +93,36 @@ function SortableProfileCard({ profile, isActive, onOpen, onActivate, onDeactiva
         </div>
         {profile.apiKey && (
           <div className="flex items-center space-x-1 ml-6">
-            <div className="px-2 py-1 bg-green-500/10 rounded text-xs text-green-400">API Key Configured</div>
+            <div className="px-2 py-1 bg-green-900/20 rounded text-xs text-green-400">API Key Configured</div>
           </div>
         )}
         {profile.authToken && (
           <div className="flex items-center space-x-1 ml-6">
-            <div className="px-2 py-1 bg-blue-500/10 rounded text-xs text-blue-400">Auth Token Configured</div>
+            <div className="px-2 py-1 bg-zinc-800/50 rounded text-xs text-zinc-300">Auth Token Configured</div>
           </div>
         )}
         <div className="text-xs text-gray-500 mt-2">Created: {new Date(profile.createdAt).toLocaleDateString()}</div>
       </div>
 
-      <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+      <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
         {!isActive ? (
           <>
             <button
               onClick={(e) => { e.stopPropagation(); onActivate(profile.id); }}
-              className="flex-1 glass hover:border-green-500/50 border border-green-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-green-500/20 bg-gradient-to-r from-green-500/10 to-emerald-500/10"
+              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 bg-zinc-800/50"
             >
               <Play className="w-4 h-4 text-green-400" />
               <span className="text-xs text-white font-medium">Activate</span>
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(profile.id); }}
-              className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
+              className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all"
             >
-              <Edit2 className="w-4 h-4 text-purple-400" />
+              <Edit2 className="w-4 h-4 text-zinc-100" />
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(profile.id); }}
-              className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+              className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
               data-tooltip="Delete profile"
             >
               <Trash2 className="w-4 h-4 text-red-400" />
@@ -132,16 +132,16 @@ function SortableProfileCard({ profile, isActive, onOpen, onActivate, onDeactiva
           <>
             <button
               onClick={(e) => { e.stopPropagation(); onDeactivate(profile.id); }}
-              className="flex-1 glass hover:border-yellow-500/50 border border-yellow-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-yellow-500/20 bg-gradient-to-r from-yellow-500/10 to-orange-500/10"
+              className="flex-1 glass hover:border-yellow-700/50 border border-yellow-900/50 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 bg-zinc-800/50"
             >
               <Square className="w-4 h-4 text-yellow-400" />
               <span className="text-xs text-white font-medium">Deactivate</span>
             </button>
             <button
               onClick={(e) => { e.stopPropagation(); onEdit(profile.id); }}
-              className="p-2 glass hover:border-purple-500/50 border border-purple-500/20 rounded-xl transition-all"
+              className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all"
             >
-              <Edit2 className="w-4 h-4 text-purple-400" />
+              <Edit2 className="w-4 h-4 text-zinc-100" />
             </button>
           </>
         )}
@@ -297,7 +297,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
           <div>
             <div className="flex items-center justify-between mb-8 titlebar-no-drag">
               <div>
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                <h2 className="text-3xl font-bold  text-white mb-2">
                   Environment Profiles
                 </h2>
                 <p className="text-gray-400">Manage your API credential profiles</p>
@@ -305,23 +305,23 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
               <div className="flex items-center space-x-3 titlebar-no-drag">
                 <button
                   onClick={viewConfigFile}
-                  className="glass hover:border-blue-500/50 border border-blue-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
                 >
-                  <FileText className="w-5 h-5 text-blue-400 group-hover:scale-110 transition-transform duration-300" />
+                  <FileText className="w-5 h-5 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
                   <span className="text-white font-medium">View Config</span>
                 </button>
                 <button
                   onClick={viewClaudeSettings}
-                  className="glass hover:border-green-500/50 border border-green-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-green-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
                 >
                   <Settings className="w-5 h-5 text-green-400 group-hover:rotate-45 transition-transform duration-300" />
                   <span className="text-white font-medium">Claude Settings</span>
                 </button>
                 <button
                   onClick={() => setShowAddProfileModal(true)}
-                  className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
                 >
-                  <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                  <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
                   <span className="text-white font-medium">Add Profile</span>
                 </button>
               </div>
@@ -349,10 +349,10 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   const profile = localProfiles.find((p) => p.id === activeId);
                   if (!profile) return null;
                   return (
-                    <div className="glass border border-purple-500/40 rounded-2xl p-6 shadow-2xl shadow-purple-500/30 h-[320px] flex flex-col opacity-95 rotate-1 scale-105" style={{ cursor: 'grabbing' }}>
+                    <div className="glass border border-zinc-700 rounded-2xl p-6 shadow-2xl shadow-black/30 h-[320px] flex flex-col opacity-95 rotate-1 scale-105" style={{ cursor: 'grabbing' }}>
                       <div className="flex items-start mb-4">
-                        <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/30 to-blue-500/30 neon-glow">
-                          <Settings className="w-6 h-6 text-purple-400" />
+                        <div className="p-3 rounded-xl bg-zinc-800/80 ">
+                          <Settings className="w-6 h-6 text-zinc-100" />
                         </div>
                       </div>
                       <h3 className="text-xl font-bold text-white mb-2">{profile.name}</h3>
@@ -374,9 +374,9 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                 <p className="text-gray-400 mb-4">No environment profiles configured yet</p>
                 <button
                   onClick={() => setShowAddProfileModal(true)}
-                  className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
                 >
-                  <Plus className="w-5 h-5 text-purple-400" />
+                  <Plus className="w-5 h-5 text-zinc-100" />
                   <span className="text-white font-medium">Add Your First Profile</span>
                 </button>
               </div>
@@ -390,19 +390,19 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   setEnvViewMode('list');
                   setEditingProfile(null);
                 }}
-                className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors titlebar-no-drag"
+                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors titlebar-no-drag"
               >
-                <ArrowLeft className="w-6 h-6 text-purple-400" />
+                <ArrowLeft className="w-6 h-6 text-zinc-100" />
               </button>
               <div>
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">
+                <h2 className="text-3xl font-bold  text-white">
                   {editingProfile?.name}
                 </h2>
                 <p className="text-gray-400">Edit profile configuration</p>
               </div>
             </div>
 
-            <div className="glass border border-purple-500/20 rounded-2xl p-8">
+            <div className="glass border border-zinc-800 rounded-2xl p-8">
               <div className="space-y-6">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Profile Name</label>
@@ -410,7 +410,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type="text"
                     value={editingProfile?.name || ''}
                     onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, name: e.target.value } : null))}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-colors"
                     placeholder="e.g., Production, Development"
                   />
                 </div>
@@ -421,7 +421,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type="text"
                     value={editingProfile?.baseUrl || ''}
                     onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, baseUrl: e.target.value } : null))}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-colors"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-colors"
                     placeholder="https://api.anthropic.com"
                   />
                 </div>
@@ -433,12 +433,12 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       type={showApiKey ? 'text' : 'password'}
                       value={editingProfile?.apiKey || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, apiKey: e.target.value } : null))}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
+                      className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 pr-12 text-white focus:border-zinc-600 focus:outline-none transition-colors font-mono"
                       placeholder="sk-ant-..."
                     />
                     <button
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                     >
                       {showApiKey ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                     </button>
@@ -452,12 +452,12 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       type={showApiKey ? 'text' : 'password'}
                       value={editingProfile?.authToken || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, authToken: e.target.value } : null))}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-colors font-mono"
+                      className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 pr-12 text-white focus:border-zinc-600 focus:outline-none transition-colors font-mono"
                       placeholder="Optional auth token..."
                     />
                     <button
                       onClick={() => setShowApiKey(!showApiKey)}
-                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                      className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                     >
                       {showApiKey ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                     </button>
@@ -471,7 +471,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       type="text"
                       value={editingProfile?.haikuModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, haikuModel: e.target.value } : null))}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                      className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
                       placeholder="claude-3-5-haiku-..."
                     />
                   </div>
@@ -481,7 +481,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       type="text"
                       value={editingProfile?.opusModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, opusModel: e.target.value } : null))}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                      className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
                       placeholder="claude-3-opus-..."
                     />
                   </div>
@@ -491,7 +491,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       type="text"
                       value={editingProfile?.sonnetModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, sonnetModel: e.target.value } : null))}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                      className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
                       placeholder="claude-3-5-sonnet-..."
                     />
                   </div>
@@ -501,25 +501,25 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       type="text"
                       value={editingProfile?.smallFastModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, smallFastModel: e.target.value } : null))}
-                      className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-colors"
+                      className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
                       placeholder="claude-3-5-haiku-..."
                     />
                   </div>
                 </div>
 
-                <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                <div className="flex justify-end space-x-4 pt-6 border-t border-zinc-800">
                   <button
                     onClick={() => {
                       setEnvViewMode('list');
                       setEditingProfile(null);
                     }}
-                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={saveProfileDetail}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                    className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
                   >
                     <Save className="w-4 h-4" />
                     <span>Save Changes</span>
@@ -533,10 +533,10 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
 
       {showConfigFileModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-blue-500/30 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-blue-500/20 neon-glow">
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-black/20 ">
             <div className="flex items-center justify-between mb-6 flex-shrink-0">
               <div>
-                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-400 mb-2">
+                <h3 className="text-2xl font-bold  text-white mb-2">
                   Shell Configuration File
                 </h3>
                 <p className="text-gray-400 text-sm">{configFilePath || 'Loading...'}</p>
@@ -546,20 +546,20 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   navigator.clipboard.writeText(configFileContent);
                   showNotification('Configuration copied to clipboard!');
                 }}
-                className="glass hover:border-blue-500/50 border border-blue-500/20 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-blue-500/20 group"
+                className="glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group"
                 disabled={isLoadingConfigFile}
               >
-                <Copy className="w-4 h-4 text-blue-400" />
+                <Copy className="w-4 h-4 text-zinc-300" />
                 <span className="text-white text-sm">Copy</span>
               </button>
             </div>
 
             <div className="flex-1 min-h-0 mb-6">
-              <div className="glass border border-blue-500/20 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
+              <div className="glass border border-zinc-800 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
                 {isLoadingConfigFile ? (
                   <div className="flex items-center justify-center h-full min-h-[300px]">
                     <div className="flex flex-col items-center space-y-4">
-                      <div className="w-12 h-12 border-4 border-blue-500/20 border-t-blue-500 rounded-full animate-spin"></div>
+                      <div className="w-12 h-12 border-4 border-zinc-800 border-t-blue-500 rounded-full animate-spin"></div>
                       <p className="text-gray-400">Loading configuration file...</p>
                     </div>
                   </div>
@@ -572,7 +572,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
             <div className="flex justify-end space-x-3 flex-shrink-0 mt-auto">
               <button
                 onClick={() => setShowConfigFileModal(false)}
-                className="glass hover:border-gray-500/50 border border-gray-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-gray-500/20 ripple-effect"
+                className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 "
               >
                 <X className="w-5 h-5 text-gray-400" />
                 <span className="text-white font-medium">Close</span>
@@ -584,10 +584,10 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
 
       {showSettingsModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-green-500/30 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-green-500/20 neon-glow">
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-5xl w-full h-[90vh] flex flex-col animate-slide-up shadow-2xl shadow-black/20 ">
             <div className="flex items-center justify-between mb-6 flex-shrink-0">
               <div>
-                <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-green-400 to-blue-400 mb-2">
+                <h3 className="text-2xl font-bold  text-white mb-2">
                   Claude Settings
                 </h3>
                 <p className="text-gray-400 text-sm">{settingsFilePath || 'Loading...'}</p>
@@ -597,7 +597,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   navigator.clipboard.writeText(settingsContent);
                   showNotification('Settings copied to clipboard!');
                 }}
-                className="glass hover:border-green-500/50 border border-green-500/20 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-green-500/20 group"
+                className="glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group"
                 disabled={isLoadingSettings}
               >
                 <Copy className="w-4 h-4 text-green-400" />
@@ -606,11 +606,11 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
             </div>
 
             <div className="flex-1 min-h-0 mb-6">
-              <div className="glass border border-green-500/20 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
+              <div className="glass border border-zinc-800 rounded-xl p-6 h-full overflow-y-auto font-mono text-sm" style={{ maxHeight: '100%' }}>
                 {isLoadingSettings ? (
                   <div className="flex items-center justify-center h-full min-h-[300px]">
                     <div className="flex flex-col items-center space-y-4">
-                      <div className="w-12 h-12 border-4 border-green-500/20 border-t-green-500 rounded-full animate-spin"></div>
+                      <div className="w-12 h-12 border-4 border-zinc-800 border-t-green-500 rounded-full animate-spin"></div>
                       <p className="text-gray-400">Loading settings file...</p>
                     </div>
                   </div>
@@ -623,7 +623,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
             <div className="flex justify-end space-x-3 flex-shrink-0 mt-auto">
               <button
                 onClick={() => setShowSettingsModal(false)}
-                className="glass hover:border-gray-500/50 border border-gray-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-gray-500/20 ripple-effect"
+                className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 "
               >
                 <X className="w-5 h-5 text-gray-400" />
                 <span className="text-white font-medium">Close</span>
@@ -635,8 +635,8 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
 
       {showAddProfileModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Environment Profile</h3>
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-black/20 ">
+            <h3 className="text-2xl font-bold  text-white mb-6">Add New Environment Profile</h3>
 
             <div className="space-y-4">
               <div>
@@ -645,7 +645,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   type="text"
                   value={newProfileForm.name}
                   onChange={(e) => setNewProfileForm({ ...newProfileForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   placeholder="e.g., Production, Development, Testing"
                 />
               </div>
@@ -656,7 +656,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   type="text"
                   value={newProfileForm.baseUrl}
                   onChange={(e) => setNewProfileForm({ ...newProfileForm, baseUrl: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   placeholder="https://api.anthropic.com"
                 />
               </div>
@@ -668,12 +668,12 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type={showApiKey ? 'text' : 'password'}
                     value={newProfileForm.apiKey}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, apiKey: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 pr-12 text-white focus:border-zinc-600 focus:outline-none transition-all font-mono input-focus"
                     placeholder="sk-ant-..."
                   />
                   <button
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                   >
                     {showApiKey ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                   </button>
@@ -687,12 +687,12 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type={showApiKey ? 'text' : 'password'}
                     value={newProfileForm.authToken}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, authToken: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 pr-12 text-white focus:border-purple-500/50 focus:outline-none transition-all font-mono input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 pr-12 text-white focus:border-zinc-600 focus:outline-none transition-all font-mono input-focus"
                     placeholder="Optional auth token..."
                   />
                   <button
                     onClick={() => setShowApiKey(!showApiKey)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-purple-500/20 transition-colors"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                   >
                     {showApiKey ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                   </button>
@@ -706,7 +706,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type="text"
                     value={newProfileForm.haikuModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, haikuModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                     placeholder="claude-3-5-haiku-..."
                   />
                 </div>
@@ -716,7 +716,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type="text"
                     value={newProfileForm.opusModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, opusModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                     placeholder="claude-3-opus-..."
                   />
                 </div>
@@ -726,7 +726,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type="text"
                     value={newProfileForm.sonnetModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, sonnetModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                     placeholder="claude-3-5-sonnet-..."
                   />
                 </div>
@@ -736,7 +736,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     type="text"
                     value={newProfileForm.smallFastModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, smallFastModel: e.target.value })}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                     placeholder="claude-3-5-haiku-..."
                   />
                 </div>
@@ -749,13 +749,13 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   setShowAddProfileModal(false);
                   setNewProfileForm(emptyProfileForm);
                 }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-all "
               >
                 Cancel
               </button>
               <button
                 onClick={addNewProfile}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all  pulse-ring "
               >
                 Add Profile
               </button>

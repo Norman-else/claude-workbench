@@ -88,7 +88,7 @@ Show concrete examples of using this Skill.
           <div>
             <div className="flex items-center justify-between mb-8 titlebar-no-drag">
               <div>
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-2">
+                <h2 className="text-3xl font-bold  text-white mb-2">
                   Personal Skills
                 </h2>
                 <p className="text-gray-400">Create and manage your Agent Skills</p>
@@ -96,9 +96,9 @@ Show concrete examples of using this Skill.
               <div>
                 <button
                   onClick={() => setShowAddSkillModal(true)}
-                  className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-purple-500/20 group ripple-effect neon-glow titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
                 >
-                  <Plus className="w-5 h-5 text-purple-400 group-hover:rotate-90 transition-transform duration-300" />
+                  <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
                   <span className="text-white font-medium">Add Skill</span>
                 </button>
               </div>
@@ -108,17 +108,17 @@ Show concrete examples of using this Skill.
               {skills.map((skill) => (
                 <div
                   key={skill.name}
-                  className="glass border border-purple-500/20 rounded-2xl p-6 card-hover cursor-pointer group gradient-border relative h-[320px] flex flex-col"
+                  className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
                   onClick={() => openSkillDetail(skill)}
                 >
                   <div className="flex items-center space-x-2 mb-4">
                     <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                    <span className="text-xs font-medium text-blue-400">Skill</span>
+                    <span className="text-xs font-medium text-zinc-300">Skill</span>
                   </div>
 
                   <div className="flex items-start mb-4">
-                    <div className="p-3 rounded-xl bg-gradient-to-br from-purple-500/20 to-blue-500/20 group-hover:from-purple-500/30 group-hover:to-blue-500/30 transition-all neon-glow">
-                      <Zap className="w-6 h-6 text-purple-400" />
+                    <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
+                      <Zap className="w-6 h-6 text-zinc-100" />
                     </div>
                   </div>
 
@@ -128,15 +128,15 @@ Show concrete examples of using this Skill.
                     <p className="text-gray-400 line-clamp-3 text-xs">{skill.description || skill.content.substring(0, 100) + '...'}</p>
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-4 border-t border-purple-500/20 mt-auto">
+                  <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
                         openSkillDetail(skill);
                       }}
-                      className="flex-1 glass hover:border-purple-500/50 border border-purple-500/20 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                      className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
                     >
-                      <Edit2 className="w-4 h-4 text-purple-400" />
+                      <Edit2 className="w-4 h-4 text-zinc-100" />
                       <span className="text-xs text-white font-medium">Edit</span>
                     </button>
                     <button
@@ -144,7 +144,7 @@ Show concrete examples of using this Skill.
                         e.stopPropagation();
                         requestDelete(skill.name);
                       }}
-                      className="p-2 glass hover:border-red-500/50 border border-red-500/20 rounded-xl transition-all tooltip"
+                      className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
                       data-tooltip="Delete skill"
                     >
                       <Trash2 className="w-4 h-4 text-red-400" />
@@ -154,14 +154,14 @@ Show concrete examples of using this Skill.
               ))}
 
               {skills.length === 0 && (
-                <div className="col-span-full glass border border-purple-500/20 rounded-2xl p-12 text-center">
+                <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
                   <Zap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
                   <p className="text-gray-400 mb-4">No skills yet</p>
                   <button
                     onClick={() => setShowAddSkillModal(true)}
-                    className="glass hover:border-purple-500/50 border border-purple-500/20 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                    className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
                   >
-                    <Plus className="w-5 h-5 text-purple-400" />
+                    <Plus className="w-5 h-5 text-zinc-100" />
                     <span className="text-white font-medium">Create Your First Skill</span>
                   </button>
                 </div>
@@ -176,17 +176,17 @@ Show concrete examples of using this Skill.
                   setSkillViewMode('list');
                   setEditingSkill(null);
                 }}
-                className="p-2 rounded-lg hover:bg-purple-500/20 transition-colors titlebar-no-drag"
+                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors titlebar-no-drag"
               >
-                <ArrowLeft className="w-6 h-6 text-purple-400" />
+                <ArrowLeft className="w-6 h-6 text-zinc-100" />
               </button>
               <div>
-                <h2 className="text-3xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400">{editingSkill?.name}</h2>
+                <h2 className="text-3xl font-bold  text-white">{editingSkill?.name}</h2>
                 <p className="text-gray-400">Edit skill content (SKILL.md format)</p>
               </div>
             </div>
 
-            <div className="glass border border-purple-500/20 rounded-2xl p-8">
+            <div className="glass border border-zinc-800 rounded-2xl p-8">
               <div className="space-y-6">
                 <div>
                   <div className="flex items-center justify-between mb-2">
@@ -197,7 +197,7 @@ Show concrete examples of using this Skill.
                     type="text"
                     value={editingSkill?.name || ''}
                     disabled
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-gray-500 bg-gray-800/50 cursor-not-allowed"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-gray-500 bg-zinc-900/50 cursor-not-allowed"
                   />
                 </div>
 
@@ -206,7 +206,7 @@ Show concrete examples of using this Skill.
                   <textarea
                     value={editingSkill?.content || ''}
                     onChange={(e) => setEditingSkill((prev) => (prev ? { ...prev, content: e.target.value } : null))}
-                    className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                     rows={20}
                     placeholder="---
 name: skill-name
@@ -223,19 +223,19 @@ Show concrete examples of using this Skill."
                   />
                 </div>
 
-                <div className="flex justify-end space-x-4 pt-6 border-t border-purple-500/20">
+                <div className="flex justify-end space-x-4 pt-6 border-t border-zinc-800">
                   <button
                     onClick={() => {
                       setSkillViewMode('list');
                       setEditingSkill(null);
                     }}
-                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-colors"
+                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
                   >
                     Cancel
                   </button>
                   <button
                     onClick={saveSkillDetail}
-                    className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all flex items-center space-x-2"
+                    className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
                   >
                     <Save className="w-4 h-4" />
                     <span>Save Changes</span>
@@ -249,8 +249,8 @@ Show concrete examples of using this Skill."
 
       {showAddSkillModal && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-          <div className="glass-dark border border-purple-500/30 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-purple-500/20 neon-glow">
-            <h3 className="text-2xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-purple-400 to-blue-400 mb-6">Add New Skill</h3>
+          <div className="glass-dark border border-zinc-700 rounded-2xl p-8 max-w-2xl w-full animate-slide-up shadow-2xl shadow-black/20 ">
+            <h3 className="text-2xl font-bold  text-white mb-6">Add New Skill</h3>
 
             <div className="space-y-4">
               <div>
@@ -262,7 +262,7 @@ Show concrete examples of using this Skill."
                   type="text"
                   value={newSkillForm.name}
                   onChange={(e) => setNewSkillForm({ ...newSkillForm, name: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   placeholder="e.g., pdf-processing"
                 />
               </div>
@@ -270,14 +270,14 @@ Show concrete examples of using this Skill."
               <div>
                 <div className="flex items-center justify-between mb-2">
                   <label className="block text-sm font-medium text-gray-300">SKILL.md Content</label>
-                  <button onClick={useSkillTemplate} className="text-xs text-purple-400 hover:text-purple-300 transition-colors">
+                  <button onClick={useSkillTemplate} className="text-xs text-zinc-100 hover:text-purple-300 transition-colors">
                     Use Template
                   </button>
                 </div>
                 <textarea
                   value={newSkillForm.content}
                   onChange={(e) => setNewSkillForm({ ...newSkillForm, content: e.target.value })}
-                  className="w-full glass border border-purple-500/20 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-purple-500/50 focus:outline-none transition-all input-focus"
+                  className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
                   rows={15}
                   placeholder="---
 name: skill-name
@@ -301,13 +301,13 @@ Show concrete examples of using this Skill."
                   setShowAddSkillModal(false);
                   setNewSkillForm({ name: '', content: '' });
                 }}
-                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition-all ripple-effect"
+                className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-all "
               >
                 Cancel
               </button>
               <button
                 onClick={addNewSkill}
-                className="px-6 py-3 rounded-xl bg-gradient-to-r from-purple-500 to-blue-500 text-white font-medium hover:shadow-lg hover:shadow-purple-500/50 transition-all ripple-effect pulse-ring neon-glow"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all  pulse-ring "
               >
                 Add Skill
               </button>
