@@ -279,8 +279,8 @@ export function McpTab({
                 return (
                   <div
                     key={name}
-                    className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col card-hover cursor-pointer"
-                  >
+                    onClick={() => openServerDetail(name)}
+                    className="glass border border-purple-500/20 rounded-2xl p-6 group gradient-border relative h-[320px] flex flex-col card-hover cursor-pointer">
                     <div className="mb-4 flex items-center space-x-2">
                       <div
                         className={`w-2 h-2 rounded-full ${
@@ -321,7 +321,7 @@ export function McpTab({
                       </div>
                     </div>
 
-                    <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer" onClick={() => openServerDetail(name)}>
+                    <h3 className="text-xl font-bold text-white mb-2 transition-all">
                       {name}
                     </h3>
 
