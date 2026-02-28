@@ -296,3 +296,173 @@ html[data-theme="light"] .prose pre {
 html[data-theme="light"] .prose pre::-webkit-scrollbar-thumb {
   background: #d4d4d8;
 }
+
+/* ============================================================
+   Light mode overrides for hardcoded Tailwind dark classes
+   ============================================================ */
+
+/* Text colors */
+html[data-theme="light"] .text-white {
+  color: #111111 !important;
+}
+html[data-theme="light"] .text-zinc-100,
+html[data-theme="light"] .text-zinc-200,
+html[data-theme="light"] .text-zinc-300 {
+  color: #27272a !important;
+}
+html[data-theme="light"] .text-zinc-400 {
+  color: #52525b !important;
+}
+html[data-theme="light"] .text-zinc-500 {
+  color: #71717a !important;
+}
+
+/* Background colors */
+html[data-theme="light"] .bg-zinc-950 {
+  background-color: #f9f9f9 !important;
+}
+html[data-theme="light"] .bg-zinc-900 {
+  background-color: #f4f4f5 !important;
+}
+html[data-theme="light"] .bg-zinc-800 {
+  background-color: #e4e4e7 !important;
+}
+html[data-theme="light"] .bg-zinc-700 {
+  background-color: #d4d4d8 !important;
+}
+html[data-theme="light"] .hover\:bg-zinc-800\/50:hover {
+  background-color: rgba(228,228,231,0.5) !important;
+}
+html[data-theme="light"] .hover\:bg-zinc-800:hover {
+  background-color: #e4e4e7 !important;
+}
+html[data-theme="light"] .hover\:bg-zinc-700:hover {
+  background-color: #d4d4d8 !important;
+}
+
+/* Border colors */
+html[data-theme="light"] .border-zinc-800 {
+  border-color: #e4e4e7 !important;
+}
+html[data-theme="light"] .border-zinc-700 {
+  border-color: #d4d4d8 !important;
+}
+html[data-theme="light"] .border-zinc-600 {
+  border-color: #a1a1aa !important;
+}
+html[data-theme="light"] .hover\:border-zinc-700:hover {
+  border-color: #a1a1aa !important;
+}
+html[data-theme="light"] .hover\:border-zinc-500:hover {
+  border-color: #71717a !important;
+}
+
+/* Sidebar nav */
+html[data-theme="light"] nav.glass-dark {
+  background: rgba(244,244,245,0.95) !important;
+  border-color: #e4e4e7 !important;
+}
+
+/* Active tab icon bg */
+html[data-theme="light"] .bg-zinc-700.pulse-ring {
+  background-color: #18181b !important;
+}
+
+/* Non-active icon bg */
+html[data-theme="light"] .group:not(.active) .bg-zinc-900 {
+  background-color: #e4e4e7 !important;
+}
+
+/* Cards */
+html[data-theme="light"] .glass {
+  background: rgba(255,255,255,0.95) !important;
+  border-color: #e4e4e7 !important;
+}
+html[data-theme="light"] .glass-dark {
+  background: rgba(255,255,255,0.98) !important;
+  border-color: #e4e4e7 !important;
+}
+
+/* Start/action buttons in light mode */
+html[data-theme="light"] .border-emerald-900 {
+  border-color: #6ee7b7 !important;
+}
+html[data-theme="light"] .text-emerald-400 {
+  color: #059669 !important;
+}
+html[data-theme="light"] .hover\:border-emerald-700:hover {
+  border-color: #34d399 !important;
+}
+html[data-theme="light"] .border-red-900 {
+  border-color: #fca5a5 !important;
+}
+html[data-theme="light"] .text-red-400 {
+  color: #dc2626 !important;
+}
+html[data-theme="light"] .hover\:border-red-700:hover {
+  border-color: #f87171 !important;
+}
+
+/* Mono / code text */
+html[data-theme="light"] .font-mono {
+  color: #3f3f46;
+}
+
+/* Input / textarea */
+html[data-theme="light"] input,
+html[data-theme="light"] textarea,
+html[data-theme="light"] select {
+  background-color: #ffffff !important;
+  color: #111111 !important;
+  border-color: #d4d4d8 !important;
+}
+html[data-theme="light"] input::placeholder,
+html[data-theme="light"] textarea::placeholder {
+  color: #a1a1aa !important;
+}
+html[data-theme="light"] input:focus,
+html[data-theme="light"] textarea:focus {
+  border-color: #71717a !important;
+  box-shadow: 0 0 0 1px #71717a !important;
+}
+
+/* Modal overlay */
+html[data-theme="light"] .bg-black\/50 {
+  background-color: rgba(0,0,0,0.3) !important;
+}
+
+/* Shadow adjustments */
+html[data-theme="light"] .shadow-black\/20 {
+  box-shadow: 0 4px 12px rgba(0,0,0,0.08) !important;
+}
+
+/* Ghost buttons (Cancel etc) */
+html[data-theme="light"] .hover\:bg-zinc-900:hover {
+  background-color: #f4f4f5 !important;
+}
+
+/* Refresh config button */
+html[data-theme="light"] .glass.border-zinc-800 button,
+html[data-theme="light"] button.glass {
+  color: #111111 !important;
+}
+
+/* Start button in light mode - better contrast */
+html[data-theme="light"] .bg-zinc-800\/50 {
+  background-color: #f0fdf4 !important; /* green-50 */
+  border-color: #bbf7d0 !important; /* green-200 */
+}
+html[data-theme="light"] .hover\:bg-zinc-700\/50:hover {
+  background-color: #dcfce7 !important; /* green-100 */
+}
+html[data-theme="light"] .text-green-400 {
+  color: #16a34a !important; /* green-600 */
+}
+
+/* Add Server / Import JSON header buttons in light mode */
+html[data-theme="light"] .border-zinc-700 {
+  border-color: #d4d4d8 !important;
+}
+html[data-theme="light"] .hover\:border-zinc-600:hover {
+  border-color: #a1a1aa !important;
+}
