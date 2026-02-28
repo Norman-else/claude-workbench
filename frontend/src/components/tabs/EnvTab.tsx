@@ -616,7 +616,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
               <button
                 onClick={handleSaveConfigFile}
                 disabled={isSavingConfigFile || isLoadingConfigFile}
-                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center justify-center space-x-2 min-w-[88px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
                 <span>{isSavingConfigFile ? 'Saving...' : 'Save'}</span>
@@ -680,7 +680,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
               <button
                 onClick={handleSaveSettings}
                 disabled={isSavingSettings || isLoadingSettings}
-                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center justify-center space-x-2 min-w-[88px] disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Save className="w-4 h-4" />
                 <span>{isSavingSettings ? 'Saving...' : 'Save'}</span>
