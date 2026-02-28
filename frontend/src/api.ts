@@ -150,6 +150,14 @@ export async function getShellConfigContent(): Promise<ShellConfigContentRespons
   return requestJson<ShellConfigContentResponse>('/api/shell-config-content');
 }
 
+export async function saveShellConfigContent(content: string): Promise<void> {
+  await requestVoid('/api/shell-config-content', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+}
+
 export async function getClaudeSettingsContent(): Promise<ShellConfigContentResponse> {
   return requestJson<ShellConfigContentResponse>('/api/claude-settings-content');
+}
+
+export async function saveClaudeSettingsContent(content: string): Promise<void> {
+  await requestVoid('/api/claude-settings-content', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
 }

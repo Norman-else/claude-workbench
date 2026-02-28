@@ -340,6 +340,56 @@ app.get('/api/claude-settings-content', async (req, res) => {
   }
 });
 
+app.post('/api/shell-config-content', async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'content must be a string' });
+      return;
+    }
+    let configPath = '';
+    if (IS_WINDOWS) {
+      try {
+        let profilePath;
+        try {
+          const { stdout } = await execPromise('pwsh -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        } catch {
+          const { stdout } = await execPromise('powershell -Command "$PROFILE"');
+          profilePath = stdout.trim();
+        }
+        configPath = profilePath;
+      } catch (error) {
+        res.status(500).json({ error: error.message });
+        return;
+      }
+    } else {
+      configPath = await getEnvConfigPath();
+      await ensureFileExists(configPath, '');
+    }
+    await fs.writeFile(configPath, content, 'utf-8');
+    res.json({ success: true, configPath });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/claude-settings-content', async (req, res) => {
+  try {
+    const { content } = req.body;
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'content must be a string' });
+      return;
+    }
+    await fs.mkdir(path.dirname(CLAUDE_SETTINGS_PATH), { recursive: true });
+    await fs.writeFile(CLAUDE_SETTINGS_PATH, content, 'utf-8');
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
 // Get environment variables
 app.get('/api/env-vars', async (req, res) => {
   try {

@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, CheckCircle2, Copy, Edit2, Eye, EyeOff, FileText, Play, Plus, Save, Settings, Square, Terminal, Trash2, X } from 'lucide-react';
-import { activateEnvProfile, createEnvProfile, deactivateEnvProfile, getClaudeSettingsContent, getShellConfigContent, reorderEnvProfiles, updateEnvProfile } from '../../api';
+import { activateEnvProfile, createEnvProfile, deactivateEnvProfile, getClaudeSettingsContent, getShellConfigContent, reorderEnvProfiles, saveClaudeSettingsContent, saveShellConfigContent, updateEnvProfile } from '../../api';
 import type { EnvProfile, EnvProfileForm, ViewMode } from '../../types';
 import {
   DndContext,
@@ -192,12 +192,43 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
   const [configFileContent, setConfigFileContent] = useState('');
   const [configFilePath, setConfigFilePath] = useState('');
   const [isLoadingConfigFile, setIsLoadingConfigFile] = useState(false);
+  const [isSavingConfigFile, setIsSavingConfigFile] = useState(false);
 
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [settingsContent, setSettingsContent] = useState('');
   const [settingsFilePath, setSettingsFilePath] = useState('');
   const [isLoadingSettings, setIsLoadingSettings] = useState(false);
+  const [isSavingSettings, setIsSavingSettings] = useState(false);
 
+  const handleSaveConfigFile = async () => {
+    setIsSavingConfigFile(true);
+    try {
+      await saveShellConfigContent(configFileContent);
+      showNotification('Configuration saved successfully!');
+    } catch {
+      showNotification('Failed to save configuration', 'error');
+    } finally {
+      setIsSavingConfigFile(false);
+    }
+  };
+
+  const handleSaveSettings = async () => {
+    try {
+      JSON.parse(settingsContent);
+    } catch {
+      showNotification('Invalid JSON — please fix errors before saving', 'error');
+      return;
+    }
+    setIsSavingSettings(true);
+    try {
+      await saveClaudeSettingsContent(settingsContent);
+      showNotification('Claude Settings saved successfully!');
+    } catch {
+      showNotification('Failed to save settings', 'error');
+    } finally {
+      setIsSavingSettings(false);
+    }
+  };
   const openProfileDetail = (profileId: string) => {
     const profile = envProfiles.find((p) => p.id === profileId);
     if (profile) {
@@ -564,7 +595,12 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     </div>
                   </div>
                 ) : (
-                  <pre className="text-gray-300 whitespace-pre-wrap break-words">{configFileContent}</pre>
+                  <textarea
+                    className="text-gray-300 whitespace-pre-wrap break-words w-full h-full bg-transparent resize-none focus:outline-none font-mono text-sm"
+                    value={configFileContent}
+                    onChange={(e) => setConfigFileContent(e.target.value)}
+                    spellCheck={false}
+                  />
                 )}
               </div>
             </div>
@@ -576,6 +612,14 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
               >
                 <X className="w-5 h-5 text-gray-400" />
                 <span className="text-white font-medium">Close</span>
+              </button>
+              <button
+                onClick={handleSaveConfigFile}
+                disabled={isSavingConfigFile || isLoadingConfigFile}
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSavingConfigFile ? 'Saving...' : 'Save'}</span>
               </button>
             </div>
           </div>
@@ -615,7 +659,12 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     </div>
                   </div>
                 ) : (
-                  <pre className="text-gray-300 whitespace-pre-wrap break-words">{settingsContent}</pre>
+                  <textarea
+                    className="text-gray-300 whitespace-pre-wrap break-words w-full h-full bg-transparent resize-none focus:outline-none font-mono text-sm"
+                    value={settingsContent}
+                    onChange={(e) => setSettingsContent(e.target.value)}
+                    spellCheck={false}
+                  />
                 )}
               </div>
             </div>
@@ -627,6 +676,14 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
               >
                 <X className="w-5 h-5 text-gray-400" />
                 <span className="text-white font-medium">Close</span>
+              </button>
+              <button
+                onClick={handleSaveSettings}
+                disabled={isSavingSettings || isLoadingSettings}
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                <Save className="w-4 h-4" />
+                <span>{isSavingSettings ? 'Saving...' : 'Save'}</span>
               </button>
             </div>
           </div>

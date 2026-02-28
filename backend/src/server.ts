@@ -446,6 +446,46 @@ app.get('/api/claude-settings-content', async (_req: Request, res: Response) => 
     res.json({ configPath: CLAUDE_SETTINGS_PATH, content });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
+  });
+
+app.post('/api/shell-config-content', async (req: Request, res: Response) => {
+  try {
+    const { content } = req.body as { content: string };
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'content must be a string' });
+      return;
+    }
+    let configPath = '';
+    if (IS_WINDOWS) {
+      const { stdout } = await new Promise<{ stdout: string }>((resolve, reject) => {
+        exec('pwsh -Command "$PROFILE" 2>$null || powershell -Command "$PROFILE"', (err, stdout) => {
+          if (err) reject(err); else resolve({ stdout });
+        });
+      });
+      configPath = stdout.trim();
+    } else {
+      configPath = await getEnvConfigPath();
+      await ensureFileExists(configPath, '');
+    }
+    await fs.writeFile(configPath, content, 'utf-8');
+    res.json({ success: true, configPath });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/claude-settings-content', async (req: Request, res: Response) => {
+  try {
+    const { content } = req.body as { content: string };
+    if (typeof content !== 'string') {
+      res.status(400).json({ error: 'content must be a string' });
+      return;
+    }
+    await fs.mkdir(path.dirname(CLAUDE_SETTINGS_PATH), { recursive: true });
+    await fs.writeFile(CLAUDE_SETTINGS_PATH, content, 'utf-8');
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
   }
 });
 
