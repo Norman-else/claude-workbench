@@ -253,7 +253,7 @@ function App() {
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'mcp' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                  activeTab === 'mcp' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Server className="w-5 h-5 text-white" />
@@ -272,7 +272,7 @@ function App() {
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'env' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                  activeTab === 'env' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Terminal className="w-5 h-5 text-white" />
@@ -291,7 +291,7 @@ function App() {
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'commands' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                  activeTab === 'commands' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Command className="w-5 h-5 text-white" />
@@ -310,7 +310,7 @@ function App() {
             >
               <div
                 className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'skills' ? 'bg-white text-black pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                  activeTab === 'skills' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
                 }`}
               >
                 <Zap className="w-5 h-5 text-white" />
