@@ -128,13 +128,21 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          NOTES="${{ inputs.release_notes }}"
-          if [ -z "$NOTES" ]; then
-            NOTES="Release ${{ inputs.version }}"
+          EXTRA_NOTES="${{ inputs.release_notes }}"
+          if [ -n "$EXTRA_NOTES" ]; then
+            gh release create ${{ inputs.version }} \
+              artifacts/windows/* \
+              artifacts/macos/* \
+              --repo ${{ github.repository }} \
+              --title "${{ inputs.version }}" \
+              --generate-notes \
+              --notes-start-tag $(gh release list --repo ${{ github.repository }} --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "") \
+              --notes "$EXTRA_NOTES"
+          else
+            gh release create ${{ inputs.version }} \
+              artifacts/windows/* \
+              artifacts/macos/* \
+              --repo ${{ github.repository }} \
+              --title "${{ inputs.version }}" \
+              --generate-notes
           fi
-          gh release create ${{ inputs.version }} \
-            artifacts/windows/* \
-            artifacts/macos/* \
-            --repo ${{ github.repository }} \
-            --title "${{ inputs.version }}" \
-            --notes "$NOTES"
