@@ -21,10 +21,17 @@ import { SkillsTab } from './components/tabs/SkillsTab';
 
 function App() {
   const electron = useElectron();
+  const [appVersion, setAppVersion] = useState<string>('');
 
   useEffect(() => {
     document.title = 'Claude Workbench';
   }, []);
+
+  useEffect(() => {
+    if (electron.isElectron && window.electronAPI?.getAppVersion) {
+      window.electronAPI.getAppVersion().then(setAppVersion);
+    }
+  }, [electron.isElectron]);
 
   const [activeTab, setActiveTab] = useState<TabType>('env');
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
@@ -359,7 +366,7 @@ function App() {
             </div>
           )}
 
-          {electron.isElectron && <div className="mt-4 text-xs text-center text-zinc-100/60">Desktop App v1.0</div>}
+          {electron.isElectron && <div className="mt-4 text-xs text-center text-zinc-100/60">Desktop App {appVersion ? `v${appVersion}` : 'v1.0'}</div>}
         </nav>
 
         <div className="flex-1 overflow-y-auto relative z-10 titlebar-no-drag">

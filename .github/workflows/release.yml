@@ -1,0 +1,128 @@
+name: Build and Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. v1.0.1)'
+        required: true
+        type: string
+      release_notes:
+        description: 'Release notes'
+        required: false
+        default: ''
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set version in package.json
+        run: |
+          $version = "${{ inputs.version }}".TrimStart('v')
+          $pkg = Get-Content package.json | ConvertFrom-Json
+          $pkg.version = $version
+          $pkg | ConvertTo-Json -Depth 10 | Set-Content package.json
+        shell: pwsh
+
+      - name: Install dependencies
+        run: npm run install:all
+
+      - name: Build Windows
+        run: npm run build:desktop:win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            dist-electron/*-Setup.exe
+            dist-electron/*-Portable.exe
+          retention-days: 1
+
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Set version in package.json
+        run: |
+          VERSION="${{ inputs.version }}"
+          VERSION="${VERSION#v}"
+          node -e "
+            const fs = require('fs');
+            const pkg = JSON.parse(fs.readFileSync('package.json'));
+            pkg.version = '$VERSION';
+            fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2));
+          "
+
+      - name: Install dependencies
+        run: npm run install:all
+
+      - name: Build macOS
+        run: npm run build:desktop:mac
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            dist-electron/*.dmg
+            dist-electron/*.zip
+          retention-days: 1
+
+  release:
+    name: Create Release
+    needs: [build-windows, build-macos]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download Windows artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-build
+          path: artifacts/windows
+
+      - name: Download macOS artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: macos-build
+          path: artifacts/macos
+
+      - name: Delete existing release if exists
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release delete ${{ inputs.version }} --repo ${{ github.repository }} --yes 2>/dev/null || true
+          gh api repos/${{ github.repository }}/git/refs/tags/${{ inputs.version }} -X DELETE 2>/dev/null || true
+
+      - name: Create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES="${{ inputs.release_notes }}"
+          if [ -z "$NOTES" ]; then
+            NOTES="Release ${{ inputs.version }}"
+          fi
+          gh release create ${{ inputs.version }} \
+            artifacts/windows/* \
+            artifacts/macos/* \
+            --repo ${{ github.repository }} \
+            --title "${{ inputs.version }}" \
+            --notes "$NOTES"

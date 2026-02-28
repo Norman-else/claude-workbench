@@ -126,6 +126,10 @@ ipcMain.handle('show-notification', (_event, options: { title: string; body: str
   return true;
 });
 
+ipcMain.handle('get-app-version', () => {
+  return app.getVersion();
+});
+
 // Update tray menu when window visibility changes
 ipcMain.on('window-visibility-changed', () => {
   updateTrayMenu();

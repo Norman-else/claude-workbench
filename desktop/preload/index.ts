@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Notifications
   showNotification: (options: { title: string; body: string }) => 
     ipcRenderer.invoke('show-notification', options),
+
+  // App version
+  getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 });
 
 // Type definitions for TypeScript
@@ -29,6 +32,7 @@ export interface ElectronAPI {
   getAutoLaunch: () => Promise<boolean>;
   setAutoLaunch: (enable: boolean) => Promise<boolean>;
   showNotification: (options: { title: string; body: string }) => Promise<boolean>;
+  getAppVersion: () => Promise<string>;
 }
 
 declare global {
