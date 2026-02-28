@@ -519,7 +519,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   </button>
                   <button
                     onClick={saveProfileDetail}
-                    className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
+                    className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
                   >
                     <Save className="w-4 h-4" />
                     <span>Save Changes</span>
@@ -755,7 +755,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
               </button>
               <button
                 onClick={addNewProfile}
-                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 text-white font-medium hover:shadow-lg hover:shadow-black/40 transition-all  pulse-ring "
+                className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all  pulse-ring "
               >
                 Add Profile
               </button>
