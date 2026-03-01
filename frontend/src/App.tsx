@@ -366,7 +366,7 @@ function App() {
             </div>
           )}
 
-          {electron.isElectron && <div className="mt-4 text-xs text-center text-zinc-100/60">Desktop App {appVersion ? `v${appVersion}` : 'v1.0'}</div>}
+          {electron.isElectron && <div className="mt-4 text-xs text-center text-zinc-500 dark:text-zinc-400">Desktop App {appVersion ? `v${appVersion}` : 'v1.0'}</div>}
         </nav>
 
         <div className="flex-1 overflow-y-auto relative z-10 titlebar-no-drag">
