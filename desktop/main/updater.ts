@@ -100,3 +100,15 @@ export function checkForUpdatesOnStartup(): void {
     });
   }, 5000);
 }
+
+export function checkForUpdatesManually(): void {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const { autoUpdater } = require('electron-updater');
+
+  sendStatus({ type: 'checking' });
+
+  autoUpdater.checkForUpdates().catch((err: Error) => {
+    console.error('[Updater] Manual check failed:', err);
+    sendStatus({ type: 'error', message: err.message });
+  });
+}

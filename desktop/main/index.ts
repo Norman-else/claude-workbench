@@ -4,6 +4,7 @@ import { createTray, updateTrayMenu } from './tray.js';
 import { isAutoLaunchEnabled, setAutoLaunch, toggleAutoLaunch } from './autoLaunch.js';
 import { startBackend, stopBackend } from './backend.js';
 import { setupAutoUpdater, checkForUpdatesOnStartup } from './updater.js';
+import { createAppMenu } from './menu.js';
 
 // Add isQuitting flag to app
 (app as any).isQuitting = false;
@@ -37,6 +38,8 @@ app.on('ready', async () => {
     await new Promise(resolve => setTimeout(resolve, 1000));
     
     console.log('[Main] Creating main window...');
+    createAppMenu();
+    console.log('[Main] App menu created');
     createWindow();
     console.log('[Main] Main window created');
     
