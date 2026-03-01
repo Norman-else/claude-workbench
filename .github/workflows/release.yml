@@ -131,6 +131,7 @@ jobs:
 
       - name: Generate release notes
         id: notes
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -144,7 +145,7 @@ jobs:
             LOG_RANGE="HEAD"
           fi
 
-          # Categorize commits
+          # Categorize commits using a temp file
           FEATURES=""
           FIXES=""
           PERF=""
@@ -153,26 +154,28 @@ jobs:
           CHORE=""
           OTHER=""
 
+          git log $LOG_RANGE --pretty=format:"%h %s" --no-merges > /tmp/commits.txt
+
           while IFS= read -r line; do
             HASH=$(echo "$line" | cut -d' ' -f1)
             MSG=$(echo "$line" | cut -d' ' -f2-)
             ENTRY="- ${MSG} (\`${HASH}\`)"
             case "$MSG" in
-              feat:*|feat\(*) FEATURES="$FEATURES"$'\n'"$ENTRY" ;;
-              fix:*|fix\(*)   FIXES="$FIXES"$'\n'"$ENTRY" ;;
-              perf:*|perf\(*) PERF="$PERF"$'\n'"$ENTRY" ;;
-              refactor:*|refactor\(*) REFACTOR="$REFACTOR"$'\n'"$ENTRY" ;;
-              docs:*|docs\(*) DOCS="$DOCS"$'\n'"$ENTRY" ;;
-              chore:*|chore\(*)|ci:*|build:*) CHORE="$CHORE"$'\n'"$ENTRY" ;;
-              *)              OTHER="$OTHER"$'\n'"$ENTRY" ;;
+              feat:*|"feat("*) FEATURES="${FEATURES}"$'\n'"${ENTRY}" ;;
+              fix:*|"fix("*)   FIXES="${FIXES}"$'\n'"${ENTRY}" ;;
+              perf:*|"perf("*) PERF="${PERF}"$'\n'"${ENTRY}" ;;
+              refactor:*|"refactor("*) REFACTOR="${REFACTOR}"$'\n'"${ENTRY}" ;;
+              docs:*|"docs("*) DOCS="${DOCS}"$'\n'"${ENTRY}" ;;
+              chore:*|"chore("*|ci:*|build:*) CHORE="${CHORE}"$'\n'"${ENTRY}" ;;
+              *)               OTHER="${OTHER}"$'\n'"${ENTRY}" ;;
             esac
-          done < <(git log $LOG_RANGE --pretty=format:"%h %s" --no-merges)
+          done < /tmp/commits.txt
 
           # Build notes
           NOTES=""
           EXTRA_NOTES="${{ inputs.release_notes }}"
           if [ -n "$EXTRA_NOTES" ]; then
-            NOTES="$EXTRA_NOTES"$'\n\n'
+            NOTES="${EXTRA_NOTES}"$'\n\n'
           fi
 
           [ -n "$FEATURES" ]  && NOTES="${NOTES}## New Features${FEATURES}"$'\n\n'
@@ -188,7 +191,7 @@ jobs:
           fi
 
           # Write to file to avoid quoting issues
-          echo "$NOTES" > release_notes.md
+          printf '%s' "$NOTES" > release_notes.md
           cat release_notes.md
 
       - name: Create Release
