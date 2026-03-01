@@ -452,15 +452,15 @@ function App() {
 
         {showRefreshModal && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-50 p-4 animate-fade-in">
-            <div className="bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-zinc-700 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-black/20">
+            <div className="refresh-modal glass-dark border border-zinc-700 rounded-2xl p-8 max-w-md w-full animate-slide-up shadow-2xl shadow-black/20">
               <div className="text-center mb-6">
-                <div className="w-16 h-16 bg-zinc-100 dark:bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
-                  <RefreshCw className="w-8 h-8 text-zinc-700 dark:text-zinc-100 animate-spin" />
+                <div className="w-16 h-16 bg-zinc-800 rounded-full flex items-center justify-center mx-auto mb-4 pulse-ring">
+                  <RefreshCw className="w-8 h-8 text-zinc-100 animate-spin" />
                 </div>
-                <h3 className="text-2xl font-bold text-zinc-900 dark:text-white mb-2">
+                <h3 className="text-2xl font-bold text-white mb-2">
                   Refreshing Configuration
                 </h3>
-                <p className="text-zinc-500 dark:text-gray-400 text-sm">Loading configuration from disk...</p>
+                <p className="text-gray-400 text-sm">Loading configuration from disk...</p>
               </div>
 
               <div className="space-y-4">
@@ -474,7 +474,7 @@ function App() {
                 ).map(([key, label]) => (
                   <div key={key} className="flex items-center space-x-3">
                     <div className="flex-shrink-0">
-                      {refreshProgress[key] === 'pending' && <div className="w-6 h-6 rounded-full border-2 border-zinc-300 dark:border-gray-600"></div>}
+                      {refreshProgress[key] === 'pending' && <div className="w-6 h-6 rounded-full border-2 border-gray-600"></div>}
                       {refreshProgress[key] === 'loading' && (
                         <div className="w-6 h-6 rounded-full border-2 border-purple-400 border-t-transparent animate-spin"></div>
                       )}
@@ -493,12 +493,12 @@ function App() {
                       <div
                         className={`text-sm font-medium ${
                           refreshProgress[key] === 'done'
-                            ? 'text-green-600 dark:text-green-400'
+                            ? 'text-green-400'
                             : refreshProgress[key] === 'error'
-                              ? 'text-red-600 dark:text-red-400'
+                              ? 'text-red-400'
                               : refreshProgress[key] === 'loading'
-                                ? 'text-zinc-900 dark:text-zinc-100'
-                                : 'text-zinc-400 dark:text-gray-400'
+                                ? 'text-zinc-100'
+                                : 'text-gray-400'
                         }`}
                       >
                         {label}
@@ -509,7 +509,7 @@ function App() {
               </div>
 
               <div className="mt-6">
-                <div className="h-2 bg-zinc-100 dark:bg-zinc-800 rounded-full overflow-hidden">
+                <div className="h-2 bg-zinc-800 rounded-full overflow-hidden">
                   <div
                     className="h-full bg-purple-500 transition-all duration-500 ease-out"
                     style={{

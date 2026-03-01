@@ -482,3 +482,30 @@ html[data-theme="light"] .border-zinc-700 {
 html[data-theme="light"] .hover\:border-zinc-600:hover {
   border-color: #a1a1aa !important;
 }
+
+/* Refresh config modal - light mode overrides */
+html[data-theme="light"] .refresh-modal {
+  background: #ffffff !important;
+  border-color: #e4e4e7 !important;
+}
+html[data-theme="light"] .refresh-modal .bg-zinc-800 {
+  background: #f4f4f5 !important;
+}
+html[data-theme="light"] .refresh-modal .text-zinc-100 {
+  color: #3f3f46 !important;
+}
+html[data-theme="light"] .refresh-modal .text-white {
+  color: #18181b !important;
+}
+html[data-theme="light"] .refresh-modal .text-gray-400 {
+  color: #71717a !important;
+}
+html[data-theme="light"] .refresh-modal .border-gray-600 {
+  border-color: #d4d4d8 !important;
+}
+html[data-theme="light"] .refresh-modal .text-green-400 {
+  color: #16a34a !important;
+}
+html[data-theme="light"] .refresh-modal .text-red-400 {
+  color: #dc2626 !important;
+}
