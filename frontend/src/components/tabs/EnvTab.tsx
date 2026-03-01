@@ -151,6 +151,7 @@ function SortableProfileCard({ profile, isActive, onOpen, onActivate, onDeactiva
 }
 export function EnvTab({ envProfiles, activeProfileId, showNotification, loadConfig, requestDelete }: EnvTabProps) {
   const [showApiKey, setShowApiKey] = useState(false);
+  const [showAuthToken, setShowAuthToken] = useState(false);
   const [envViewMode, setEnvViewMode] = useState<ViewMode>('list');
   const [editingProfile, setEditingProfile] = useState<EnvProfile | null>(null);
   const [showAddProfileModal, setShowAddProfileModal] = useState(false);
@@ -480,17 +481,17 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                   <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
                   <div className="relative">
                     <input
-                      type={showApiKey ? 'text' : 'password'}
+                      type={showAuthToken ? 'text' : 'password'}
                       value={editingProfile?.authToken || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, authToken: e.target.value } : null))}
                       className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 pr-12 text-white focus:border-zinc-600 focus:outline-none transition-colors font-mono"
                       placeholder="Optional auth token..."
                     />
                     <button
-                      onClick={() => setShowApiKey(!showApiKey)}
+                      onClick={() => setShowAuthToken(!showAuthToken)}
                       className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                     >
-                      {showApiKey ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
+                      {showAuthToken ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                     </button>
                   </div>
                 </div>
@@ -741,17 +742,17 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                 <label className="block text-sm font-medium text-gray-300 mb-2">ANTHROPIC_AUTH_TOKEN (Optional)</label>
                 <div className="relative">
                   <input
-                    type={showApiKey ? 'text' : 'password'}
+                    type={showAuthToken ? 'text' : 'password'}
                     value={newProfileForm.authToken}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, authToken: e.target.value })}
                     className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 pr-12 text-white focus:border-zinc-600 focus:outline-none transition-all font-mono input-focus"
                     placeholder="Optional auth token..."
                   />
                   <button
-                    onClick={() => setShowApiKey(!showApiKey)}
+                    onClick={() => setShowAuthToken(!showAuthToken)}
                     className="absolute right-3 top-1/2 -translate-y-1/2 p-2 rounded-lg hover:bg-zinc-800 transition-colors"
                   >
-                    {showApiKey ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
+                    {showAuthToken ? <EyeOff className="w-4 h-4 text-gray-400" /> : <Eye className="w-4 h-4 text-gray-400" />}
                   </button>
                 </div>
               </div>
