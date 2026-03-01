@@ -6,6 +6,36 @@ const path = require('path');
 
 const SOURCE_PATH = path.join(__dirname, 'icon-source.png');
 const WARM_BG = { r: 255, g: 248, b: 245, alpha: 255 };
+const NEAR_WHITE_THRESHOLD = 220;
+
+// ---------------------------------------------------------------------------
+// removeWhiteBackground
+// Zeroes the alpha channel for any near-white pixel (R>220 AND G>220 AND B>220).
+// Accepts a sharp-compatible buffer; returns a new RGBA sharp buffer.
+// ---------------------------------------------------------------------------
+async function removeWhiteBackground(inputBuffer) {
+  const { data, info } = await sharp(inputBuffer)
+    .ensureAlpha()
+    .raw()
+    .toBuffer({ resolveWithObject: true });
+
+  const { width, height, channels } = info;
+  const pixelCount = width * height;
+
+  for (let i = 0; i < pixelCount; i++) {
+    const offset = i * channels;
+    const isNearWhite =
+      data[offset] > NEAR_WHITE_THRESHOLD &&
+      data[offset + 1] > NEAR_WHITE_THRESHOLD &&
+      data[offset + 2] > NEAR_WHITE_THRESHOLD;
+
+    if (isNearWhite) {
+      data[offset + 3] = 0;
+    }
+  }
+
+  return sharp(data, { raw: { width, height, channels: 4 } }).png().toBuffer();
+}
 
 // ---------------------------------------------------------------------------
 // createRoundedIconBuffer
@@ -22,12 +52,14 @@ async function createRoundedIconBuffer(size) {
     `</svg>`
   );
 
-  const iconBuf = await sharp(SOURCE_PATH)
+  const resizedIconBuf = await sharp(SOURCE_PATH)
     .resize(iconSize, iconSize, {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 },
     })
     .toBuffer();
+
+  const iconBuf = await removeWhiteBackground(resizedIconBuf);
 
   return sharp({
     create: { width: size, height: size, channels: 4, background: WARM_BG },
@@ -45,7 +77,10 @@ async function createRoundedIconBuffer(size) {
 // Transparent background, starburst only — no rounded corners.
 // ---------------------------------------------------------------------------
 async function createTrayIconBuffer(size) {
-  return sharp(SOURCE_PATH)
+  const sourceBuf = await sharp(SOURCE_PATH).toBuffer();
+  const sourceWithoutWhite = await removeWhiteBackground(sourceBuf);
+
+  return sharp(sourceWithoutWhite)
     .resize(size, size, {
       fit: 'contain',
       background: { r: 0, g: 0, b: 0, alpha: 0 },
