@@ -105,6 +105,11 @@ jobs:
     permissions:
       contents: write
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Download Windows artifacts
         uses: actions/download-artifact@v4
         with:
@@ -124,25 +129,75 @@ jobs:
           gh release delete ${{ inputs.version }} --repo ${{ github.repository }} --yes 2>/dev/null || true
           gh api repos/${{ github.repository }}/git/refs/tags/${{ inputs.version }} -X DELETE 2>/dev/null || true
 
+      - name: Generate release notes
+        id: notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get previous release tag
+          PREV_TAG=$(gh release list --repo ${{ github.repository }} --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
+
+          # Build changelog from git log
+          if [ -n "$PREV_TAG" ]; then
+            LOG_RANGE="$PREV_TAG..HEAD"
+          else
+            LOG_RANGE="HEAD"
+          fi
+
+          # Categorize commits
+          FEATURES=""
+          FIXES=""
+          PERF=""
+          REFACTOR=""
+          DOCS=""
+          CHORE=""
+          OTHER=""
+
+          while IFS= read -r line; do
+            HASH=$(echo "$line" | cut -d' ' -f1)
+            MSG=$(echo "$line" | cut -d' ' -f2-)
+            ENTRY="- ${MSG} (\`${HASH}\`)"
+            case "$MSG" in
+              feat:*|feat\(*) FEATURES="$FEATURES"$'\n'"$ENTRY" ;;
+              fix:*|fix\(*)   FIXES="$FIXES"$'\n'"$ENTRY" ;;
+              perf:*|perf\(*) PERF="$PERF"$'\n'"$ENTRY" ;;
+              refactor:*|refactor\(*) REFACTOR="$REFACTOR"$'\n'"$ENTRY" ;;
+              docs:*|docs\(*) DOCS="$DOCS"$'\n'"$ENTRY" ;;
+              chore:*|chore\(*)|ci:*|build:*) CHORE="$CHORE"$'\n'"$ENTRY" ;;
+              *)              OTHER="$OTHER"$'\n'"$ENTRY" ;;
+            esac
+          done < <(git log $LOG_RANGE --pretty=format:"%h %s" --no-merges)
+
+          # Build notes
+          NOTES=""
+          EXTRA_NOTES="${{ inputs.release_notes }}"
+          if [ -n "$EXTRA_NOTES" ]; then
+            NOTES="$EXTRA_NOTES"$'\n\n'
+          fi
+
+          [ -n "$FEATURES" ]  && NOTES="${NOTES}## New Features${FEATURES}"$'\n\n'
+          [ -n "$FIXES" ]     && NOTES="${NOTES}## Bug Fixes${FIXES}"$'\n\n'
+          [ -n "$PERF" ]      && NOTES="${NOTES}## Performance Improvements${PERF}"$'\n\n'
+          [ -n "$REFACTOR" ]  && NOTES="${NOTES}## Refactoring${REFACTOR}"$'\n\n'
+          [ -n "$DOCS" ]      && NOTES="${NOTES}## Documentation${DOCS}"$'\n\n'
+          [ -n "$CHORE" ]     && NOTES="${NOTES}## Maintenance${CHORE}"$'\n\n'
+          [ -n "$OTHER" ]     && NOTES="${NOTES}## Other Changes${OTHER}"$'\n\n'
+
+          if [ -n "$PREV_TAG" ]; then
+            NOTES="${NOTES}**Full Changelog**: https://github.com/${{ github.repository }}/compare/${PREV_TAG}...${{ inputs.version }}"
+          fi
+
+          # Write to file to avoid quoting issues
+          echo "$NOTES" > release_notes.md
+          cat release_notes.md
+
       - name: Create Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          EXTRA_NOTES="${{ inputs.release_notes }}"
-          if [ -n "$EXTRA_NOTES" ]; then
-            gh release create ${{ inputs.version }} \
-              artifacts/windows/* \
-              artifacts/macos/* \
-              --repo ${{ github.repository }} \
-              --title "${{ inputs.version }}" \
-              --generate-notes \
-              --notes-start-tag $(gh release list --repo ${{ github.repository }} --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "") \
-              --notes "$EXTRA_NOTES"
-          else
-            gh release create ${{ inputs.version }} \
-              artifacts/windows/* \
-              artifacts/macos/* \
-              --repo ${{ github.repository }} \
-              --title "${{ inputs.version }}" \
-              --generate-notes
-          fi
+          gh release create ${{ inputs.version }} \
+            artifacts/windows/* \
+            artifacts/macos/* \
+            --repo ${{ github.repository }} \
+            --title "${{ inputs.version }}" \
+            --notes-file release_notes.md
