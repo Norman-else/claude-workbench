@@ -30,6 +30,7 @@
     "concurrently": "^8.2.2",
     "electron": "^39.1.1",
     "electron-builder": "^26.0.12",
+    "sharp": "^0.34.5",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3",
     "wait-on": "^9.0.1"

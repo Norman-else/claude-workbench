@@ -18,6 +18,7 @@ import { McpTab } from './components/tabs/McpTab';
 import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
 import { SkillsTab } from './components/tabs/SkillsTab';
+import { UpdateNotification } from './components/UpdateNotification';
 
 function App() {
   const electron = useElectron();
@@ -529,6 +530,8 @@ function App() {
           </div>
         )}
       </div>
+
+      <UpdateNotification />
     </div>
   );
 }

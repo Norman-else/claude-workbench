@@ -57,6 +57,7 @@ jobs:
           path: |
             dist-electron/*-Setup.exe
             dist-electron/*-Portable.exe
+            dist-electron/latest.yml
           retention-days: 1
 
   build-macos:
@@ -96,6 +97,7 @@ jobs:
           path: |
             dist-electron/*.dmg
             dist-electron/*.zip
+            dist-electron/latest-mac.yml
           retention-days: 1
 
   release:

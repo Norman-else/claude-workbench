@@ -21,6 +21,16 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // App version
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
+
+  // Auto-update
+  checkForUpdates: () => ipcRenderer.invoke('check-for-updates'),
+  installUpdate: () => ipcRenderer.invoke('install-update'),
+  getUpdaterStatus: () => ipcRenderer.invoke('get-updater-status'),
+  onUpdaterStatus: (callback: (status: any) => void) => {
+    const handler = (_event: Electron.IpcRendererEvent, status: any) => callback(status);
+    ipcRenderer.on('updater-status', handler);
+    return () => ipcRenderer.removeListener('updater-status', handler);
+  },
 });
 
 // Type definitions for TypeScript
@@ -33,6 +43,10 @@ export interface ElectronAPI {
   setAutoLaunch: (enable: boolean) => Promise<boolean>;
   showNotification: (options: { title: string; body: string }) => Promise<boolean>;
   getAppVersion: () => Promise<string>;
+  checkForUpdates: () => Promise<void>;
+  installUpdate: () => Promise<void>;
+  getUpdaterStatus: () => Promise<any>;
+  onUpdaterStatus: (callback: (status: any) => void) => () => void;
 }
 
 declare global {
@@ -40,4 +54,5 @@ declare global {
     electronAPI: ElectronAPI;
   }
 }
+
 

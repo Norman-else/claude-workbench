@@ -3,6 +3,7 @@ import { createWindow, showWindow } from './window.js';
 import { createTray, updateTrayMenu } from './tray.js';
 import { isAutoLaunchEnabled, setAutoLaunch, toggleAutoLaunch } from './autoLaunch.js';
 import { startBackend, stopBackend } from './backend.js';
+import { setupAutoUpdater, checkForUpdatesOnStartup } from './updater.js';
 
 // Add isQuitting flag to app
 (app as any).isQuitting = false;
@@ -42,7 +43,14 @@ app.on('ready', async () => {
     console.log('[Main] Creating system tray...');
     createTray();
     console.log('[Main] System tray created');
-    
+
+    // Setup auto updater (packaged builds only to avoid dev-mode interference)
+    if (app.isPackaged) {
+      setupAutoUpdater();
+      checkForUpdatesOnStartup();
+      console.log('[Main] Auto updater setup complete');
+    }
+
     console.log('[Main] Claude Workbench desktop app started successfully');
   } catch (error) {
     console.error('[Main] Failed to start app:', error);

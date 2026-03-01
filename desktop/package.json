@@ -4,5 +4,8 @@
   "type": "commonjs",
   "main": "dist/main/index.js",
   "private": true,
-  "description": "Desktop application files for Claude Workbench"
+  "description": "Desktop application files for Claude Workbench",
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
 }
