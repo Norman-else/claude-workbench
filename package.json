@@ -25,6 +25,9 @@
   "author": "",
   "license": "MIT",
   "main": "desktop/dist/main/index.js",
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  },
   "devDependencies": {
     "@types/node": "^24.10.0",
     "concurrently": "^8.2.2",
