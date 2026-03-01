@@ -34,6 +34,7 @@ mac:
   gatekeeperAssess: false
   entitlements: desktop/build/entitlements.mac.plist
   entitlementsInherit: desktop/build/entitlements.mac.plist
+  artifactName: Claude-Workbench-${version}-${arch}-mac.${ext}
 
 dmg:
   title: ${productName} ${version}
@@ -54,7 +55,7 @@ win:
     - nsis
     - portable
   icon: desktop/assets/icon.ico
-  artifactName: ${productName}-${version}-Setup.${ext}
+  artifactName: Claude-Workbench-${version}-Setup.${ext}
 
 nsis:
   oneClick: false
@@ -66,7 +67,7 @@ nsis:
   shortcutName: ${productName}
 
 portable:
-  artifactName: ${productName}-${version}-Portable.${ext}
+  artifactName: Claude-Workbench-${version}-Portable.${ext}
 
 # Linux configuration
 linux:
