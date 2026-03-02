@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ArrowLeft, Code, Copy, Edit2, FileText, Play, Plus, RotateCw, Save, Server, Square, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Code, Copy, Edit2, FileText, Play, Plus, RotateCw, Save, Server, Square, Store, Trash2, X } from 'lucide-react';
 import { saveClaudeConfig, restartMcpServer, startMcpServer, stopMcpServer } from '../../api';
 import { ServerLogs } from '../ServerLogs';
+import { McpMarketplace } from '../McpMarketplace';
 import type { ClaudeConfig, McpServer, McpStatus, ViewMode } from '../../types';
 
 interface McpTabProps {
@@ -36,6 +37,7 @@ export function McpTab({
   const [showLogsModal, setShowLogsModal] = useState(false);
   const [logsServerName, setLogsServerName] = useState<string | null>(null);
   const [showImportJsonModal, setShowImportJsonModal] = useState(false);
+  const [showMarketplace, setShowMarketplace] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState('');
   const [newServerForm, setNewServerForm] = useState({ name: '', command: '', args: '', env: '' });
 
@@ -253,6 +255,13 @@ export function McpTab({
                 <p className="text-gray-400">Manage your Model Context Protocol servers</p>
               </div>
               <div className="flex space-x-4 titlebar-no-drag">
+                <button
+                  onClick={() => setShowMarketplace(true)}
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
+                >
+                  <Store className="w-5 h-5 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
+                  <span className="text-white font-medium">Browse Marketplace</span>
+                </button>
                 <button
                   onClick={() => setShowAddServerModal(true)}
                   className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
@@ -697,6 +706,14 @@ export function McpTab({
           </div>
         </div>
       )}
+
+      <McpMarketplace
+        open={showMarketplace}
+        onClose={() => setShowMarketplace(false)}
+        claudeConfig={claudeConfig}
+        setClaudeConfig={setClaudeConfig}
+        showNotification={showNotification}
+      />
     </>
   );
 }

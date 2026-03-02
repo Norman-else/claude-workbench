@@ -74,3 +74,36 @@ export interface ShellConfigContentResponse {
   configPath: string;
   content: string;
 }
+
+// Registry API 相关类型
+export interface RegistryEnvVar {
+  name: string;
+  description?: string;
+  isRequired?: boolean;
+  isSecret?: boolean;
+}
+
+export interface RegistryPackage {
+  registryType: string;
+  identifier: string;
+  version?: string;
+  runtimeHint?: string;
+  transport: { type: string };
+  environmentVariables?: RegistryEnvVar[];
+}
+
+export interface RegistryServer {
+  name: string;
+  title?: string;
+  description?: string;
+  version?: string;
+  websiteUrl?: string;
+  repository?: { url: string; source: string };
+  icons?: Array<{ src: string; mimeType: string }>;
+  packages?: RegistryPackage[];
+}
+
+export interface RegistryListResponse {
+  servers: Array<{ server: RegistryServer; _meta?: Record<string, unknown> }>;
+  metadata: { nextCursor?: string; count: number };
+}
