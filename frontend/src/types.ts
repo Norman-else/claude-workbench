@@ -92,6 +92,19 @@ export interface RegistryPackage {
   environmentVariables?: RegistryEnvVar[];
 }
 
+export interface RegistryRemoteHeader {
+  name: string;
+  description?: string;
+  isRequired?: boolean;
+  isSecret?: boolean;
+}
+
+export interface RegistryRemote {
+  type: 'streamable-http' | 'sse' | string;
+  url: string;
+  headers?: RegistryRemoteHeader[];
+}
+
 export interface RegistryServer {
   name: string;
   title?: string;
@@ -101,6 +114,7 @@ export interface RegistryServer {
   repository?: { url: string; source: string };
   icons?: Array<{ src: string; mimeType: string }>;
   packages?: RegistryPackage[];
+  remotes?: RegistryRemote[];
 }
 
 export interface RegistryListResponse {

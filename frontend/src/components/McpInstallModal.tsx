@@ -1,32 +1,40 @@
 import { useState } from 'react';
 import { Download, X, Eye, EyeOff } from 'lucide-react';
-import type { RegistryEnvVar, RegistryPackage, RegistryServer } from '../types';
+import type { RegistryServer } from '../types';
+
+export interface RequiredField {
+  name: string;
+  description?: string;
+  isSecret?: boolean;
+}
 
 interface McpInstallModalProps {
   server: RegistryServer;
-  npmPackage: RegistryPackage;
-  onInstall: (envValues: Record<string, string>) => Promise<void>;
+  packageLabel: string;         // 显示用，如 "npm: airtable-mcp-server" 或 "remote: https://..."
+  requiredFields: RequiredField[];
+  onInstall: (values: Record<string, string>) => Promise<void>;
   onClose: () => void;
 }
 
-export function McpInstallModal({ server, npmPackage, onInstall, onClose }: McpInstallModalProps) {
-  const requiredEnvVars = (npmPackage.environmentVariables ?? []).filter((e) => e.isRequired);
-  const [envValues, setEnvValues] = useState<Record<string, string>>(
-    Object.fromEntries(requiredEnvVars.map((e) => [e.name, '']))
+export function McpInstallModal({ server, packageLabel, requiredFields, onInstall, onClose }: McpInstallModalProps) {
+  const [values, setValues] = useState<Record<string, string>>(
+    Object.fromEntries(requiredFields.map((f) => [f.name, '']))
   );
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [installing, setInstalling] = useState(false);
 
-  const canInstall = requiredEnvVars.every((e) => envValues[e.name]?.trim());
+  const canInstall = requiredFields.every((f) => values[f.name]?.trim());
 
   const handleInstall = async () => {
     setInstalling(true);
     try {
-      await onInstall(envValues);
+      await onInstall(values);
     } finally {
       setInstalling(false);
     }
   };
+
+  const displayName = server.title ?? server.name.split('/').pop() ?? server.name;
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[200] p-4 animate-fade-in">
@@ -34,8 +42,10 @@ export function McpInstallModal({ server, npmPackage, onInstall, onClose }: McpI
         {/* Header */}
         <div className="flex items-start justify-between mb-6">
           <div>
-            <h3 className="text-2xl font-bold text-white">{server.title ?? server.name}</h3>
-            <p className="text-gray-400 text-sm mt-1">{server.description}</p>
+            <h3 className="text-2xl font-bold text-white">{displayName}</h3>
+            {server.description && (
+              <p className="text-gray-400 text-sm mt-1">{server.description}</p>
+            )}
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-zinc-800 transition-colors ml-4 flex-shrink-0">
             <X className="w-5 h-5 text-gray-400" />
@@ -43,37 +53,37 @@ export function McpInstallModal({ server, npmPackage, onInstall, onClose }: McpI
         </div>
 
         {/* Package info */}
-        <div className="glass border border-zinc-800 rounded-xl px-4 py-3 mb-6 flex items-center space-x-2">
-          <span className="text-xs font-medium text-blue-400 bg-blue-900/30 px-2 py-0.5 rounded">npm</span>
-          <span className="text-sm text-zinc-300 font-mono">{npmPackage.identifier}</span>
-          {npmPackage.version && <span className="text-xs text-zinc-500 ml-auto">v{npmPackage.version}</span>}
+        <div className="glass border border-zinc-800 rounded-xl px-4 py-3 mb-6">
+          <span className="text-sm text-zinc-300 font-mono text-xs break-all">{packageLabel}</span>
         </div>
 
-        {/* Required env vars */}
-        {requiredEnvVars.length > 0 && (
+        {/* Required fields */}
+        {requiredFields.length > 0 && (
           <div className="space-y-4 mb-6">
             <p className="text-sm font-medium text-gray-300">Required Configuration</p>
-            {requiredEnvVars.map((envVar: RegistryEnvVar) => (
-              <div key={envVar.name}>
+            {requiredFields.map((field) => (
+              <div key={field.name}>
                 <label className="block text-xs font-medium text-gray-400 mb-1">
-                  {envVar.name}
-                  {envVar.description && <span className="text-zinc-600 ml-2">— {envVar.description}</span>}
+                  {field.name}
+                  {field.description && (
+                    <span className="text-zinc-600 ml-2">— {field.description}</span>
+                  )}
                 </label>
                 <div className="relative">
                   <input
-                    type={envVar.isSecret && !showSecrets[envVar.name] ? 'password' : 'text'}
-                    value={envValues[envVar.name] ?? ''}
-                    onChange={(e) => setEnvValues((prev) => ({ ...prev, [envVar.name]: e.target.value }))}
+                    type={field.isSecret && !showSecrets[field.name] ? 'password' : 'text'}
+                    value={values[field.name] ?? ''}
+                    onChange={(e) => setValues((prev) => ({ ...prev, [field.name]: e.target.value }))}
                     className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white focus:border-zinc-600 focus:outline-none transition-colors pr-10"
-                    placeholder={envVar.isSecret ? '••••••••' : `Enter ${envVar.name}`}
+                    placeholder={field.isSecret ? '••••••••' : `Enter ${field.name}`}
                   />
-                  {envVar.isSecret && (
+                  {field.isSecret && (
                     <button
                       type="button"
-                      onClick={() => setShowSecrets((prev) => ({ ...prev, [envVar.name]: !prev[envVar.name] }))}
+                      onClick={() => setShowSecrets((prev) => ({ ...prev, [field.name]: !prev[field.name] }))}
                       className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
                     >
-                      {showSecrets[envVar.name] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      {showSecrets[field.name] ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                     </button>
                   )}
                 </div>

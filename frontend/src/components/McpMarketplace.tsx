@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Search, X, Download, Check, AlertCircle, ChevronLeft, ChevronRight, Store } from 'lucide-react';
+import { Search, X, Download, Check, AlertCircle, ChevronLeft, ChevronRight, Store, Wifi } from 'lucide-react';
 import { saveClaudeConfig } from '../api';
 import { McpInstallModal } from './McpInstallModal';
-import type { ClaudeConfig, RegistryServer, RegistryPackage, RegistryListResponse } from '../types';
+import type { RequiredField } from './McpInstallModal';
+import type { ClaudeConfig, RegistryServer, RegistryPackage, RegistryRemote, RegistryListResponse } from '../types';
 
 const REGISTRY_BASE = 'https://registry.modelcontextprotocol.io/v0.1';
 const PAGE_SIZE = 20;
@@ -15,8 +16,20 @@ interface McpMarketplaceProps {
   showNotification: (message: string, type?: 'success' | 'error') => void;
 }
 
+// ── helpers ──────────────────────────────────────────────────────────────────
+
 function getNpmPackage(server: RegistryServer): RegistryPackage | undefined {
   return server.packages?.find((p) => p.registryType === 'npm');
+}
+
+function getFirstRemote(server: RegistryServer): RegistryRemote | undefined {
+  return server.remotes?.[0];
+}
+
+function getInstallType(server: RegistryServer): 'npm' | 'remote' | null {
+  if (getNpmPackage(server)) return 'npm';
+  if (getFirstRemote(server)) return 'remote';
+  return null;
 }
 
 function getServerDisplayName(server: RegistryServer): string {
@@ -24,9 +37,10 @@ function getServerDisplayName(server: RegistryServer): string {
 }
 
 function getInstalledServerName(server: RegistryServer): string {
-  // Use the part after the slash, e.g. "io.github.user/weather" → "weather"
   return server.name.split('/').pop() ?? server.name;
 }
+
+// ── sub-components ────────────────────────────────────────────────────────────
 
 function ServerIcon({ server }: { server: RegistryServer }) {
   const [imgError, setImgError] = useState(false);
@@ -67,14 +81,21 @@ function SkeletonCard() {
   );
 }
 
+// ── main component ────────────────────────────────────────────────────────────
+
 export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, showNotification }: McpMarketplaceProps) {
   const [servers, setServers] = useState<RegistryServer[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [nextCursor, setNextCursor] = useState<string | null>(null);
-  const [cursorStack, setCursorStack] = useState<string[]>([]); // stack of previous cursors
-  const [installTarget, setInstallTarget] = useState<RegistryServer | null>(null);
+  const [cursorStack, setCursorStack] = useState<string[]>([]);
+  const [installTarget, setInstallTarget] = useState<{
+    server: RegistryServer;
+    packageLabel: string;
+    requiredFields: RequiredField[];
+    doInstall: (values: Record<string, string>) => Promise<void>;
+  } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const fetchServers = useCallback(async (cursor: string | null, search: string) => {
@@ -89,9 +110,11 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
       if (!res.ok) throw new Error(`Registry API error: ${res.status}`);
 
       const data: RegistryListResponse = await res.json();
+
+      // Keep servers that have npm packages OR remotes (drop servers with neither)
       const filtered = data.servers
         .map((item) => item.server)
-        .filter((s) => getNpmPackage(s) !== undefined);
+        .filter((s) => getNpmPackage(s) !== undefined || getFirstRemote(s) !== undefined);
 
       setServers(filtered);
       setNextCursor(data.metadata.nextCursor ?? null);
@@ -102,7 +125,7 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
     }
   }, []);
 
-  // Initial load & re-load when opened
+  // Initial load when opened
   useEffect(() => {
     if (!open) return;
     setCursorStack([]);
@@ -124,20 +147,23 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
 
   const isInstalled = useCallback(
     (server: RegistryServer): boolean => {
+      const existingServers = Object.values(claudeConfig.mcpServers ?? {});
       const npmPkg = getNpmPackage(server);
-      if (!npmPkg) return false;
-      return Object.values(claudeConfig.mcpServers ?? {}).some(
-        (s) => s.args?.includes(npmPkg.identifier)
-      );
+      if (npmPkg) {
+        return existingServers.some((s) => s.args?.includes(npmPkg.identifier));
+      }
+      const remote = getFirstRemote(server);
+      if (remote) {
+        return existingServers.some((s) => s.args?.includes(remote.url));
+      }
+      return false;
     },
     [claudeConfig.mcpServers]
   );
 
   const handleNextPage = () => {
     if (!nextCursor) return;
-    // Push current "first item cursor" — we use '' for page 1
-    const currentCursor = cursorStack.length === 0 ? null : cursorStack[cursorStack.length - 1];
-    setCursorStack((prev) => [...prev, currentCursor ?? '']);
+    setCursorStack((prev) => [...prev, prev.length === 0 ? '' : nextCursor]);
     fetchServers(nextCursor, searchQuery);
   };
 
@@ -149,13 +175,9 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
     fetchServers(prevCursor === '' ? null : prevCursor, searchQuery);
   };
 
-  const installServer = useCallback(
-    async (server: RegistryServer, envValues: Record<string, string>) => {
-      const npmPkg = getNpmPackage(server);
-      if (!npmPkg) return;
-
+  const doInstallServer = useCallback(
+    async (server: RegistryServer, mcpArgs: string[], envValues: Record<string, string>) => {
       const serverName = getInstalledServerName(server);
-      // Deduplicate name if already exists
       let finalName = serverName;
       let counter = 1;
       while (claudeConfig.mcpServers?.[finalName]) {
@@ -168,7 +190,7 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
           ...claudeConfig.mcpServers,
           [finalName]: {
             command: 'npx',
-            args: ['-y', npmPkg.identifier],
+            args: mcpArgs,
             env: Object.keys(envValues).length > 0 ? envValues : undefined,
           },
         },
@@ -182,29 +204,63 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
     [claudeConfig, setClaudeConfig, showNotification]
   );
 
-  const handleInstallClick = (server: RegistryServer) => {
-    const npmPkg = getNpmPackage(server);
-    if (!npmPkg) return;
+  const handleInstallClick = useCallback(
+    (server: RegistryServer) => {
+      const installType = getInstallType(server);
+      if (!installType) return;
 
-    const requiredEnvVars = (npmPkg.environmentVariables ?? []).filter((e) => e.isRequired);
-    if (requiredEnvVars.length > 0) {
-      setInstallTarget(server);
-    } else {
-      installServer(server, {}).catch(() =>
-        showNotification('Failed to install server', 'error')
-      );
-    }
-  };
+      if (installType === 'npm') {
+        const npmPkg = getNpmPackage(server)!;
+        const requiredFields: RequiredField[] = (npmPkg.environmentVariables ?? [])
+          .filter((e) => e.isRequired)
+          .map((e) => ({ name: e.name, description: e.description, isSecret: e.isSecret }));
+
+        if (requiredFields.length > 0) {
+          setInstallTarget({
+            server,
+            packageLabel: `npm: ${npmPkg.identifier}`,
+            requiredFields,
+            doInstall: async (envValues) => {
+              await doInstallServer(server, ['-y', npmPkg.identifier], envValues);
+            },
+          });
+        } else {
+          doInstallServer(server, ['-y', npmPkg.identifier], {}).catch(() =>
+            showNotification('Failed to install server', 'error')
+          );
+        }
+      } else {
+        // remote
+        const remote = getFirstRemote(server)!;
+        const requiredFields: RequiredField[] = (remote.headers ?? [])
+          .filter((h) => h.isRequired)
+          .map((h) => ({ name: h.name, description: h.description, isSecret: h.isSecret }));
+
+        if (requiredFields.length > 0) {
+          setInstallTarget({
+            server,
+            packageLabel: `remote: ${remote.url}`,
+            requiredFields,
+            doInstall: async (headerValues) => {
+              await doInstallServer(server, ['mcp-remote', remote.url], headerValues);
+            },
+          });
+        } else {
+          doInstallServer(server, ['mcp-remote', remote.url], {}).catch(() =>
+            showNotification('Failed to install server', 'error')
+          );
+        }
+      }
+    },
+    [doInstallServer, showNotification]
+  );
 
   if (!open) return null;
 
   return (
     <>
       {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-black/30 z-[140]"
-        onClick={onClose}
-      />
+      <div className="fixed inset-0 bg-black/30 z-[140]" onClick={onClose} />
 
       {/* Drawer */}
       <div className="fixed inset-y-0 right-0 w-[560px] z-[150] flex flex-col glass-dark border-l border-zinc-800 shadow-2xl shadow-black/40">
@@ -276,40 +332,64 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
           )}
 
           {!loading && !error && servers.map((server) => {
-            const npmPkg = getNpmPackage(server)!;
+            const installType = getInstallType(server);
             const installed = isInstalled(server);
-            const requiredEnvs = (npmPkg.environmentVariables ?? []).filter((e) => e.isRequired);
+            const npmPkg = getNpmPackage(server);
+            const remote = getFirstRemote(server);
+
+            // Collect required field names for warning hints
+            const requiredEnvNames: string[] = installType === 'npm'
+              ? (npmPkg?.environmentVariables ?? []).filter((e) => e.isRequired).map((e) => e.name)
+              : (remote?.headers ?? []).filter((h) => h.isRequired).map((h) => h.name);
 
             return (
-              <div key={server.name} className="glass border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors">
+              <div
+                key={server.name}
+                className="glass border border-zinc-800 rounded-xl p-4 hover:border-zinc-700 transition-colors"
+              >
                 <div className="flex items-start space-x-3">
                   <ServerIcon server={server} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center space-x-2 mb-1">
+                    <div className="flex items-center space-x-2 mb-1 flex-wrap gap-y-1">
                       <span className="text-sm font-semibold text-white truncate">
                         {getServerDisplayName(server)}
                       </span>
-                      <span className="text-xs font-medium text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded flex-shrink-0">
-                        npm
-                      </span>
+                      {/* Type badge */}
+                      {installType === 'npm' && (
+                        <span className="text-xs font-medium text-blue-400 bg-blue-900/30 px-1.5 py-0.5 rounded flex-shrink-0">
+                          npm
+                        </span>
+                      )}
+                      {installType === 'remote' && (
+                        <span className="text-xs font-medium text-purple-400 bg-purple-900/30 px-1.5 py-0.5 rounded flex-shrink-0 flex items-center space-x-1">
+                          <Wifi className="w-3 h-3" />
+                          <span>remote</span>
+                        </span>
+                      )}
                     </div>
                     {server.description && (
                       <p className="text-xs text-zinc-400 line-clamp-2 mb-2">{server.description}</p>
                     )}
-                    {requiredEnvs.length > 0 && (
+                    {requiredEnvNames.length > 0 && (
                       <div className="flex items-center space-x-1 text-xs text-amber-400/80">
                         <AlertCircle className="w-3 h-3 flex-shrink-0" />
                         <span className="truncate">
-                          Requires: {requiredEnvs.map((e) => e.name).join(', ')}
+                          Requires: {requiredEnvNames.join(', ')}
                         </span>
                       </div>
                     )}
                   </div>
+
+                  {/* Action button */}
                   <div className="flex-shrink-0">
                     {installed ? (
                       <div className="flex items-center space-x-1 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-800/50">
                         <Check className="w-3.5 h-3.5 text-green-400" />
                         <span className="text-xs text-green-400 font-medium">Installed</span>
+                      </div>
+                    ) : installType === null ? (
+                      <div className="flex items-center px-3 py-1.5 rounded-lg bg-zinc-900/50 border border-zinc-800">
+                        <span className="text-xs text-zinc-600">Not supported</span>
                       </div>
                     ) : (
                       <button
@@ -338,9 +418,7 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
               <ChevronLeft className="w-4 h-4" />
               <span>Previous</span>
             </button>
-            <span className="text-xs text-zinc-500">
-              Page {cursorStack.length + 1}
-            </span>
+            <span className="text-xs text-zinc-500">Page {cursorStack.length + 1}</span>
             <button
               onClick={handleNextPage}
               disabled={!nextCursor}
@@ -354,19 +432,15 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
       </div>
 
       {/* Install Modal */}
-      {installTarget && (() => {
-        const npmPkg = getNpmPackage(installTarget)!;
-        return (
-          <McpInstallModal
-            server={installTarget}
-            npmPackage={npmPkg}
-            onInstall={async (envValues) => {
-              await installServer(installTarget, envValues);
-            }}
-            onClose={() => setInstallTarget(null)}
-          />
-        );
-      })()}
+      {installTarget && (
+        <McpInstallModal
+          server={installTarget.server}
+          packageLabel={installTarget.packageLabel}
+          requiredFields={installTarget.requiredFields}
+          onInstall={installTarget.doInstall}
+          onClose={() => setInstallTarget(null)}
+        />
+      )}
     </>
   );
 }
