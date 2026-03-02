@@ -97,8 +97,10 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
     doInstall: (values: Record<string, string>) => Promise<void>;
   } | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const currentCursorRef = useRef<string | null>(null);
 
   const fetchServers = useCallback(async (cursor: string | null, search: string) => {
+    currentCursorRef.current = cursor;
     setLoading(true);
     setError(null);
     try {
@@ -163,7 +165,7 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
 
   const handleNextPage = () => {
     if (!nextCursor) return;
-    setCursorStack((prev) => [...prev, prev.length === 0 ? '' : nextCursor]);
+    setCursorStack((prev) => [...prev, currentCursorRef.current ?? '']);
     fetchServers(nextCursor, searchQuery);
   };
 

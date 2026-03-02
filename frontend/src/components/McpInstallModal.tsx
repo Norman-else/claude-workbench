@@ -10,7 +10,7 @@ export interface RequiredField {
 
 interface McpInstallModalProps {
   server: RegistryServer;
-  packageLabel: string;         // 显示用，如 "npm: airtable-mcp-server" 或 "remote: https://..."
+  packageLabel: string;         // Display label e.g. "npm: airtable-mcp-server" or "remote: https://..."
   requiredFields: RequiredField[];
   onInstall: (values: Record<string, string>) => Promise<void>;
   onClose: () => void;
@@ -22,14 +22,17 @@ export function McpInstallModal({ server, packageLabel, requiredFields, onInstal
   );
   const [showSecrets, setShowSecrets] = useState<Record<string, boolean>>({});
   const [installing, setInstalling] = useState(false);
+  const [installError, setInstallError] = useState<string | null>(null);
 
   const canInstall = requiredFields.every((f) => values[f.name]?.trim());
 
   const handleInstall = async () => {
     setInstalling(true);
+    setInstallError(null);
     try {
       await onInstall(values);
-    } finally {
+    } catch (err) {
+      setInstallError(err instanceof Error ? err.message : 'Installation failed. Please try again.');
       setInstalling(false);
     }
   };
@@ -93,6 +96,11 @@ export function McpInstallModal({ server, packageLabel, requiredFields, onInstal
         )}
 
         {/* Actions */}
+        {installError && (
+          <div className="mb-4 px-4 py-3 rounded-xl bg-red-900/30 border border-red-800/50">
+            <p className="text-sm text-red-400">{installError}</p>
+          </div>
+        )}
         <div className="flex justify-end space-x-4">
           <button
             onClick={onClose}

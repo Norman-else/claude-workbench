@@ -172,7 +172,7 @@ export function McpTab({
     try {
       await stopMcpServer(serverName);
       showNotification(`Server "${serverName}" stopped`);
-      setMcpStatuses((prev) => ({ ...prev, [serverName]: { status: 'stopping', running: false } }));
+      setMcpStatuses((prev) => ({ ...prev, [serverName]: { status: 'stopped', running: false } }));
     } catch (error) {
       showNotification(`Failed to stop server: ${error}`, 'error');
     } finally {

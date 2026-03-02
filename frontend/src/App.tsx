@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Check, Command, RefreshCw, Server, Settings, Terminal, Trash2, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
@@ -61,10 +61,16 @@ function App() {
     type: 'success' | 'error';
   }>({ show: false, message: '', type: 'success' });
 
+  const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
+    if (notificationTimerRef.current) {
+      clearTimeout(notificationTimerRef.current);
+    }
     setNotification({ show: true, message, type });
-    setTimeout(() => {
+    notificationTimerRef.current = setTimeout(() => {
       setNotification({ show: false, message: '', type: 'success' });
+      notificationTimerRef.current = null;
     }, 3000);
 
     if (electron.isElectron) {
