@@ -2441,15 +2441,18 @@ app.post('/api/plugins/uninstall', async (req, res) => {
     delete updatedPlugins[key];
     await writeInstalledPlugins({ ...installedData, plugins: updatedPlugins });
 
-    // Also remove from enabledPlugins in settings.json (the CLI's authoritative source)
+    // Also remove from enabledPlugins in settings.json (the CLI's authoritative source).
+    // Use regex line-deletion to avoid touching any other content in the file.
     try {
       const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
-      const settings = JSON.parse(settingsRaw);
-      const enabledPlugins = settings.enabledPlugins ?? {};
-      delete enabledPlugins[key];
-      settings.enabledPlugins = enabledPlugins;
-      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
-    } catch { /* settings.json missing or malformed — ignore */ }
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // Remove the exact line: optional whitespace + "key": true/false + optional trailing comma + newline
+      const linePattern = new RegExp(`^[ \\t]*"${escapedKey}"[ \\t]*:[ \\t]*(true|false),?[ \\t]*(\\r?\\n|$)`, 'm');
+      const updated = settingsRaw.replace(linePattern, '');
+      if (updated !== settingsRaw) {
+        await fs.writeFile(CLAUDE_SETTINGS_PATH, updated, 'utf-8');
+      }
+    } catch { /* settings.json missing or unreadable — ignore */ }
 
     res.json({ success: true, message: `Plugin '${plugin}' uninstalled.` });
   } catch (err) {
