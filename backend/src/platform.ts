@@ -241,7 +241,7 @@ export async function writeSettingsEnv(
   }
   settings.env = envVars;
   await fs.mkdir(path.dirname(settingsPath), { recursive: true });
-  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2), 'utf-8');
+  await fs.writeFile(settingsPath, JSON.stringify(settings, null, 4), 'utf-8');
 }
 
 export async function clearSettingsEnv(settingsPath: string): Promise<void> {
@@ -251,7 +251,7 @@ export async function clearSettingsEnv(settingsPath: string): Promise<void> {
     delete settings.env;
     await fs.writeFile(
       settingsPath,
-      JSON.stringify(settings, null, 2),
+      JSON.stringify(settings, null, 4),
       'utf-8'
     );
   } catch {

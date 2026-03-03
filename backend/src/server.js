@@ -268,7 +268,7 @@ async function writeSettingsEnv(envVars) {
     settings.env = envVars;
 
     // Write back to file (no comments, pure JSON)
-    await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+    await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
     return true;
   } catch (error) {
     console.error('Failed to write settings.json env:', error);
@@ -286,7 +286,7 @@ async function clearSettingsEnv() {
       delete settings.env;
 
       // Write back to file
-      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
     }
     return true;
   } catch (error) {
