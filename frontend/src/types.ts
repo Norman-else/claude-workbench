@@ -121,3 +121,54 @@ export interface RegistryListResponse {
   servers: Array<{ server: RegistryServer; _meta?: Record<string, unknown> }>;
   metadata: { nextCursor?: string; count: number };
 }
+
+export interface MarketplaceSource {
+  source: 'github' | 'git';
+  repo: string;
+}
+
+export interface KnownMarketplace {
+  source: MarketplaceSource;
+  installLocation: string;
+  lastUpdated: string;
+}
+
+export interface MarketplacePlugin {
+  name: string;
+  description?: string;
+  source: string;
+  strict?: boolean;
+  skills?: string[];
+  version?: string;
+  category?: string;
+}
+
+export interface MarketplaceManifest {
+  name: string;
+  description?: string;
+  version?: string;
+  owner?: { name: string; email: string };
+  metadata?: { description: string; version: string };
+  plugins: MarketplacePlugin[];
+}
+
+export interface InstalledPlugin {
+  scope: string;
+  installPath: string;
+  version: string;
+  installedAt: string;
+  lastUpdated?: string;
+  gitCommitSha: string;
+}
+
+export interface InstalledPluginsFile {
+  version: number;
+  plugins: Record<string, InstalledPlugin[]>;
+}
+
+export interface MarketplaceInfo {
+  name: string;
+  manifest: MarketplaceManifest;
+  source: MarketplaceSource;
+  lastUpdated: string;
+}
