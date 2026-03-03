@@ -541,3 +541,12 @@ html[data-theme="light"] .glass-dark .text-zinc-600:hover {
 html[data-theme="light"] .glass-dark .bg-zinc-800 {
   background-color: #e4e4e7 !important; /* zinc-200 */
 }
+html[data-theme="light"] .glass-dark .bg-zinc-900\/50 {
+  background-color: #f4f4f5 !important; /* zinc-100 */
+}
+html[data-theme="light"] .glass-dark .border-zinc-800 {
+  border-color: #d4d4d8 !important; /* zinc-300 */
+}
+html[data-theme="light"] .glass-dark .text-zinc-500 {
+  color: #71717a !important; /* zinc-500 */
+}
