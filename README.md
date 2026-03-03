@@ -1,6 +1,6 @@
 # Claude Workbench
 
-A modern GUI management tool for the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code). It provides a visual interface to manage MCP servers, API credential profiles, custom slash-commands, and agent skills — all without manually editing JSON or shell config files.
+A modern GUI management tool for the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code). It provides a visual interface to manage MCP servers, API credential profiles, custom slash-commands, agent skills, and community plugins — all without manually editing JSON or shell config files.
 
 Available as a **web app** (runs in your browser) or a **desktop app** (native Electron wrapper for Windows and macOS).
 
@@ -26,9 +26,23 @@ Available as a **web app** (runs in your browser) or a **desktop app** (native E
 - Create and manage Claude CLI slash-command scripts stored in `~/.claude/commands/`
 - Full in-app editor for each command file
 
+### Plugin Commands
+- View and browse commands provided by installed plugins
+- Read-only view of plugin command scripts with syntax highlighting
+- Commands tab splits into **My Commands** (user-created) and **Plugin Commands** (from plugins)
+
 ### Skills
 - Create and manage agent skill definitions in SKILL.md format stored in `~/.claude/skills/`
 - Built-in SKILL.md template scaffold with frontmatter, instructions, and examples sections
+- Browse and install plugins from community marketplaces via the Skills Marketplace
+
+### Skills Marketplace
+- Browse plugins from community marketplace repositories hosted on GitHub
+- Add any GitHub repository as a marketplace source with a single URL
+- Install/uninstall plugins with one click — plugins can include commands, skills, and agents
+- Update marketplace to get the latest plugin listings
+- Installed plugins are tracked in `~/.claude/plugins/installed_plugins.json`
+- Marketplace sources are saved in `~/.claude/plugins/known_marketplaces.json`
 
 ### Desktop App Extras
 - System tray with show/hide and quit controls
@@ -161,7 +175,10 @@ The workflow will:
 claude-workbench/
 ├── frontend/               # React SPA (Vite + TypeScript + Tailwind)
 │   └── src/
-│       ├── components/tabs/  # EnvTab, McpTab, CommandsTab, SkillsTab
+│       ├── components/
+│       │   ├── tabs/         # EnvTab, McpTab, CommandsTab, SkillsTab
+│       │   ├── SkillsMarketplace.tsx  # Marketplace drawer UI
+│       │   └── AddMarketplaceModal.tsx # Add marketplace source modal
 │       ├── App.tsx
 │       └── api.ts
 ├── backend/                # Express REST API (Node.js + TypeScript)
@@ -187,6 +204,8 @@ claude-workbench/
 | `~/.claude/commands/*.md` | Custom Claude CLI slash-commands |
 | `~/.claude/skills/<name>/SKILL.md` | Agent skill definitions |
 | `~/.zshrc` / `~/.bashrc` / PowerShell `$PROFILE` | Shell env var blocks (fallback) |
+| `~/.claude/plugins/known_marketplaces.json` | Registered marketplace sources |
+| `~/.claude/plugins/installed_plugins.json` | Installed plugin registry |
 
 ---
 
