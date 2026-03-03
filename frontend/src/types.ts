@@ -172,3 +172,19 @@ export interface MarketplaceInfo {
   source: MarketplaceSource;
   lastUpdated: string;
 }
+
+ export interface PluginContentFile {
+  name: string;      // 文件名不含扩展名，如 "code-review"
+  filename: string;  // 完整文件名，如 "code-review.md"
+}
+
+export interface InstalledPluginDetails {
+  key: string;             // "pluginName@marketplaceName"
+  pluginName: string;
+  marketplaceName: string;
+  installPath: string;
+  version: string;
+  commands: PluginContentFile[];   // commands/ 目录下的 .md 文件
+  skills: PluginContentFile[];     // skills/ 目录下的子目录（含 SKILL.md 的）
+  agents: PluginContentFile[];     // agents/ 目录下的 .md 文件
+}

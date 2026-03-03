@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowLeft, Edit2, Eye, Loader2, Package, Plus, Save, Store, Trash2, Zap } from 'lucide-react';
-import { saveSkill, addMarketplace, installPlugin, uninstallPlugin, updateMarketplace, removeMarketplace } from '../../api';
-import type { Skill, ViewMode, MarketplaceInfo, InstalledPluginsFile } from '../../types';
+import { saveSkill, addMarketplace, installPlugin, uninstallPlugin, updateMarketplace, removeMarketplace, getInstalledPluginDetails } from '../../api';
+import type { Skill, ViewMode, MarketplaceInfo, InstalledPluginsFile, InstalledPluginDetails } from '../../types';
 import { SkillsMarketplace } from '../SkillsMarketplace';
 import { AddMarketplaceModal } from '../AddMarketplaceModal';
 
@@ -25,6 +25,11 @@ export function SkillsTab({ skills, showNotification, loadConfig, requestDelete,
   const [showAddMarketplaceModal, setShowAddMarketplaceModal] = useState(false);
   const [selectedInstalledPlugin, setSelectedInstalledPlugin] = useState<{ key: string; pluginName: string; marketplaceName: string } | null>(null);
   const [uninstallingPlugins, setUninstallingPlugins] = useState<Set<string>>(new Set());
+  const [pluginDetails, setPluginDetails] = useState<InstalledPluginDetails[]>([]);
+
+  useEffect(() => {
+    getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
+  }, [installedPlugins]);
 
   const openSkillDetail = (skill: Skill) => {
     setEditingSkill(skill);
@@ -344,6 +349,7 @@ Show concrete examples of using this Skill."
             {(() => {
               const marketplace = marketplaces.find(m => m.name === selectedInstalledPlugin.marketplaceName);
               const pluginInfo = marketplace?.manifest.plugins?.find(p => p.name === selectedInstalledPlugin.pluginName);
+              const detail = pluginDetails.find(d => d.key === selectedInstalledPlugin.key);
 
               return (
                 <div className="glass border border-zinc-800 rounded-2xl p-8">
@@ -386,6 +392,43 @@ Show concrete examples of using this Skill."
                       <Package className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
                       <p className="text-zinc-400">Marketplace info unavailable</p>
                       <p className="text-xs text-zinc-600 mt-1">The marketplace for this plugin may have been removed</p>
+                    </div>
+                  )}
+
+                  {detail && detail.commands.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-sm font-medium text-zinc-400 mb-3">Commands</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {detail.commands.map((cmd) => (
+                          <span key={cmd.name} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-300">
+                            {cmd.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {detail && detail.skills.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-sm font-medium text-zinc-400 mb-3">Skills</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {detail.skills.map((s) => (
+                          <span key={s.name} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-300">
+                            {s.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {detail && detail.agents.length > 0 && (
+                    <div className="mt-6">
+                      <h3 className="text-sm font-medium text-zinc-400 mb-3">Agents</h3>
+                      <div className="flex flex-wrap gap-2">
+                        {detail.agents.map((agent) => (
+                          <span key={agent.name} className="inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-zinc-800 border border-zinc-700 text-zinc-300">
+                            {agent.name}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
 

@@ -8,6 +8,7 @@ import type {
   ShellConfigContentResponse,
   Skill,
   MarketplaceInfo,
+  InstalledPluginDetails,
 } from './types';
 
 async function parseError(response: Response): Promise<string> {
@@ -199,4 +200,8 @@ export async function uninstallPlugin(marketplace: string, plugin: string): Prom
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ marketplace, plugin }),
   });
+}
+
+export function getInstalledPluginDetails(): Promise<InstalledPluginDetails[]> {
+  return requestJson('/api/plugins/installed-details');
 }

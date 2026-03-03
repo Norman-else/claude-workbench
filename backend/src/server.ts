@@ -1497,6 +1497,89 @@ app.post('/api/plugins/uninstall', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/plugins/installed-details', async (_req: Request, res: Response) => {
+  try {
+    const installedData = await readInstalledPlugins();
+    const results: Array<{
+      key: string;
+      pluginName: string;
+      marketplaceName: string;
+      installPath: string;
+      version: string;
+      commands: Array<{ name: string; filename: string }>;
+      skills: Array<{ name: string; filename: string }>;
+      agents: Array<{ name: string; filename: string }>;
+    }> = [];
+
+    for (const [key, records] of Object.entries(installedData.plugins)) {
+      if (!records || records.length === 0) continue;
+
+      const atIndex = key.lastIndexOf('@');
+      if (atIndex <= 0) continue;
+      const pluginName = key.substring(0, atIndex);
+      const marketplaceName = key.substring(atIndex + 1);
+
+      const latest = records[records.length - 1] as { installPath: string; version: string };
+      const installPath = latest.installPath;
+      const version = latest.version || '';
+
+      try {
+        await fs.access(installPath);
+      } catch {
+        continue;
+      }
+
+      const commands: Array<{ name: string; filename: string }> = [];
+      const skills: Array<{ name: string; filename: string }> = [];
+      const agents: Array<{ name: string; filename: string }> = [];
+
+      // Scan commands/
+      try {
+        const commandsDir = path.join(installPath, 'commands');
+        const commandEntries = await fs.readdir(commandsDir);
+        for (const entry of commandEntries) {
+          if (entry.endsWith('.md')) {
+            commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      // Scan skills/
+      try {
+        const skillsDir = path.join(installPath, 'skills');
+        const skillEntries = await fs.readdir(skillsDir);
+        for (const entry of skillEntries) {
+          const entryPath = path.join(skillsDir, entry);
+          const stat = await fs.stat(entryPath);
+          if (stat.isDirectory()) {
+            try {
+              await fs.access(path.join(entryPath, 'SKILL.md'));
+              skills.push({ name: entry, filename: 'SKILL.md' });
+            } catch { /* no SKILL.md in this subdir */ }
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      // Scan agents/
+      try {
+        const agentsDir = path.join(installPath, 'agents');
+        const agentEntries = await fs.readdir(agentsDir);
+        for (const entry of agentEntries) {
+          if (entry.endsWith('.md')) {
+            agents.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      results.push({ key, pluginName, marketplaceName, installPath, version, commands, skills, agents });
+    }
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ============================================================
 // Start
 // ============================================================
