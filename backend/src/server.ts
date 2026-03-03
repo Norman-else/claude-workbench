@@ -1505,9 +1505,10 @@ app.post('/api/plugins/uninstall', async (req: Request, res: Response) => {
     try {
       const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
       const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      // Remove the exact line: optional whitespace + "key": true/false + optional trailing comma + newline
       const linePattern = new RegExp(`^[ \\t]*"${escapedKey}"[ \\t]*:[ \\t]*(true|false),?[ \\t]*(\\r?\\n|$)`, 'm');
-      const updated = settingsRaw.replace(linePattern, '');
+      let updated = settingsRaw.replace(linePattern, '');
+      // Fix trailing comma on the new last entry inside enabledPlugins (makes JSON invalid)
+      updated = updated.replace(/(true|false),(?=\s*\n[ \t]*})/g, '$1');
       if (updated !== settingsRaw) {
         await fs.writeFile(CLAUDE_SETTINGS_PATH, updated, 'utf-8');
       }
