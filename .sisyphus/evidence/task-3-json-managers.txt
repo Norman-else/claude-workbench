@@ -1,0 +1,17 @@
+
+> claude-workbench-frontend@1.0.0 build
+> tsc && vite build
+
+vite v5.4.21 building for production...
+transforming...
+✓ 1375 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                   0.47 kB │ gzip:  0.30 kB
+dist/assets/index-CeQC5B3w.css   33.23 kB │ gzip:  6.59 kB
+dist/assets/index-BJLhnAv_.js   301.40 kB │ gzip: 82.07 kB
+✓ built in 1.32s
+
+--- Grep verification ---
+/Users/normanzuo/PersonalRepos/claude-workbench/backend/src/server.ts:7
+/Users/normanzuo/PersonalRepos/claude-workbench/backend/src/server.js:6

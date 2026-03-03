@@ -40,6 +40,11 @@ const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+const PLUGINS_DIR = path.join(HOME_DIR, '.claude', 'plugins');
+const MARKETPLACES_DIR = path.join(PLUGINS_DIR, 'marketplaces');
+const CACHE_DIR = path.join(PLUGINS_DIR, 'cache');
+const KNOWN_MARKETPLACES_PATH = path.join(PLUGINS_DIR, 'known_marketplaces.json');
+const INSTALLED_PLUGINS_PATH = path.join(PLUGINS_DIR, 'installed_plugins.json');
 
 // ============================================================
 // Git Helpers
@@ -134,6 +139,63 @@ function extractMarketplaceName(url) {
   return segments[segments.length - 1] || url;
 }
 
+// ============================================================
+// Marketplace JSON Managers
+// ============================================================
+
+async function ensurePluginsDirs() {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.mkdir(MARKETPLACES_DIR, { recursive: true });
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+}
+
+async function readKnownMarketplaces() {
+  try {
+    await fs.mkdir(PLUGINS_DIR, { recursive: true });
+    const raw = await fs.readFile(KNOWN_MARKETPLACES_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return {};
+  }
+}
+
+async function writeKnownMarketplaces(data) {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.writeFile(KNOWN_MARKETPLACES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readInstalledPlugins() {
+  try {
+    const raw = await fs.readFile(INSTALLED_PLUGINS_PATH, 'utf-8');
+    return JSON.parse(raw);
+  } catch {
+    return { version: 2, plugins: {} };
+  }
+}
+
+async function writeInstalledPlugins(data) {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.writeFile(INSTALLED_PLUGINS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readMarketplaceManifest(marketplaceName) {
+  try {
+    const manifestPath = path.join(MARKETPLACES_DIR, marketplaceName, '.claude-plugin', 'marketplace.json');
+    const raw = await fs.readFile(manifestPath, 'utf-8');
+    const manifest = JSON.parse(raw);
+    // Validate: no path traversal in skills
+    for (const plugin of manifest.plugins || []) {
+      for (const skill of plugin.skills || []) {
+        if (skill.includes('..') || path.isAbsolute(skill)) {
+          throw new Error(`Path traversal detected in skill path: ${skill}`);
+        }
+      }
+    }
+    return manifest;
+  } catch {
+    return null;
+  }
+}
 
 // Platform-specific configuration
 const IS_WINDOWS = os.platform() === 'win32';

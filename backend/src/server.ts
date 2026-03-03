@@ -198,6 +198,66 @@ function extractMarketplaceName(url: string): string {
 }
 
 // ============================================================
+// Marketplace JSON Managers
+// ============================================================
+
+async function ensurePluginsDirs(): Promise<void> {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.mkdir(MARKETPLACES_DIR, { recursive: true });
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+}
+
+async function readKnownMarketplaces(): Promise<Record<string, { source: { source: string; repo: string }; installLocation: string; lastUpdated: string }>> {
+  try {
+    await fs.mkdir(PLUGINS_DIR, { recursive: true });
+    const raw = await fs.readFile(KNOWN_MARKETPLACES_PATH, 'utf-8');
+    return JSON.parse(raw) as Record<string, { source: { source: string; repo: string }; installLocation: string; lastUpdated: string }>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeKnownMarketplaces(data: Record<string, unknown>): Promise<void> {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.writeFile(KNOWN_MARKETPLACES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readInstalledPlugins(): Promise<{ version: number; plugins: Record<string, unknown[]> }> {
+  try {
+    const raw = await fs.readFile(INSTALLED_PLUGINS_PATH, 'utf-8');
+    return JSON.parse(raw) as { version: number; plugins: Record<string, unknown[]> };
+  } catch {
+    return { version: 2, plugins: {} };
+  }
+}
+
+async function writeInstalledPlugins(data: { version: number; plugins: Record<string, unknown[]> }): Promise<void> {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.writeFile(INSTALLED_PLUGINS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readMarketplaceManifest(marketplaceName: string): Promise<{ name: string; description?: string; version?: string; owner?: { name: string; email: string }; metadata?: { description: string; version: string }; plugins: Array<{ name: string; description?: string; source: string; strict?: boolean; skills?: string[]; version?: string; category?: string }> } | null> {
+  try {
+    const manifestPath = path.join(MARKETPLACES_DIR, marketplaceName, '.claude-plugin', 'marketplace.json');
+    const raw = await fs.readFile(manifestPath, 'utf-8');
+    const manifest = JSON.parse(raw) as { name: string; plugins: Array<{ name: string; source: string; skills?: string[] }> };
+    // Validate: no path traversal in skills
+    for (const plugin of manifest.plugins || []) {
+      for (const skill of plugin.skills || []) {
+        if (skill.includes('..') || path.isAbsolute(skill)) {
+          throw new Error(`Path traversal detected in skill path: ${skill}`);
+        }
+      }
+      if (plugin.source && (plugin.source.includes('..') || (path.isAbsolute(plugin.source) && !plugin.source.startsWith('./')))) {
+        // Allow "./" relative paths
+      }
+    }
+    return manifest as ReturnType<typeof readMarketplaceManifest> extends Promise<infer T> ? Exclude<T, null> : never;
+  } catch {
+    return null;
+  }
+}
+// ============================================================
 // MCP process manager state
 // ============================================================
 
