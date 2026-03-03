@@ -41,6 +41,99 @@ const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
 
+// ============================================================
+// Git Helpers
+// ============================================================
+
+let gitAvailableCache = null;
+
+async function checkGitAvailable() {
+  if (gitAvailableCache !== null) return gitAvailableCache;
+  try {
+    await new Promise((resolve, reject) => {
+      const child = exec('git --version', (err) => (err ? reject(err) : resolve()));
+      child.on('error', reject);
+    });
+    gitAvailableCache = true;
+  } catch {
+    gitAvailableCache = false;
+  }
+  return gitAvailableCache;
+}
+
+async function gitCloneShallow(url, destDir) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn('git', ['clone', '--depth', '1', url, destDir], {
+        stdio: 'pipe',
+        signal: controller.signal,
+      });
+      child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`git clone exited with code ${code}`))));
+      child.on('error', reject);
+    });
+  } catch (err) {
+    try { await fs.rm(destDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function gitPull(repoDir) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    await new Promise((resolve, reject) => {
+      const child = spawn('git', ['-C', repoDir, 'pull'], {
+        stdio: 'pipe',
+        signal: controller.signal,
+      });
+      child.on('close', async (code) => {
+        if (code === 0) { resolve(); return; }
+        try {
+          await new Promise((res2, rej2) => {
+            const reset = spawn('git', ['-C', repoDir, 'reset', '--hard', 'origin/HEAD'], { stdio: 'pipe' });
+            reset.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git reset exited ${c}`))));
+            reset.on('error', rej2);
+          });
+          await new Promise((res2, rej2) => {
+            const pull2 = spawn('git', ['-C', repoDir, 'pull'], { stdio: 'pipe' });
+            pull2.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git pull retry exited ${c}`))));
+            pull2.on('error', rej2);
+          });
+          resolve();
+        } catch (retryErr) {
+          reject(retryErr);
+        }
+      });
+      child.on('error', reject);
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getGitCommitSha(repoDir) {
+  const { stdout } = await execPromise(`git -C "${repoDir}" rev-parse --short HEAD`);
+  return stdout.trim();
+}
+
+function normalizeGitUrl(input) {
+  if (/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(input)) {
+    const repo = input.endsWith('.git') ? input : `${input}.git`;
+    return `https://github.com/${repo}`;
+  }
+  return input;
+}
+
+function extractMarketplaceName(url) {
+  const normalized = normalizeGitUrl(url);
+  const segments = normalized.replace(/\.git$/, '').split('/');
+  return segments[segments.length - 1] || url;
+}
+
 
 // Platform-specific configuration
 const IS_WINDOWS = os.platform() === 'win32';

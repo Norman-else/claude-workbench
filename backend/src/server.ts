@@ -89,7 +89,113 @@ const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+const PLUGINS_DIR = path.join(HOME_DIR, '.claude', 'plugins');
+const MARKETPLACES_DIR = path.join(PLUGINS_DIR, 'marketplaces');
+const CACHE_DIR = path.join(PLUGINS_DIR, 'cache');
+const KNOWN_MARKETPLACES_PATH = path.join(PLUGINS_DIR, 'known_marketplaces.json');
+const INSTALLED_PLUGINS_PATH = path.join(PLUGINS_DIR, 'installed_plugins.json');
 const PORT = 3001;
+
+// ============================================================
+// Git Helpers
+// ============================================================
+
+let gitAvailableCache: boolean | null = null;
+
+async function checkGitAvailable(): Promise<boolean> {
+  if (gitAvailableCache !== null) return gitAvailableCache;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = exec('git --version', (err) => (err ? reject(err) : resolve()));
+      child.on('error', reject);
+    });
+    gitAvailableCache = true;
+  } catch {
+    gitAvailableCache = false;
+  }
+  return gitAvailableCache;
+}
+
+async function gitCloneShallow(url: string, destDir: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('git', ['clone', '--depth', '1', url, destDir], {
+        stdio: 'pipe',
+        signal: controller.signal,
+      });
+      child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`git clone exited with code ${code}`))));
+      child.on('error', reject);
+    });
+  } catch (err) {
+    // Clean up partial clone on failure
+    try { await fs.rm(destDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function gitPull(repoDir: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('git', ['-C', repoDir, 'pull'], {
+        stdio: 'pipe',
+        signal: controller.signal,
+      });
+      child.on('close', async (code) => {
+        if (code === 0) { resolve(); return; }
+        // On conflict, hard reset and retry
+        try {
+          await new Promise<void>((res2, rej2) => {
+            const reset = spawn('git', ['-C', repoDir, 'reset', '--hard', 'origin/HEAD'], { stdio: 'pipe' });
+            reset.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git reset exited ${c}`))));
+            reset.on('error', rej2);
+          });
+          await new Promise<void>((res2, rej2) => {
+            const pull2 = spawn('git', ['-C', repoDir, 'pull'], { stdio: 'pipe' });
+            pull2.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git pull retry exited ${c}`))));
+            pull2.on('error', rej2);
+          });
+          resolve();
+        } catch (retryErr) {
+          reject(retryErr);
+        }
+      });
+      child.on('error', reject);
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getGitCommitSha(repoDir: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    exec(`git -C "${repoDir}" rev-parse --short HEAD`, (err, stdout) => {
+      if (err) { reject(err); return; }
+      resolve(stdout.trim());
+    });
+  });
+}
+
+function normalizeGitUrl(input: string): string {
+  // If it matches owner/repo pattern (no protocol, no dots before slash), convert to GitHub URL
+  if (/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(input)) {
+    const repo = input.endsWith('.git') ? input : `${input}.git`;
+    return `https://github.com/${repo}`;
+  }
+  return input;
+}
+
+function extractMarketplaceName(url: string): string {
+  // Get last path segment, remove .git suffix
+  const normalized = normalizeGitUrl(url);
+  const segments = normalized.replace(/\.git$/, '').split('/');
+  return segments[segments.length - 1] || url;
+}
 
 // ============================================================
 // MCP process manager state
