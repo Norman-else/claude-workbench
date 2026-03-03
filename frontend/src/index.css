@@ -509,3 +509,35 @@ html[data-theme="light"] .refresh-modal .text-green-400 {
 html[data-theme="light"] .refresh-modal .text-red-400 {
   color: #dc2626 !important;
 }
+
+/* UpdateNotification toast - light mode */
+html[data-theme="light"] .glass-dark .text-green-300 {
+  color: #15803d !important; /* green-700 */
+}
+html[data-theme="light"] .glass-dark .bg-green-900\/50 {
+  background-color: #f0fdf4 !important; /* green-50 */
+}
+html[data-theme="light"] .glass-dark .hover\:bg-green-800\/50:hover {
+  background-color: #dcfce7 !important; /* green-100 */
+}
+html[data-theme="light"] .glass-dark .border-green-700 {
+  border-color: #86efac !important; /* green-300 */
+}
+html[data-theme="light"] .glass-dark .text-white {
+  color: #18181b !important; /* zinc-900 */
+}
+html[data-theme="light"] .glass-dark .text-zinc-400 {
+  color: #71717a !important; /* zinc-500 */
+}
+html[data-theme="light"] .glass-dark .text-zinc-300 {
+  color: #52525b !important; /* zinc-600 */
+}
+html[data-theme="light"] .glass-dark .text-zinc-600 {
+  color: #a1a1aa !important; /* zinc-400 */
+}
+html[data-theme="light"] .glass-dark .text-zinc-600:hover {
+  color: #52525b !important; /* zinc-600 */
+}
+html[data-theme="light"] .glass-dark .bg-zinc-800 {
+  background-color: #e4e4e7 !important; /* zinc-200 */
+}
