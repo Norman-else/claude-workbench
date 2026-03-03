@@ -1,20 +1,28 @@
 import { useState } from 'react';
-import { ArrowLeft, Edit2, Plus, Save, Trash2, Zap } from 'lucide-react';
-import { saveSkill } from '../../api';
-import type { Skill, ViewMode } from '../../types';
+import { ArrowLeft, Edit2, Package, Plus, Save, Store, Trash2, Zap } from 'lucide-react';
+import { saveSkill, addMarketplace, installPlugin, uninstallPlugin, updateMarketplace, removeMarketplace } from '../../api';
+import type { Skill, ViewMode, MarketplaceInfo, InstalledPluginsFile } from '../../types';
+import { SkillsMarketplace } from '../SkillsMarketplace';
+import { AddMarketplaceModal } from '../AddMarketplaceModal';
 
 interface SkillsTabProps {
   skills: Skill[];
   showNotification: (message: string, type?: 'success' | 'error') => void;
   loadConfig: (showProgress?: boolean) => Promise<void>;
   requestDelete: (name: string) => void;
+  marketplaces?: MarketplaceInfo[];
+  installedPlugins?: InstalledPluginsFile;
+  onRefreshMarketplaces?: () => Promise<void>;
 }
 
-export function SkillsTab({ skills, showNotification, loadConfig, requestDelete }: SkillsTabProps) {
+export function SkillsTab({ skills, showNotification, loadConfig, requestDelete, marketplaces = [], installedPlugins = { version: 1, plugins: {} }, onRefreshMarketplaces = async () => {} }: SkillsTabProps) {
   const [skillViewMode, setSkillViewMode] = useState<ViewMode>('list');
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [showAddSkillModal, setShowAddSkillModal] = useState(false);
   const [newSkillForm, setNewSkillForm] = useState<{ name: string; content: string }>({ name: '', content: '' });
+  const [skillsView, setSkillsView] = useState<'personal' | 'marketplace'>('personal');
+  const [showMarketplaceDrawer, setShowMarketplaceDrawer] = useState(false);
+  const [showAddMarketplaceModal, setShowAddMarketplaceModal] = useState(false);
 
   const openSkillDetail = (skill: Skill) => {
     setEditingSkill(skill);
@@ -81,10 +89,53 @@ Show concrete examples of using this Skill.
     setNewSkillForm({ ...newSkillForm, content: template });
   };
 
+  const handleAddMarketplace = async (url: string) => {
+    await addMarketplace(url);
+    await onRefreshMarketplaces();
+  };
+
+  const handleInstallPlugin = async (marketplace: string, plugin: string) => {
+    await installPlugin(marketplace, plugin);
+    await onRefreshMarketplaces();
+  };
+
+  const handleUninstallPlugin = async (marketplace: string, plugin: string) => {
+    await uninstallPlugin(marketplace, plugin);
+    await onRefreshMarketplaces();
+  };
+
+  const handleUpdateMarketplace = async (name: string) => {
+    await updateMarketplace(name);
+    await onRefreshMarketplaces();
+  };
+
+  const handleRemoveMarketplace = async (name: string) => {
+    await removeMarketplace(name);
+    await onRefreshMarketplaces();
+  };
+
   return (
     <>
       <div className="p-8">
-        {skillViewMode === 'list' ? (
+        {/* Tab switcher */}
+        <div className="flex items-center space-x-1 glass border border-zinc-800 rounded-xl p-1 mb-6 titlebar-no-drag w-fit">
+          <button
+            onClick={() => setSkillsView('personal')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${skillsView === 'personal' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+          >
+            Personal Skills
+          </button>
+          <button
+            onClick={() => setSkillsView('marketplace')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${skillsView === 'marketplace' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+          >
+            Marketplace Skills
+          </button>
+        </div>
+
+        {skillsView === 'personal' ? (
+          <>
+            {skillViewMode === 'list' ? (
           <div>
             <div className="flex items-center justify-between mb-8 titlebar-no-drag">
               <div>
@@ -245,6 +296,59 @@ Show concrete examples of using this Skill."
             </div>
           </div>
         )}
+          </>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+              <div>
+                <h2 className="text-3xl font-bold text-white mb-2">Marketplace Skills</h2>
+                <p className="text-gray-400">Browse and install skills from community marketplaces</p>
+              </div>
+              <button
+                onClick={() => setShowMarketplaceDrawer(true)}
+                className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
+              >
+                <Store className="w-5 h-5 text-zinc-100" />
+                <span className="text-white font-medium">Browse Marketplace</span>
+              </button>
+            </div>
+
+            {Object.keys(installedPlugins.plugins).length === 0 ? (
+              <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                <Store className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                <p className="text-gray-400 mb-4">No marketplace skills installed</p>
+                <button
+                  onClick={() => setShowMarketplaceDrawer(true)}
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                >
+                  <Plus className="w-5 h-5 text-zinc-100" />
+                  <span className="text-white font-medium">Browse Marketplace</span>
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {Object.entries(installedPlugins.plugins).map(([key]) => {
+                  const [pluginName, marketplaceName] = key.split('@');
+                  return (
+                    <div key={key} className="glass border border-zinc-800 rounded-2xl p-6 h-[200px] flex flex-col">
+                      <div className="flex items-center space-x-2 mb-4">
+                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                        <span className="text-xs font-medium text-zinc-300">Installed</span>
+                      </div>
+                      <div className="flex items-start mb-4">
+                        <div className="p-3 rounded-xl bg-zinc-800/50">
+                          <Package className="w-6 h-6 text-zinc-100" />
+                        </div>
+                      </div>
+                      <h3 className="text-base font-bold text-white mb-1">{pluginName}</h3>
+                      <p className="text-xs text-zinc-500 mt-auto">{marketplaceName}</p>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+        )}
       </div>
 
       {showAddSkillModal && (
@@ -315,6 +419,26 @@ Show concrete examples of using this Skill."
           </div>
         </div>
       )}
+
+      <SkillsMarketplace
+        open={showMarketplaceDrawer}
+        onClose={() => setShowMarketplaceDrawer(false)}
+        marketplaces={marketplaces}
+        installedPlugins={installedPlugins}
+        onInstall={handleInstallPlugin}
+        onUninstall={handleUninstallPlugin}
+        onAddMarketplace={() => { setShowMarketplaceDrawer(false); setShowAddMarketplaceModal(true); }}
+        onUpdateMarketplace={handleUpdateMarketplace}
+        onRemoveMarketplace={handleRemoveMarketplace}
+        showNotification={showNotification}
+      />
+
+      <AddMarketplaceModal
+        open={showAddMarketplaceModal}
+        onClose={() => setShowAddMarketplaceModal(false)}
+        onAdd={handleAddMarketplace}
+        showNotification={showNotification}
+      />
     </>
   );
 }
