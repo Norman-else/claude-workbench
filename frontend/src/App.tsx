@@ -426,6 +426,7 @@ function App() {
               showNotification={showNotification}
               loadConfig={loadConfig}
               requestDelete={requestDelete}
+              installedPlugins={installedPlugins}
             />
           )}
 

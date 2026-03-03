@@ -1,20 +1,34 @@
-import { useState } from 'react';
-import { ArrowLeft, Command, Edit2, Plus, Save, Trash2 } from 'lucide-react';
-import { saveCommand } from '../../api';
-import type { CommandFile, ViewMode } from '../../types';
+import { useState, useEffect } from 'react';
+import { ArrowLeft, Command, Edit2, Eye, Package, Plus, Save, Trash2 } from 'lucide-react';
+import { saveCommand, getInstalledPluginDetails, getPluginCommandContent } from '../../api';
+import type { CommandFile, InstalledPluginDetails, InstalledPluginsFile, ViewMode } from '../../types';
 
 interface CommandsTabProps {
   commands: CommandFile[];
   showNotification: (message: string, type?: 'success' | 'error') => void;
   loadConfig: (showProgress?: boolean) => Promise<void>;
   requestDelete: (name: string) => void;
+  installedPlugins?: InstalledPluginsFile;
 }
 
-export function CommandsTab({ commands, showNotification, loadConfig, requestDelete }: CommandsTabProps) {
+export function CommandsTab({ commands, showNotification, loadConfig, requestDelete, installedPlugins }: CommandsTabProps) {
   const [commandViewMode, setCommandViewMode] = useState<ViewMode>('list');
   const [editingCommand, setEditingCommand] = useState<CommandFile | null>(null);
   const [showAddCommandModal, setShowAddCommandModal] = useState(false);
   const [newCommandForm, setNewCommandForm] = useState<{ name: string; content: string }>({ name: '', content: '' });
+  const [commandsView, setCommandsView] = useState<'my' | 'plugin'>('my');
+  const [pluginDetails, setPluginDetails] = useState<InstalledPluginDetails[]>([]);
+  const [viewingPluginCommand, setViewingPluginCommand] = useState<{
+    pluginKey: string;
+    pluginName: string;
+    marketplaceName: string;
+    name: string;
+    content: string;
+  } | null>(null);
+
+  useEffect(() => {
+    getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
+  }, [installedPlugins]);
 
   const openCommandDetail = (commandName: string) => {
     const cmd = commands.find((c) => c.name === commandName);
@@ -54,147 +68,285 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
     }
   };
 
+  const handleViewPluginCommand = async (detail: InstalledPluginDetails, cmd: { name: string; filename: string }) => {
+    try {
+      const { content } = await getPluginCommandContent(detail.installPath, cmd.filename);
+      setViewingPluginCommand({
+        pluginKey: detail.key,
+        pluginName: detail.pluginName,
+        marketplaceName: detail.marketplaceName,
+        name: cmd.name,
+        content,
+      });
+    } catch {
+      showNotification('Failed to load command content', 'error');
+    }
+  };
+
   return (
     <>
       <div className="p-8">
-        {commandViewMode === 'list' ? (
-          <div>
-            <div className="flex items-center justify-between mb-8 titlebar-no-drag">
-              <div>
-                <h2 className="text-3xl font-bold  text-white mb-2">
-                  Custom Commands
-                </h2>
-                <p className="text-gray-400">Manage your custom command scripts</p>
-              </div>
-              <div>
-                <button
-                  onClick={() => setShowAddCommandModal(true)}
-                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
-                >
-                  <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
-                  <span className="text-white font-medium">Add Command</span>
-                </button>
-              </div>
-            </div>
+        {/* Tab switcher */}
+        <div className="flex items-center space-x-1 glass border border-zinc-800 rounded-xl p-1 mb-6 titlebar-no-drag w-fit">
+          <button
+            onClick={() => setCommandsView('my')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${commandsView === 'my' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+          >
+            My Commands
+          </button>
+          <button
+            onClick={() => setCommandsView('plugin')}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${commandsView === 'plugin' ? 'bg-zinc-700 text-white' : 'text-zinc-400 hover:text-white'}`}
+          >
+            Plugin Commands
+          </button>
+        </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {commands.map((cmd) => (
-                <div
-                  key={cmd.name}
-                  className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
-                  onClick={() => openCommandDetail(cmd.name)}
-                >
-                  <div className="flex items-center space-x-2 mb-4">
-                    <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                    <span className="text-xs font-medium text-zinc-300">Command</span>
+        {commandsView === 'my' ? (
+          <>
+            {commandViewMode === 'list' ? (
+              <div>
+                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                  <div>
+                    <h2 className="text-3xl font-bold  text-white mb-2">
+                      Custom Commands
+                    </h2>
+                    <p className="text-gray-400">Manage your custom command scripts</p>
                   </div>
+                  <div>
+                    <button
+                      onClick={() => setShowAddCommandModal(true)}
+                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
+                    >
+                      <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
+                      <span className="text-white font-medium">Add Command</span>
+                    </button>
+                  </div>
+                </div>
 
-                  <div className="flex items-start mb-4">
-                    <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
-                      <Command className="w-6 h-6 text-zinc-100" />
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {commands.map((cmd) => (
+                    <div
+                      key={cmd.name}
+                      className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
+                      onClick={() => openCommandDetail(cmd.name)}
+                    >
+                      <div className="flex items-center space-x-2 mb-4">
+                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
+                        <span className="text-xs font-medium text-zinc-300">Command</span>
+                      </div>
+
+                      <div className="flex items-start mb-4">
+                        <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
+                          <Command className="w-6 h-6 text-zinc-100" />
+                        </div>
+                      </div>
+
+                      <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{cmd.name.replace(/\.md$/, '')}</h3>
+
+                      <div className="space-y-2 text-sm mb-4 flex-1">
+                        <p className="text-gray-400 line-clamp-3 font-mono text-xs">{cmd.content.substring(0, 100)}...</p>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openCommandDetail(cmd.name);
+                          }}
+                          className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                        >
+                          <Edit2 className="w-4 h-4 text-zinc-100" />
+                          <span className="text-xs text-white font-medium">Edit</span>
+                        </button>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            requestDelete(cmd.name);
+                          }}
+                          className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
+                          data-tooltip="Delete command"
+                        >
+                          <Trash2 className="w-4 h-4 text-red-400" />
+                        </button>
+                      </div>
                     </div>
-                  </div>
+                  ))}
 
-                  <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{cmd.name.replace(/\.md$/, '')}</h3>
-
-                  <div className="space-y-2 text-sm mb-4 flex-1">
-                    <p className="text-gray-400 line-clamp-3 font-mono text-xs">{cmd.content.substring(0, 100)}...</p>
-                  </div>
-
-                  <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        openCommandDetail(cmd.name);
-                      }}
-                      className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                    >
-                      <Edit2 className="w-4 h-4 text-zinc-100" />
-                      <span className="text-xs text-white font-medium">Edit</span>
-                    </button>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        requestDelete(cmd.name);
-                      }}
-                      className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
-                      data-tooltip="Delete command"
-                    >
-                      <Trash2 className="w-4 h-4 text-red-400" />
-                    </button>
-                  </div>
+                  {commands.length === 0 && (
+                    <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
+                      <Command className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 mb-4">No custom commands yet</p>
+                      <button
+                        onClick={() => setShowAddCommandModal(true)}
+                        className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                      >
+                        <Plus className="w-5 h-5 text-zinc-100" />
+                        <span className="text-white font-medium">Create Your First Command</span>
+                      </button>
+                    </div>
+                  )}
                 </div>
-              ))}
-
-              {commands.length === 0 && (
-                <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
-                  <Command className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-400 mb-4">No custom commands yet</p>
-                  <button
-                    onClick={() => setShowAddCommandModal(true)}
-                    className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-                  >
-                    <Plus className="w-5 h-5 text-zinc-100" />
-                    <span className="text-white font-medium">Create Your First Command</span>
-                  </button>
-                </div>
-              )}
-            </div>
-          </div>
-        ) : (
-          <div>
-            <div className="flex items-center space-x-4 mb-8 relative z-[60]">
-              <button
-                onClick={() => {
-                  setCommandViewMode('list');
-                  setEditingCommand(null);
-                }}
-                className="p-2 rounded-lg hover:bg-zinc-800 transition-colors titlebar-no-drag"
-              >
-                <ArrowLeft className="w-6 h-6 text-zinc-100" />
-              </button>
-              <div>
-                <h2 className="text-3xl font-bold  text-white">
-                  {editingCommand?.name.replace(/\.md$/, '')}
-                </h2>
-                <p className="text-gray-400">Edit command content</p>
               </div>
-            </div>
-
-            <div className="glass border border-zinc-800 rounded-2xl p-8">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Command Content</label>
-                  <textarea
-                    value={editingCommand?.content || ''}
-                    onChange={(e) => setEditingCommand((prev) => (prev ? { ...prev, content: e.target.value } : null))}
-                    className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
-                    rows={20}
-                    placeholder="Enter your command script here..."
-                  />
-                </div>
-
-                <div className="flex justify-end space-x-4 pt-6 border-t border-zinc-800">
+            ) : (
+              <div>
+                <div className="flex items-center space-x-4 mb-8 relative z-[60]">
                   <button
                     onClick={() => {
                       setCommandViewMode('list');
                       setEditingCommand(null);
                     }}
-                    className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                    className="p-2 rounded-lg hover:bg-zinc-800 transition-colors titlebar-no-drag"
                   >
-                    Cancel
+                    <ArrowLeft className="w-6 h-6 text-zinc-100" />
                   </button>
-                  <button
-                    onClick={saveCommandDetail}
-                    className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
-                  >
-                    <Save className="w-4 h-4" />
-                    <span>Save Changes</span>
-                  </button>
+                  <div>
+                    <h2 className="text-3xl font-bold  text-white">
+                      {editingCommand?.name.replace(/\.md$/, '')}
+                    </h2>
+                    <p className="text-gray-400">Edit command content</p>
+                  </div>
+                </div>
+
+                <div className="glass border border-zinc-800 rounded-2xl p-8">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Command Content</label>
+                      <textarea
+                        value={editingCommand?.content || ''}
+                        onChange={(e) => setEditingCommand((prev) => (prev ? { ...prev, content: e.target.value } : null))}
+                        className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
+                        rows={20}
+                        placeholder="Enter your command script here..."
+                      />
+                    </div>
+
+                    <div className="flex justify-end space-x-4 pt-6 border-t border-zinc-800">
+                      <button
+                        onClick={() => {
+                          setCommandViewMode('list');
+                          setEditingCommand(null);
+                        }}
+                        className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={saveCommandDetail}
+                        className="px-6 py-3 rounded-xl bg-white text-black hover:bg-zinc-200 font-medium hover:shadow-lg hover:shadow-black/40 transition-all flex items-center space-x-2"
+                      >
+                        <Save className="w-4 h-4" />
+                        <span>Save Changes</span>
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
-            </div>
-          </div>
+            )}
+          </>
+        ) : (
+          <>
+            {viewingPluginCommand === null ? (
+              <div>
+                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                  <div>
+                    <h2 className="text-3xl font-bold  text-white mb-2">
+                      Plugin Commands
+                    </h2>
+                    <p className="text-gray-400">Commands from installed plugins</p>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {pluginDetails.flatMap((detail) =>
+                    detail.commands.map((cmd) => (
+                      <div
+                        key={`${detail.key}-${cmd.filename}`}
+                        className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
+                        onClick={() => handleViewPluginCommand(detail, cmd)}
+                      >
+                        <div className="flex items-center space-x-2 mb-4">
+                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
+                          <span className="text-xs font-medium text-zinc-300">Plugin</span>
+                        </div>
+
+                        <div className="flex items-start mb-4">
+                          <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
+                            <Package className="w-6 h-6 text-zinc-100" />
+                          </div>
+                        </div>
+
+                        <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{cmd.name}</h3>
+                        <span className="text-xs text-zinc-500 mb-2">{detail.pluginName}@{detail.marketplaceName}</span>
+
+                        <div className="space-y-2 text-sm mb-4 flex-1">
+                          <p className="text-gray-400 line-clamp-3 font-mono text-xs">Plugin command</p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
+                          <button
+                            onClick={(e) => { e.stopPropagation(); handleViewPluginCommand(detail, cmd); }}
+                            className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                          >
+                            <Eye className="w-4 h-4 text-zinc-100" />
+                            <span className="text-xs text-white font-medium">View</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))
+                  )}
+
+                  {pluginDetails.every((d) => d.commands.length === 0) && (
+                    <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
+                      <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                      <p className="text-gray-400 mb-4">No plugin commands installed</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div>
+                <div className="flex items-center space-x-4 mb-8 relative z-[60]">
+                  <button
+                    onClick={() => setViewingPluginCommand(null)}
+                    className="p-2 rounded-lg hover:bg-zinc-800 transition-colors titlebar-no-drag"
+                  >
+                    <ArrowLeft className="w-6 h-6 text-zinc-100" />
+                  </button>
+                  <div>
+                    <h2 className="text-3xl font-bold  text-white">
+                      {viewingPluginCommand.name}
+                    </h2>
+                    <span className="text-xs text-zinc-500">{viewingPluginCommand.pluginName}@{viewingPluginCommand.marketplaceName}</span>
+                    <p className="text-gray-400">Plugin command (read-only)</p>
+                  </div>
+                </div>
+
+                <div className="glass border border-zinc-800 rounded-2xl p-8">
+                  <div className="space-y-6">
+                    <div>
+                      <label className="block text-sm font-medium text-gray-300 mb-2">Command Content</label>
+                      <textarea
+                        value={viewingPluginCommand.content}
+                        readOnly
+                        className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white font-mono text-sm focus:border-zinc-600 focus:outline-none transition-all"
+                        rows={20}
+                      />
+                    </div>
+
+                    <div className="flex justify-end pt-6 border-t border-zinc-800">
+                      <button
+                        onClick={() => setViewingPluginCommand(null)}
+                        className="px-6 py-3 rounded-xl text-gray-400 hover:text-white hover:bg-zinc-800 transition-colors"
+                      >
+                        Close
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
 

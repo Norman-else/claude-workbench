@@ -205,3 +205,8 @@ export async function uninstallPlugin(marketplace: string, plugin: string): Prom
 export function getInstalledPluginDetails(): Promise<InstalledPluginDetails[]> {
   return requestJson('/api/plugins/installed-details');
 }
+
+
+export function getPluginCommandContent(installPath: string, filename: string): Promise<{ content: string }> {
+  return requestJson(`/api/plugins/command-content?installPath=${encodeURIComponent(installPath)}&filename=${encodeURIComponent(filename)}`);
+}

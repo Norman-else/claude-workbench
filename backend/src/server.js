@@ -2545,6 +2545,21 @@ app.get('/api/plugins/installed-details', async (req, res) => {
   }
 });
 
+app.get('/api/plugins/command-content', async (req, res) => {
+  try {
+    const { installPath, filename } = req.query;
+    if (!installPath || !filename) {
+      res.status(400).json({ error: 'installPath and filename are required' });
+      return;
+    }
+    const filePath = path.join(installPath, 'commands', filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 const server = app.listen(PORT, () => {
   console.log(`🚀 Claude Config Service backend running on http://localhost:${PORT}`);
   console.log(`📡 MCP Process Manager ready`);

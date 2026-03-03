@@ -1603,6 +1603,21 @@ app.get('/api/plugins/installed-details', async (_req: Request, res: Response) =
   }
 });
 
+app.get('/api/plugins/command-content', async (req: Request, res: Response) => {
+  try {
+    const { installPath, filename } = req.query as { installPath: string; filename: string };
+    if (!installPath || !filename) {
+      res.status(400).json({ error: 'installPath and filename are required' });
+      return;
+    }
+    const filePath = path.join(installPath, 'commands', filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ============================================================
 // Start
 // ============================================================
