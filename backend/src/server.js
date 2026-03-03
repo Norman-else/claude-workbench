@@ -2357,7 +2357,7 @@ app.post('/api/plugins/install', async (req, res) => {
       return res.json({ success: true, message: 'Plugin already installed at this version.', alreadyInstalled: true });
     }
 
-    const cacheDir = path.join(CACHE_DIR, marketplace, plugin, sha, plugin);
+    const cacheDir = path.join(CACHE_DIR, marketplace, plugin, sha);
     await fs.mkdir(cacheDir, { recursive: true });
 
     if (pluginEntry.skills && pluginEntry.skills.length > 0) {
@@ -2399,6 +2399,16 @@ app.post('/api/plugins/install', async (req, res) => {
       },
     };
     await writeInstalledPlugins(updatedInstalled);
+
+    // Add to enabledPlugins in settings.json so the CLI picks it up
+    try {
+      const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      const settings = JSON.parse(settingsRaw);
+      const enabledPlugins = settings.enabledPlugins ?? {};
+      enabledPlugins[key] = true;
+      settings.enabledPlugins = enabledPlugins;
+      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
+    } catch { /* settings.json missing or malformed — ignore */ }
 
     res.json({ success: true, installPath: cacheDir, sha, plugin, marketplace });
   } catch (err) {
