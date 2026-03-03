@@ -1490,6 +1490,16 @@ app.post('/api/plugins/uninstall', async (req: Request, res: Response) => {
     delete updatedPlugins[key];
     await writeInstalledPlugins({ ...installedData, plugins: updatedPlugins });
 
+    // Also remove from enabledPlugins in settings.json (the CLI's authoritative source)
+    try {
+      const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      const settings = JSON.parse(settingsRaw) as Record<string, unknown>;
+      const enabledPlugins = (settings.enabledPlugins ?? {}) as Record<string, unknown>;
+      delete enabledPlugins[key];
+      settings.enabledPlugins = enabledPlugins;
+      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
+    } catch { /* settings.json missing or malformed — ignore */ }
+
     res.json({ success: true, message: `Plugin '${plugin}' uninstalled.` });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
