@@ -89,8 +89,174 @@ const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+const PLUGINS_DIR = path.join(HOME_DIR, '.claude', 'plugins');
+const MARKETPLACES_DIR = path.join(PLUGINS_DIR, 'marketplaces');
+const CACHE_DIR = path.join(PLUGINS_DIR, 'cache');
+const KNOWN_MARKETPLACES_PATH = path.join(PLUGINS_DIR, 'known_marketplaces.json');
+const INSTALLED_PLUGINS_PATH = path.join(PLUGINS_DIR, 'installed_plugins.json');
 const PORT = 3001;
 
+// ============================================================
+// Git Helpers
+// ============================================================
+
+let gitAvailableCache: boolean | null = null;
+
+async function checkGitAvailable(): Promise<boolean> {
+  if (gitAvailableCache !== null) return gitAvailableCache;
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = exec('git --version', (err) => (err ? reject(err) : resolve()));
+      child.on('error', reject);
+    });
+    gitAvailableCache = true;
+  } catch {
+    gitAvailableCache = false;
+  }
+  return gitAvailableCache;
+}
+
+async function gitCloneShallow(url: string, destDir: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 60_000);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('git', ['clone', '--depth', '1', url, destDir], {
+        stdio: 'pipe',
+        signal: controller.signal,
+      });
+      child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`git clone exited with code ${code}`))));
+      child.on('error', reject);
+    });
+  } catch (err) {
+    // Clean up partial clone on failure
+    try { await fs.rm(destDir, { recursive: true, force: true }); } catch { /* ignore */ }
+    throw err;
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function gitPull(repoDir: string): Promise<void> {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30_000);
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn('git', ['-C', repoDir, 'pull'], {
+        stdio: 'pipe',
+        signal: controller.signal,
+      });
+      child.on('close', async (code) => {
+        if (code === 0) { resolve(); return; }
+        // On conflict, hard reset and retry
+        try {
+          await new Promise<void>((res2, rej2) => {
+            const reset = spawn('git', ['-C', repoDir, 'reset', '--hard', 'origin/HEAD'], { stdio: 'pipe' });
+            reset.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git reset exited ${c}`))));
+            reset.on('error', rej2);
+          });
+          await new Promise<void>((res2, rej2) => {
+            const pull2 = spawn('git', ['-C', repoDir, 'pull'], { stdio: 'pipe' });
+            pull2.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git pull retry exited ${c}`))));
+            pull2.on('error', rej2);
+          });
+          resolve();
+        } catch (retryErr) {
+          reject(retryErr);
+        }
+      });
+      child.on('error', reject);
+    });
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function getGitCommitSha(repoDir: string): Promise<string> {
+  return new Promise<string>((resolve, reject) => {
+    exec(`git -C "${repoDir}" rev-parse --short HEAD`, (err, stdout) => {
+      if (err) { reject(err); return; }
+      resolve(stdout.trim());
+    });
+  });
+}
+
+function normalizeGitUrl(input: string): string {
+  // If it matches owner/repo pattern (no protocol, no dots before slash), convert to GitHub URL
+  if (/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(input)) {
+    const repo = input.endsWith('.git') ? input : `${input}.git`;
+    return `https://github.com/${repo}`;
+  }
+  return input;
+}
+
+function extractMarketplaceName(url: string): string {
+  // Get last path segment, remove .git suffix
+  const normalized = normalizeGitUrl(url);
+  const segments = normalized.replace(/\.git$/, '').split('/');
+  return segments[segments.length - 1] || url;
+}
+
+// ============================================================
+// Marketplace JSON Managers
+// ============================================================
+
+async function ensurePluginsDirs(): Promise<void> {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.mkdir(MARKETPLACES_DIR, { recursive: true });
+  await fs.mkdir(CACHE_DIR, { recursive: true });
+}
+
+async function readKnownMarketplaces(): Promise<Record<string, { source: { source: string; repo: string }; installLocation: string; lastUpdated: string }>> {
+  try {
+    await fs.mkdir(PLUGINS_DIR, { recursive: true });
+    const raw = await fs.readFile(KNOWN_MARKETPLACES_PATH, 'utf-8');
+    return JSON.parse(raw) as Record<string, { source: { source: string; repo: string }; installLocation: string; lastUpdated: string }>;
+  } catch {
+    return {};
+  }
+}
+
+async function writeKnownMarketplaces(data: Record<string, unknown>): Promise<void> {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.writeFile(KNOWN_MARKETPLACES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readInstalledPlugins(): Promise<{ version: number; plugins: Record<string, unknown[]> }> {
+  try {
+    const raw = await fs.readFile(INSTALLED_PLUGINS_PATH, 'utf-8');
+    return JSON.parse(raw) as { version: number; plugins: Record<string, unknown[]> };
+  } catch {
+    return { version: 2, plugins: {} };
+  }
+}
+
+async function writeInstalledPlugins(data: { version: number; plugins: Record<string, unknown[]> }): Promise<void> {
+  await fs.mkdir(PLUGINS_DIR, { recursive: true });
+  await fs.writeFile(INSTALLED_PLUGINS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+async function readMarketplaceManifest(marketplaceName: string): Promise<{ name: string; description?: string; version?: string; owner?: { name: string; email: string }; metadata?: { description: string; version: string }; plugins: Array<{ name: string; description?: string; source: string; strict?: boolean; skills?: string[]; version?: string; category?: string }> } | null> {
+  try {
+    const manifestPath = path.join(MARKETPLACES_DIR, marketplaceName, '.claude-plugin', 'marketplace.json');
+    const raw = await fs.readFile(manifestPath, 'utf-8');
+    const manifest = JSON.parse(raw) as { name: string; plugins: Array<{ name: string; source: string; skills?: string[] }> };
+    // Validate: no path traversal in skills
+    for (const plugin of manifest.plugins || []) {
+      for (const skill of plugin.skills || []) {
+        if (skill.includes('..') || path.isAbsolute(skill)) {
+          throw new Error(`Path traversal detected in skill path: ${skill}`);
+        }
+      }
+      if (plugin.source && (plugin.source.includes('..') || (path.isAbsolute(plugin.source) && !plugin.source.startsWith('./')))) {
+        // Allow "./" relative paths
+      }
+    }
+    return manifest as ReturnType<typeof readMarketplaceManifest> extends Promise<infer T> ? Exclude<T, null> : never;
+  } catch {
+    return null;
+  }
+}
 // ============================================================
 // MCP process manager state
 // ============================================================
@@ -446,7 +612,8 @@ app.get('/api/claude-settings-content', async (_req: Request, res: Response) => 
     res.json({ configPath: CLAUDE_SETTINGS_PATH, content });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
-  });
+  }
+});
 
 app.post('/api/shell-config-content', async (req: Request, res: Response) => {
   try {
@@ -1084,6 +1251,368 @@ app.post('/api/mcp/:name/restart', async (req: Request, res: Response) => {
     });
     const result = await response.json() as unknown;
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ============================================================
+// Routes: Marketplace
+// ============================================================
+
+app.get('/api/plugins/marketplaces', async (_req: Request, res: Response) => {
+  try {
+    const marketplaces = await readKnownMarketplaces();
+    const installedPlugins = await readInstalledPlugins();
+    const result = await Promise.all(
+      Object.entries(marketplaces).map(async ([name, info]) => {
+        const manifest = await readMarketplaceManifest(name);
+        if (!manifest) return null;
+        return {
+          name,
+          source: info.source,
+          lastUpdated: info.lastUpdated,
+          manifest,
+          installedPlugins: installedPlugins.plugins,
+        };
+      })
+    );
+    res.json(result.filter(Boolean));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/marketplaces', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body as { url: string };
+    if (!url) return res.status(400).json({ error: 'url is required' });
+
+    const gitAvailable = await checkGitAvailable();
+    if (!gitAvailable) {
+      return res.status(400).json({ error: 'Git is not installed. Please install git to use marketplaces.' });
+    }
+
+    const normalizedUrl = normalizeGitUrl(url);
+    const name = extractMarketplaceName(url);
+
+    const existing = await readKnownMarketplaces();
+    if (existing[name]) {
+      return res.status(409).json({ error: `Marketplace '${name}' is already added.` });
+    }
+
+    await ensurePluginsDirs();
+    const destDir = path.join(MARKETPLACES_DIR, name);
+
+    await gitCloneShallow(normalizedUrl, destDir);
+
+    const manifest = await readMarketplaceManifest(name);
+    if (!manifest) {
+      try { await fs.rm(destDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return res.status(400).json({ error: 'Repository does not contain a valid .claude-plugin/marketplace.json file.' });
+    }
+
+    const sha = await getGitCommitSha(destDir);
+    const updated = {
+      ...existing,
+      [name]: {
+        source: { source: 'github', repo: normalizedUrl.replace(/https:\/\/github\.com\//, '').replace(/\.git$/, '') },
+        installLocation: destDir,
+        lastUpdated: new Date().toISOString(),
+        sha,
+      },
+    };
+    await writeKnownMarketplaces(updated);
+
+    res.json({ name, source: updated[name].source, lastUpdated: updated[name].lastUpdated, manifest });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/marketplaces/:name/update', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const marketplaces = await readKnownMarketplaces();
+    if (!marketplaces[name]) {
+      return res.status(404).json({ error: `Marketplace '${name}' not found.` });
+    }
+
+    const repoDir = path.join(MARKETPLACES_DIR, name);
+    await gitPull(repoDir);
+
+    const updated = {
+      ...marketplaces,
+      [name]: { ...marketplaces[name], lastUpdated: new Date().toISOString() },
+    };
+    await writeKnownMarketplaces(updated);
+
+    const manifest = await readMarketplaceManifest(name);
+    res.json({ name, source: updated[name].source, lastUpdated: updated[name].lastUpdated, manifest });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.delete('/api/plugins/marketplaces/:name', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const marketplaces = await readKnownMarketplaces();
+    if (!marketplaces[name]) {
+      return res.status(404).json({ error: `Marketplace '${name}' not found.` });
+    }
+
+    await fs.rm(path.join(MARKETPLACES_DIR, name), { recursive: true, force: true });
+
+    const updated = { ...marketplaces };
+    delete updated[name];
+    await writeKnownMarketplaces(updated);
+
+    res.json({ success: true, message: `Marketplace '${name}' removed.` });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/install', async (req: Request, res: Response) => {
+  try {
+    const { marketplace, plugin } = req.body as { marketplace: string; plugin: string };
+    if (!marketplace || !plugin) {
+      return res.status(400).json({ error: 'marketplace and plugin are required' });
+    }
+
+    const marketplaces = await readKnownMarketplaces();
+    if (!marketplaces[marketplace]) {
+      return res.status(404).json({ error: `Marketplace '${marketplace}' not found.` });
+    }
+
+    const manifest = await readMarketplaceManifest(marketplace);
+    if (!manifest) {
+      return res.status(404).json({ error: `Cannot read manifest for marketplace '${marketplace}'.` });
+    }
+
+    const pluginEntry = manifest.plugins.find((p) => p.name === plugin);
+    if (!pluginEntry) {
+      return res.status(404).json({ error: `Plugin '${plugin}' not found in marketplace '${marketplace}'.` });
+    }
+
+    const marketplaceDir = path.join(MARKETPLACES_DIR, marketplace);
+    const sha = await getGitCommitSha(marketplaceDir);
+
+    const installedData = await readInstalledPlugins();
+    const key = `${plugin}@${marketplace}`;
+    const existing = installedData.plugins[key] || [];
+    if (existing.some((e) => (e as { gitCommitSha: string }).gitCommitSha === sha)) {
+      return res.json({ success: true, message: 'Plugin already installed at this version.', alreadyInstalled: true });
+    }
+
+    const cacheDir = path.join(CACHE_DIR, marketplace, plugin, sha);
+    await fs.mkdir(cacheDir, { recursive: true });
+
+    if (pluginEntry.skills && pluginEntry.skills.length > 0) {
+      for (const skillPath of pluginEntry.skills) {
+        const relativePath = skillPath.replace(/^\.\//, '');
+        const srcDir = path.join(marketplaceDir, relativePath);
+        const skillName = path.basename(relativePath);
+        const destDir = path.join(cacheDir, skillName);
+        try {
+          await fs.cp(srcDir, destDir, { recursive: true });
+        } catch (copyErr) {
+          console.error(`Failed to copy skill ${skillPath}:`, copyErr);
+        }
+      }
+    } else if (pluginEntry.source) {
+      const relativeSrc = pluginEntry.source.replace(/^\.\//, '');
+      const srcDir = path.join(marketplaceDir, relativeSrc);
+      try {
+        await fs.cp(srcDir, cacheDir, { recursive: true });
+      } catch (copyErr) {
+        console.error(`Failed to copy plugin source ${pluginEntry.source}:`, copyErr);
+      }
+    }
+
+    const now = new Date().toISOString();
+    const installRecord = {
+      scope: 'user',
+      installPath: cacheDir,
+      version: sha,
+      installedAt: now,
+      lastUpdated: now,
+      gitCommitSha: sha,
+    };
+    const updatedInstalled = {
+      ...installedData,
+      plugins: {
+        ...installedData.plugins,
+        [key]: [...existing, installRecord],
+      },
+    };
+    await writeInstalledPlugins(updatedInstalled);
+
+    // Add to enabledPlugins in settings.json so the CLI picks it up
+    try {
+      const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      const settings = JSON.parse(settingsRaw) as Record<string, unknown>;
+      const enabledPlugins = (settings.enabledPlugins ?? {}) as Record<string, boolean>;
+      enabledPlugins[key] = true;
+      settings.enabledPlugins = enabledPlugins;
+      await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
+    } catch { /* settings.json missing or malformed — ignore */ }
+
+    res.json({ success: true, installPath: cacheDir, sha, plugin, marketplace });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/uninstall', async (req: Request, res: Response) => {
+  try {
+    const { marketplace, plugin } = req.body as { marketplace: string; plugin: string };
+    if (!marketplace || !plugin) {
+      return res.status(400).json({ error: 'marketplace and plugin are required' });
+    }
+
+    const key = `${plugin}@${marketplace}`;
+    const installedData = await readInstalledPlugins();
+    const records = installedData.plugins[key];
+
+    if (!records || records.length === 0) {
+      return res.status(404).json({ error: `Plugin '${plugin}' from '${marketplace}' is not installed.` });
+    }
+
+    for (const record of records) {
+      try {
+        await fs.rm((record as { installPath: string }).installPath, { recursive: true, force: true });
+      } catch { /* ignore */ }
+    }
+
+    const pluginCacheDir = path.join(CACHE_DIR, marketplace, plugin);
+    const marketplaceCacheDir = path.join(CACHE_DIR, marketplace);
+    try {
+      await fs.rm(pluginCacheDir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+    try {
+      const marketplaceContents = await fs.readdir(marketplaceCacheDir);
+      if (marketplaceContents.length === 0) await fs.rm(marketplaceCacheDir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+
+    const updatedPlugins = { ...installedData.plugins };
+    delete updatedPlugins[key];
+    await writeInstalledPlugins({ ...installedData, plugins: updatedPlugins });
+
+    // Also remove from enabledPlugins in settings.json (the CLI's authoritative source).
+    // Use regex line-deletion to avoid touching any other content in the file.
+    try {
+      const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+      const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const linePattern = new RegExp(`^[ \\t]*"${escapedKey}"[ \\t]*:[ \\t]*(true|false),?[ \\t]*(\\r?\\n|$)`, 'm');
+      let updated = settingsRaw.replace(linePattern, '');
+      // Fix trailing comma on the new last entry inside enabledPlugins (makes JSON invalid)
+      updated = updated.replace(/(true|false),(?=\s*\n[ \t]*})/g, '$1');
+      if (updated !== settingsRaw) {
+        await fs.writeFile(CLAUDE_SETTINGS_PATH, updated, 'utf-8');
+      }
+    } catch { /* settings.json missing or unreadable — ignore */ }
+
+    res.json({ success: true, message: `Plugin '${plugin}' uninstalled.` });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/plugins/installed-details', async (_req: Request, res: Response) => {
+  try {
+    const installedData = await readInstalledPlugins();
+    const results: Array<{
+      key: string;
+      pluginName: string;
+      marketplaceName: string;
+      installPath: string;
+      version: string;
+      commands: Array<{ name: string; filename: string }>;
+      skills: Array<{ name: string; filename: string }>;
+      agents: Array<{ name: string; filename: string }>;
+    }> = [];
+
+    for (const [key, records] of Object.entries(installedData.plugins)) {
+      if (!records || records.length === 0) continue;
+
+      const atIndex = key.lastIndexOf('@');
+      if (atIndex <= 0) continue;
+      const pluginName = key.substring(0, atIndex);
+      const marketplaceName = key.substring(atIndex + 1);
+
+      const latest = records[records.length - 1] as { installPath: string; version: string };
+      const installPath = latest.installPath;
+      const version = latest.version || '';
+
+      try {
+        await fs.access(installPath);
+      } catch {
+        continue;
+      }
+
+      const commands: Array<{ name: string; filename: string }> = [];
+      const skills: Array<{ name: string; filename: string }> = [];
+      const agents: Array<{ name: string; filename: string }> = [];
+
+      // Scan commands/
+      try {
+        const commandsDir = path.join(installPath, 'commands');
+        const commandEntries = await fs.readdir(commandsDir);
+        for (const entry of commandEntries) {
+          if (entry.endsWith('.md')) {
+            commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      // Scan skills/
+      try {
+        const skillsDir = path.join(installPath, 'skills');
+        const skillEntries = await fs.readdir(skillsDir);
+        for (const entry of skillEntries) {
+          const entryPath = path.join(skillsDir, entry);
+          const stat = await fs.stat(entryPath);
+          if (stat.isDirectory()) {
+            try {
+              await fs.access(path.join(entryPath, 'SKILL.md'));
+              skills.push({ name: entry, filename: 'SKILL.md' });
+            } catch { /* no SKILL.md in this subdir */ }
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      // Scan agents/
+      try {
+        const agentsDir = path.join(installPath, 'agents');
+        const agentEntries = await fs.readdir(agentsDir);
+        for (const entry of agentEntries) {
+          if (entry.endsWith('.md')) {
+            agents.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      results.push({ key, pluginName, marketplaceName, installPath, version, commands, skills, agents });
+    }
+
+    res.json(results);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/plugins/command-content', async (req: Request, res: Response) => {
+  try {
+    const { installPath, filename } = req.query as { installPath: string; filename: string };
+    if (!installPath || !filename) {
+      res.status(400).json({ error: 'installPath and filename are required' });
+      return;
+    }
+    const filePath = path.join(installPath, 'commands', filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ content });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

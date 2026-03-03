@@ -7,6 +7,8 @@ import type {
   McpStatus,
   ShellConfigContentResponse,
   Skill,
+  MarketplaceInfo,
+  InstalledPluginDetails,
 } from './types';
 
 async function parseError(response: Response): Promise<string> {
@@ -160,4 +162,51 @@ export async function getClaudeSettingsContent(): Promise<ShellConfigContentResp
 
 export async function saveClaudeSettingsContent(content: string): Promise<void> {
   await requestVoid('/api/claude-settings-content', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ content }) });
+}
+
+export async function getMarketplaces(): Promise<(MarketplaceInfo & { installedPlugins: Record<string, unknown[]> })[]> {
+  return requestJson<(MarketplaceInfo & { installedPlugins: Record<string, unknown[]> })[]>('/api/plugins/marketplaces');
+}
+
+export async function addMarketplace(url: string): Promise<MarketplaceInfo> {
+  return requestJson<MarketplaceInfo>('/api/plugins/marketplaces', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+}
+
+export async function updateMarketplace(name: string): Promise<MarketplaceInfo> {
+  return requestJson<MarketplaceInfo>(`/api/plugins/marketplaces/${encodeURIComponent(name)}/update`, {
+    method: 'POST',
+  });
+}
+
+export async function removeMarketplace(name: string): Promise<void> {
+  await requestVoid(`/api/plugins/marketplaces/${encodeURIComponent(name)}`, { method: 'DELETE' });
+}
+
+export async function installPlugin(marketplace: string, plugin: string): Promise<{ success: boolean; installPath?: string; alreadyInstalled?: boolean }> {
+  return requestJson<{ success: boolean; installPath?: string; alreadyInstalled?: boolean }>('/api/plugins/install', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ marketplace, plugin }),
+  });
+}
+
+export async function uninstallPlugin(marketplace: string, plugin: string): Promise<void> {
+  await requestVoid('/api/plugins/uninstall', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ marketplace, plugin }),
+  });
+}
+
+export function getInstalledPluginDetails(): Promise<InstalledPluginDetails[]> {
+  return requestJson('/api/plugins/installed-details');
+}
+
+
+export function getPluginCommandContent(installPath: string, filename: string): Promise<{ content: string }> {
+  return requestJson(`/api/plugins/command-content?installPath=${encodeURIComponent(installPath)}&filename=${encodeURIComponent(filename)}`);
 }

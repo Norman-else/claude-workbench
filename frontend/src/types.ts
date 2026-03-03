@@ -121,3 +121,70 @@ export interface RegistryListResponse {
   servers: Array<{ server: RegistryServer; _meta?: Record<string, unknown> }>;
   metadata: { nextCursor?: string; count: number };
 }
+
+export interface MarketplaceSource {
+  source: 'github' | 'git';
+  repo: string;
+}
+
+export interface KnownMarketplace {
+  source: MarketplaceSource;
+  installLocation: string;
+  lastUpdated: string;
+}
+
+export interface MarketplacePlugin {
+  name: string;
+  description?: string;
+  source: string;
+  strict?: boolean;
+  skills?: string[];
+  version?: string;
+  category?: string;
+}
+
+export interface MarketplaceManifest {
+  name: string;
+  description?: string;
+  version?: string;
+  owner?: { name: string; email: string };
+  metadata?: { description: string; version: string };
+  plugins: MarketplacePlugin[];
+}
+
+export interface InstalledPlugin {
+  scope: string;
+  installPath: string;
+  version: string;
+  installedAt: string;
+  lastUpdated?: string;
+  gitCommitSha: string;
+}
+
+export interface InstalledPluginsFile {
+  version: number;
+  plugins: Record<string, InstalledPlugin[]>;
+}
+
+export interface MarketplaceInfo {
+  name: string;
+  manifest: MarketplaceManifest;
+  source: MarketplaceSource;
+  lastUpdated: string;
+}
+
+ export interface PluginContentFile {
+  name: string;      // 文件名不含扩展名，如 "code-review"
+  filename: string;  // 完整文件名，如 "code-review.md"
+}
+
+export interface InstalledPluginDetails {
+  key: string;             // "pluginName@marketplaceName"
+  pluginName: string;
+  marketplaceName: string;
+  installPath: string;
+  version: string;
+  commands: PluginContentFile[];   // commands/ 目录下的 .md 文件
+  skills: PluginContentFile[];     // skills/ 目录下的子目录（含 SKILL.md 的）
+  agents: PluginContentFile[];     // agents/ 目录下的 .md 文件
+}

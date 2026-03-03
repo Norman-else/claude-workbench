@@ -10,10 +10,11 @@ import {
   getClaudeConfig,
   getCommands,
   getEnvProfiles,
+  getMarketplaces,
   getSkills,
   saveClaudeConfig,
 } from './api';
-import type { ClaudeConfig, CommandFile, EnvProfile, McpStatus, RefreshProgress, Skill, TabType } from './types';
+import type { ClaudeConfig, CommandFile, EnvProfile, InstalledPluginsFile, MarketplaceInfo, McpStatus, RefreshProgress, Skill, TabType } from './types';
 import { McpTab } from './components/tabs/McpTab';
 import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
@@ -38,6 +39,8 @@ function App() {
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [marketplaces, setMarketplaces] = useState<MarketplaceInfo[]>([]);
+  const [installedPlugins, setInstalledPlugins] = useState<InstalledPluginsFile>({ version: 2, plugins: {} });
   const [envProfiles, setEnvProfiles] = useState<EnvProfile[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(null);
 
@@ -123,6 +126,21 @@ function App() {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, skills: 'done' }));
       } catch {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, skills: 'error' }));
+      }
+
+      try {
+        const mpData = await getMarketplaces();
+        setMarketplaces(mpData);
+        const allInstalledPlugins: InstalledPluginsFile = { version: 2, plugins: {} };
+        for (const mp of mpData) {
+          const mpInstalledPlugins = (mp as MarketplaceInfo & { installedPlugins?: Record<string, unknown[]> }).installedPlugins;
+          if (mpInstalledPlugins) {
+            Object.assign(allInstalledPlugins.plugins, mpInstalledPlugins);
+          }
+        }
+        setInstalledPlugins(allInstalledPlugins);
+      } catch {
+        // marketplace loading is non-critical, ignore errors
       }
 
       if (showProgress) {
@@ -408,6 +426,7 @@ function App() {
               showNotification={showNotification}
               loadConfig={loadConfig}
               requestDelete={requestDelete}
+              installedPlugins={installedPlugins}
             />
           )}
 
@@ -417,6 +436,9 @@ function App() {
               showNotification={showNotification}
               loadConfig={loadConfig}
               requestDelete={requestDelete}
+              marketplaces={marketplaces}
+              installedPlugins={installedPlugins}
+              onRefreshMarketplaces={async () => { await loadConfig(); }}
             />
           )}
         </div>
