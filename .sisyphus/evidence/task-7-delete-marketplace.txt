@@ -1,0 +1,9 @@
+=== Task 7: DELETE /api/plugins/marketplaces/:name ===
+
+--- Test 1: delete nonexistent marketplace (expect 404) ---
+HTTP Status: 404
+{
+    "error": "Marketplace 'nonexistent' not found."
+}
+
+RESULT: PASS - 404 for nonexistent marketplace (not deleting real marketplace to preserve test state)

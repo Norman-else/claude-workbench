@@ -1,0 +1,20 @@
+=== Task 5: POST /api/plugins/marketplaces ===
+
+--- Test 1: add new marketplace (expect 200) ---
+HTTP Status: 200
+Response: {"name":"skills","source":{"source":"github","repo":"anthropics/skills"},"lastUpdated":"2026-03-03T02:25:25.661Z","manifest":{...}}
+
+--- Test 2: add same marketplace again (expect 409) ---
+HTTP Status: 409
+{
+    "error": "Marketplace 'skills' is already added."
+}
+
+--- Test 3: missing url (expect 400) ---
+HTTP Status: 400
+{
+    "error": "url is required"
+}
+
+RESULT: PASS - 200 for new, 409 for duplicate, 400 for missing url
+Note: 'skills' marketplace was cleaned up after testing (DELETE /api/plugins/marketplaces/skills)

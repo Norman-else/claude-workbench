@@ -1,0 +1,22 @@
+=== Task 9: POST /api/plugins/uninstall ===
+
+--- Test 1: uninstall the plugin we just installed ---
+HTTP Status: 200
+{
+    "success": true,
+    "message": "Plugin 'document-skills' uninstalled."
+}
+
+--- Test 2: uninstall again (expect 404 - already uninstalled) ---
+HTTP Status: 404
+{
+    "error": "Plugin 'document-skills' from 'anthropic-agent-skills' is not installed."
+}
+
+--- Test 3: missing params (expect 400) ---
+HTTP Status: 400
+{
+    "error": "marketplace and plugin are required"
+}
+
+RESULT: PASS - 200 for uninstall, 404 for already-uninstalled, 400 for missing params

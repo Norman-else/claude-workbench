@@ -612,7 +612,8 @@ app.get('/api/claude-settings-content', async (_req: Request, res: Response) => 
     res.json({ configPath: CLAUDE_SETTINGS_PATH, content });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
-  });
+  }
+});
 
 app.post('/api/shell-config-content', async (req: Request, res: Response) => {
   try {
@@ -1250,6 +1251,247 @@ app.post('/api/mcp/:name/restart', async (req: Request, res: Response) => {
     });
     const result = await response.json() as unknown;
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ============================================================
+// Routes: Marketplace
+// ============================================================
+
+app.get('/api/plugins/marketplaces', async (_req: Request, res: Response) => {
+  try {
+    const marketplaces = await readKnownMarketplaces();
+    const installedPlugins = await readInstalledPlugins();
+    const result = await Promise.all(
+      Object.entries(marketplaces).map(async ([name, info]) => {
+        const manifest = await readMarketplaceManifest(name);
+        if (!manifest) return null;
+        return {
+          name,
+          source: info.source,
+          lastUpdated: info.lastUpdated,
+          manifest,
+          installedPlugins: installedPlugins.plugins,
+        };
+      })
+    );
+    res.json(result.filter(Boolean));
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/marketplaces', async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body as { url: string };
+    if (!url) return res.status(400).json({ error: 'url is required' });
+
+    const gitAvailable = await checkGitAvailable();
+    if (!gitAvailable) {
+      return res.status(400).json({ error: 'Git is not installed. Please install git to use marketplaces.' });
+    }
+
+    const normalizedUrl = normalizeGitUrl(url);
+    const name = extractMarketplaceName(url);
+
+    const existing = await readKnownMarketplaces();
+    if (existing[name]) {
+      return res.status(409).json({ error: `Marketplace '${name}' is already added.` });
+    }
+
+    await ensurePluginsDirs();
+    const destDir = path.join(MARKETPLACES_DIR, name);
+
+    await gitCloneShallow(normalizedUrl, destDir);
+
+    const manifest = await readMarketplaceManifest(name);
+    if (!manifest) {
+      try { await fs.rm(destDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return res.status(400).json({ error: 'Repository does not contain a valid .claude-plugin/marketplace.json file.' });
+    }
+
+    const sha = await getGitCommitSha(destDir);
+    const updated = {
+      ...existing,
+      [name]: {
+        source: { source: 'github', repo: normalizedUrl.replace(/https:\/\/github\.com\//, '').replace(/\.git$/, '') },
+        installLocation: destDir,
+        lastUpdated: new Date().toISOString(),
+        sha,
+      },
+    };
+    await writeKnownMarketplaces(updated);
+
+    res.json({ name, source: updated[name].source, lastUpdated: updated[name].lastUpdated, manifest });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/marketplaces/:name/update', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const marketplaces = await readKnownMarketplaces();
+    if (!marketplaces[name]) {
+      return res.status(404).json({ error: `Marketplace '${name}' not found.` });
+    }
+
+    const repoDir = path.join(MARKETPLACES_DIR, name);
+    await gitPull(repoDir);
+
+    const updated = {
+      ...marketplaces,
+      [name]: { ...marketplaces[name], lastUpdated: new Date().toISOString() },
+    };
+    await writeKnownMarketplaces(updated);
+
+    const manifest = await readMarketplaceManifest(name);
+    res.json({ name, source: updated[name].source, lastUpdated: updated[name].lastUpdated, manifest });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.delete('/api/plugins/marketplaces/:name', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    const marketplaces = await readKnownMarketplaces();
+    if (!marketplaces[name]) {
+      return res.status(404).json({ error: `Marketplace '${name}' not found.` });
+    }
+
+    await fs.rm(path.join(MARKETPLACES_DIR, name), { recursive: true, force: true });
+
+    const updated = { ...marketplaces };
+    delete updated[name];
+    await writeKnownMarketplaces(updated);
+
+    res.json({ success: true, message: `Marketplace '${name}' removed.` });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/install', async (req: Request, res: Response) => {
+  try {
+    const { marketplace, plugin } = req.body as { marketplace: string; plugin: string };
+    if (!marketplace || !plugin) {
+      return res.status(400).json({ error: 'marketplace and plugin are required' });
+    }
+
+    const marketplaces = await readKnownMarketplaces();
+    if (!marketplaces[marketplace]) {
+      return res.status(404).json({ error: `Marketplace '${marketplace}' not found.` });
+    }
+
+    const manifest = await readMarketplaceManifest(marketplace);
+    if (!manifest) {
+      return res.status(404).json({ error: `Cannot read manifest for marketplace '${marketplace}'.` });
+    }
+
+    const pluginEntry = manifest.plugins.find((p) => p.name === plugin);
+    if (!pluginEntry) {
+      return res.status(404).json({ error: `Plugin '${plugin}' not found in marketplace '${marketplace}'.` });
+    }
+
+    const marketplaceDir = path.join(MARKETPLACES_DIR, marketplace);
+    const sha = await getGitCommitSha(marketplaceDir);
+
+    const installedData = await readInstalledPlugins();
+    const key = `${plugin}@${marketplace}`;
+    const existing = installedData.plugins[key] || [];
+    if (existing.some((e) => (e as { gitCommitSha: string }).gitCommitSha === sha)) {
+      return res.json({ success: true, message: 'Plugin already installed at this version.', alreadyInstalled: true });
+    }
+
+    const cacheDir = path.join(CACHE_DIR, marketplace, plugin, sha, plugin);
+    await fs.mkdir(cacheDir, { recursive: true });
+
+    if (pluginEntry.skills && pluginEntry.skills.length > 0) {
+      for (const skillPath of pluginEntry.skills) {
+        const relativePath = skillPath.replace(/^\.\//, '');
+        const srcDir = path.join(marketplaceDir, relativePath);
+        const skillName = path.basename(relativePath);
+        const destDir = path.join(cacheDir, skillName);
+        try {
+          await fs.cp(srcDir, destDir, { recursive: true });
+        } catch (copyErr) {
+          console.error(`Failed to copy skill ${skillPath}:`, copyErr);
+        }
+      }
+    } else if (pluginEntry.source) {
+      const relativeSrc = pluginEntry.source.replace(/^\.\//, '');
+      const srcDir = path.join(marketplaceDir, relativeSrc);
+      try {
+        await fs.cp(srcDir, cacheDir, { recursive: true });
+      } catch (copyErr) {
+        console.error(`Failed to copy plugin source ${pluginEntry.source}:`, copyErr);
+      }
+    }
+
+    const now = new Date().toISOString();
+    const installRecord = {
+      scope: 'user',
+      installPath: cacheDir,
+      version: sha,
+      installedAt: now,
+      lastUpdated: now,
+      gitCommitSha: sha,
+    };
+    const updatedInstalled = {
+      ...installedData,
+      plugins: {
+        ...installedData.plugins,
+        [key]: [...existing, installRecord],
+      },
+    };
+    await writeInstalledPlugins(updatedInstalled);
+
+    res.json({ success: true, installPath: cacheDir, sha, plugin, marketplace });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/plugins/uninstall', async (req: Request, res: Response) => {
+  try {
+    const { marketplace, plugin } = req.body as { marketplace: string; plugin: string };
+    if (!marketplace || !plugin) {
+      return res.status(400).json({ error: 'marketplace and plugin are required' });
+    }
+
+    const key = `${plugin}@${marketplace}`;
+    const installedData = await readInstalledPlugins();
+    const records = installedData.plugins[key];
+
+    if (!records || records.length === 0) {
+      return res.status(404).json({ error: `Plugin '${plugin}' from '${marketplace}' is not installed.` });
+    }
+
+    for (const record of records) {
+      try {
+        await fs.rm((record as { installPath: string }).installPath, { recursive: true, force: true });
+      } catch { /* ignore */ }
+    }
+
+    const pluginCacheDir = path.join(CACHE_DIR, marketplace, plugin);
+    const marketplaceCacheDir = path.join(CACHE_DIR, marketplace);
+    try {
+      const pluginContents = await fs.readdir(pluginCacheDir);
+      if (pluginContents.length === 0) await fs.rm(pluginCacheDir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+    try {
+      const marketplaceContents = await fs.readdir(marketplaceCacheDir);
+      if (marketplaceContents.length === 0) await fs.rm(marketplaceCacheDir, { recursive: true, force: true });
+    } catch { /* ignore */ }
+
+    const updatedPlugins = { ...installedData.plugins };
+    delete updatedPlugins[key];
+    await writeInstalledPlugins({ ...installedData, plugins: updatedPlugins });
+
+    res.json({ success: true, message: `Plugin '${plugin}' uninstalled.` });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

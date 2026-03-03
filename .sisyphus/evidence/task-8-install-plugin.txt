@@ -1,0 +1,31 @@
+=== Task 8: POST /api/plugins/install ===
+
+--- Test 1: install plugin from existing marketplace ---
+HTTP Status: 200
+{
+    "success": true,
+    "installPath": "/Users/normanzuo/.claude/plugins/cache/anthropic-agent-skills/document-skills/3d59511/document-skills",
+    "sha": "3d59511",
+    "plugin": "document-skills",
+    "marketplace": "anthropic-agent-skills"
+}
+
+--- Test 2: missing params (expect 400) ---
+HTTP Status: 400
+{
+    "error": "marketplace and plugin are required"
+}
+
+--- Test 3: nonexistent marketplace (expect 404) ---
+HTTP Status: 404
+{
+    "error": "Marketplace 'fake' not found."
+}
+
+--- Test 4: nonexistent plugin in existing marketplace (expect 404) ---
+HTTP Status: 404
+{
+    "error": "Plugin 'fake-plugin' not found in marketplace 'anthropic-agent-skills'."
+}
+
+RESULT: PASS - 200 for install, 400 for missing params, 404 for nonexistent
