@@ -1479,8 +1479,7 @@ app.post('/api/plugins/uninstall', async (req: Request, res: Response) => {
     const pluginCacheDir = path.join(CACHE_DIR, marketplace, plugin);
     const marketplaceCacheDir = path.join(CACHE_DIR, marketplace);
     try {
-      const pluginContents = await fs.readdir(pluginCacheDir);
-      if (pluginContents.length === 0) await fs.rm(pluginCacheDir, { recursive: true, force: true });
+      await fs.rm(pluginCacheDir, { recursive: true, force: true });
     } catch { /* ignore */ }
     try {
       const marketplaceContents = await fs.readdir(marketplaceCacheDir);
