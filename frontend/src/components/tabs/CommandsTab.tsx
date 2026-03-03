@@ -280,7 +280,7 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
                         <span className="text-xs text-zinc-500 mb-2">{detail.pluginName}@{detail.marketplaceName}</span>
 
                         <div className="space-y-2 text-sm mb-4 flex-1">
-                          <p className="text-gray-400 line-clamp-3 font-mono text-xs">Plugin command</p>
+                          <p className="text-gray-400 line-clamp-3 font-mono text-xs">{detail.pluginName}</p>
                         </div>
 
                         <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
