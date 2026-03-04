@@ -1,0 +1,1458 @@
+import express from 'express';
+import cors from 'cors';
+import bodyParser from 'body-parser';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import { spawn, exec } from 'child_process';
+import crypto from 'crypto';
+import { fileURLToPath } from 'url';
+import { IS_WINDOWS, HOME_DIR, ensureFileExists, getEnvConfigPath, readEnvFromShellConfig, writeEnvToShellConfig, clearEnvFromShellConfig, readActiveProfileIdFromShellConfig, readSettingsEnv, writeSettingsEnv, clearSettingsEnv, expandPath, getWindowsDrives, } from './platform.js';
+import { registerAIAssistantRoutes } from './ai-assistant.js';
+// ============================================================
+// Constants
+// ============================================================
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
+const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
+const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
+const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
+const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+const PLUGINS_DIR = path.join(HOME_DIR, '.claude', 'plugins');
+const MARKETPLACES_DIR = path.join(PLUGINS_DIR, 'marketplaces');
+const CACHE_DIR = path.join(PLUGINS_DIR, 'cache');
+const KNOWN_MARKETPLACES_PATH = path.join(PLUGINS_DIR, 'known_marketplaces.json');
+const INSTALLED_PLUGINS_PATH = path.join(PLUGINS_DIR, 'installed_plugins.json');
+const PORT = 3001;
+// ============================================================
+// Git Helpers
+// ============================================================
+let gitAvailableCache = null;
+async function checkGitAvailable() {
+    if (gitAvailableCache !== null)
+        return gitAvailableCache;
+    try {
+        await new Promise((resolve, reject) => {
+            const child = exec('git --version', (err) => (err ? reject(err) : resolve()));
+            child.on('error', reject);
+        });
+        gitAvailableCache = true;
+    }
+    catch {
+        gitAvailableCache = false;
+    }
+    return gitAvailableCache;
+}
+async function gitCloneShallow(url, destDir) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 60_000);
+    try {
+        await new Promise((resolve, reject) => {
+            const child = spawn('git', ['clone', '--depth', '1', url, destDir], {
+                stdio: 'pipe',
+                signal: controller.signal,
+            });
+            child.on('close', (code) => (code === 0 ? resolve() : reject(new Error(`git clone exited with code ${code}`))));
+            child.on('error', reject);
+        });
+    }
+    catch (err) {
+        // Clean up partial clone on failure
+        try {
+            await fs.rm(destDir, { recursive: true, force: true });
+        }
+        catch { /* ignore */ }
+        throw err;
+    }
+    finally {
+        clearTimeout(timeout);
+    }
+}
+async function gitPull(repoDir) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 30_000);
+    try {
+        await new Promise((resolve, reject) => {
+            const child = spawn('git', ['-C', repoDir, 'pull'], {
+                stdio: 'pipe',
+                signal: controller.signal,
+            });
+            child.on('close', async (code) => {
+                if (code === 0) {
+                    resolve();
+                    return;
+                }
+                // On conflict, hard reset and retry
+                try {
+                    await new Promise((res2, rej2) => {
+                        const reset = spawn('git', ['-C', repoDir, 'reset', '--hard', 'origin/HEAD'], { stdio: 'pipe' });
+                        reset.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git reset exited ${c}`))));
+                        reset.on('error', rej2);
+                    });
+                    await new Promise((res2, rej2) => {
+                        const pull2 = spawn('git', ['-C', repoDir, 'pull'], { stdio: 'pipe' });
+                        pull2.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git pull retry exited ${c}`))));
+                        pull2.on('error', rej2);
+                    });
+                    resolve();
+                }
+                catch (retryErr) {
+                    reject(retryErr);
+                }
+            });
+            child.on('error', reject);
+        });
+    }
+    finally {
+        clearTimeout(timeout);
+    }
+}
+async function getGitCommitSha(repoDir) {
+    return new Promise((resolve, reject) => {
+        exec(`git -C "${repoDir}" rev-parse --short HEAD`, (err, stdout) => {
+            if (err) {
+                reject(err);
+                return;
+            }
+            resolve(stdout.trim());
+        });
+    });
+}
+function normalizeGitUrl(input) {
+    // If it matches owner/repo pattern (no protocol, no dots before slash), convert to GitHub URL
+    if (/^[a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+$/.test(input)) {
+        const repo = input.endsWith('.git') ? input : `${input}.git`;
+        return `https://github.com/${repo}`;
+    }
+    return input;
+}
+function extractMarketplaceName(url) {
+    // Get last path segment, remove .git suffix
+    const normalized = normalizeGitUrl(url);
+    const segments = normalized.replace(/\.git$/, '').split('/');
+    return segments[segments.length - 1] || url;
+}
+// ============================================================
+// Marketplace JSON Managers
+// ============================================================
+async function ensurePluginsDirs() {
+    await fs.mkdir(PLUGINS_DIR, { recursive: true });
+    await fs.mkdir(MARKETPLACES_DIR, { recursive: true });
+    await fs.mkdir(CACHE_DIR, { recursive: true });
+}
+async function readKnownMarketplaces() {
+    try {
+        await fs.mkdir(PLUGINS_DIR, { recursive: true });
+        const raw = await fs.readFile(KNOWN_MARKETPLACES_PATH, 'utf-8');
+        return JSON.parse(raw);
+    }
+    catch {
+        return {};
+    }
+}
+async function writeKnownMarketplaces(data) {
+    await fs.mkdir(PLUGINS_DIR, { recursive: true });
+    await fs.writeFile(KNOWN_MARKETPLACES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+async function readInstalledPlugins() {
+    try {
+        const raw = await fs.readFile(INSTALLED_PLUGINS_PATH, 'utf-8');
+        return JSON.parse(raw);
+    }
+    catch {
+        return { version: 2, plugins: {} };
+    }
+}
+async function writeInstalledPlugins(data) {
+    await fs.mkdir(PLUGINS_DIR, { recursive: true });
+    await fs.writeFile(INSTALLED_PLUGINS_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+async function readMarketplaceManifest(marketplaceName) {
+    try {
+        const manifestPath = path.join(MARKETPLACES_DIR, marketplaceName, '.claude-plugin', 'marketplace.json');
+        const raw = await fs.readFile(manifestPath, 'utf-8');
+        const manifest = JSON.parse(raw);
+        // Validate: no path traversal in skills
+        for (const plugin of manifest.plugins || []) {
+            for (const skill of plugin.skills || []) {
+                if (skill.includes('..') || path.isAbsolute(skill)) {
+                    throw new Error(`Path traversal detected in skill path: ${skill}`);
+                }
+            }
+            if (plugin.source && (plugin.source.includes('..') || (path.isAbsolute(plugin.source) && !plugin.source.startsWith('./')))) {
+                // Allow "./" relative paths
+            }
+        }
+        return manifest;
+    }
+    catch {
+        return null;
+    }
+}
+// ============================================================
+// MCP process manager state
+// ============================================================
+const mcpProcesses = new Map();
+const mcpLogs = new Map();
+function addLog(serverName, type, message) {
+    if (!mcpLogs.has(serverName))
+        mcpLogs.set(serverName, []);
+    const logs = mcpLogs.get(serverName);
+    logs.push({ timestamp: new Date().toISOString(), type, message });
+    if (logs.length > 100)
+        logs.shift();
+}
+// ============================================================
+// App setup
+// ============================================================
+const app = express();
+const isElectron = !!process.versions.electron;
+app.use(cors());
+app.use(bodyParser.json());
+if (isElectron) {
+    const frontendPath = path.join(__dirname, '../../frontend/dist');
+    console.log(`[Server] Serving frontend static files from: ${frontendPath}`);
+    app.use(express.static(frontendPath));
+}
+// ============================================================
+// Env reload helper
+// ============================================================
+async function reloadEnvFromProfile() {
+    try {
+        // Priority 1: settings.json
+        const settingsEnv = await readSettingsEnv(CLAUDE_SETTINGS_PATH);
+        if (settingsEnv) {
+            Object.assign(process.env, settingsEnv);
+            console.log('Environment variables loaded from settings.json');
+            return true;
+        }
+    }
+    catch {
+        // fall through to shell config
+    }
+    // Priority 2: shell config
+    try {
+        const vars = await readEnvFromShellConfig();
+        Object.assign(process.env, vars);
+        return true;
+    }
+    catch (err) {
+        console.error('Failed to reload env from shell config:', err);
+        return false;
+    }
+}
+// ============================================================
+// Profile helpers
+// ============================================================
+async function readProfiles() {
+    try {
+        await ensureFileExists(CLAUDE_PROFILES_PATH, JSON.stringify({ profiles: [], activeProfileId: null }, null, 2));
+        const content = await fs.readFile(CLAUDE_PROFILES_PATH, 'utf-8');
+        const data = JSON.parse(content);
+        // Data migration: authToken → apiKey
+        let dirty = false;
+        data.profiles = data.profiles.map((p) => {
+            const anyP = p;
+            if (anyP.authToken !== undefined && anyP.apiKey === undefined) {
+                p.apiKey = anyP.authToken;
+                delete anyP.authToken;
+                dirty = true;
+            }
+            if (p.authToken === undefined) {
+                p.authToken = '';
+            }
+            return p;
+        });
+        if (dirty) {
+            await writeProfiles(data);
+            console.log('Migrated profile data: authToken → apiKey');
+        }
+        return data;
+    }
+    catch {
+        return { profiles: [], activeProfileId: null };
+    }
+}
+async function writeProfiles(data) {
+    const dir = path.dirname(CLAUDE_PROFILES_PATH);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(CLAUDE_PROFILES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+async function getCurrentActiveProfileId() {
+    try {
+        const settingsEnv = await readSettingsEnv(CLAUDE_SETTINGS_PATH);
+        if (settingsEnv?.ANTHROPIC_PROFILE_ID) {
+            return settingsEnv.ANTHROPIC_PROFILE_ID;
+        }
+    }
+    catch {
+        // fall through
+    }
+    return readActiveProfileIdFromShellConfig();
+}
+function buildProfileEnvVars(profile) {
+    const vars = {
+        ANTHROPIC_PROFILE_ID: profile.id,
+    };
+    if (profile.baseUrl)
+        vars.ANTHROPIC_BASE_URL = profile.baseUrl;
+    if (profile.apiKey)
+        vars.ANTHROPIC_API_KEY = profile.apiKey;
+    if (profile.authToken)
+        vars.ANTHROPIC_AUTH_TOKEN = profile.authToken;
+    if (profile.haikuModel)
+        vars.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.haikuModel;
+    if (profile.opusModel)
+        vars.ANTHROPIC_DEFAULT_OPUS_MODEL = profile.opusModel;
+    if (profile.sonnetModel)
+        vars.ANTHROPIC_DEFAULT_SONNET_MODEL = profile.sonnetModel;
+    if (profile.smallFastModel)
+        vars.ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = profile.smallFastModel;
+    return vars;
+}
+/** Write profile env vars – tries settings.json first, falls back to shell. */
+async function persistProfileEnvVars(profile) {
+    const vars = buildProfileEnvVars(profile);
+    try {
+        await writeSettingsEnv(CLAUDE_SETTINGS_PATH, vars);
+        await reloadEnvFromProfile();
+        return 'settings';
+    }
+    catch {
+        await writeEnvToShellConfig(vars);
+        await reloadEnvFromProfile();
+        return 'shell';
+    }
+}
+function parseFrontmatter(content) {
+    const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+    if (!match)
+        return { frontmatter: {}, body: content };
+    const frontmatter = {};
+    for (const line of match[1].split('\n')) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > 0) {
+            frontmatter[line.substring(0, colonIdx).trim()] = line
+                .substring(colonIdx + 1)
+                .trim();
+        }
+    }
+    return { frontmatter, body: match[2] };
+}
+function validateSkillName(name) {
+    return /^[a-z0-9-]{1,64}$/.test(name);
+}
+// ============================================================
+// Routes: Claude config
+// ============================================================
+app.get('/api/claude-config', async (_req, res) => {
+    try {
+        await ensureFileExists(CLAUDE_JSON_PATH, '{}');
+        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+        res.json(JSON.parse(content || '{}'));
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/claude-config', async (req, res) => {
+    try {
+        const config = req.body;
+        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2));
+        res.json({ success: true, message: 'Configuration saved successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: Environment variables (legacy single-profile API)
+// ============================================================
+app.get('/api/env-vars', async (_req, res) => {
+    try {
+        const vars = await readEnvFromShellConfig();
+        const platform = IS_WINDOWS ? 'windows' : 'unix';
+        if (IS_WINDOWS) {
+            res.json({
+                baseUrl: vars.ANTHROPIC_BASE_URL ?? '',
+                authToken: vars.ANTHROPIC_API_KEY ?? '',
+                haikuModel: vars.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
+                opusModel: vars.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
+                sonnetModel: vars.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
+                platform,
+                source: 'PowerShell Profile ($PROFILE)',
+            });
+        }
+        else {
+            const configFile = await getEnvConfigPath();
+            res.json({
+                baseUrl: vars.ANTHROPIC_BASE_URL ?? '',
+                authToken: vars.ANTHROPIC_API_KEY ?? '',
+                haikuModel: vars.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
+                opusModel: vars.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
+                sonnetModel: vars.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
+                platform,
+                configFile,
+                source: 'Shell configuration file',
+            });
+        }
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/env-vars', async (req, res) => {
+    try {
+        const { baseUrl, authToken, haikuModel, opusModel, sonnetModel, } = req.body;
+        const vars = {
+            ANTHROPIC_BASE_URL: baseUrl ?? '',
+            ANTHROPIC_API_KEY: authToken ?? '',
+        };
+        if (haikuModel)
+            vars.ANTHROPIC_DEFAULT_HAIKU_MODEL = haikuModel;
+        if (opusModel)
+            vars.ANTHROPIC_DEFAULT_OPUS_MODEL = opusModel;
+        if (sonnetModel)
+            vars.ANTHROPIC_DEFAULT_SONNET_MODEL = sonnetModel;
+        await writeEnvToShellConfig(vars);
+        await reloadEnvFromProfile();
+        const configPath = IS_WINDOWS ? 'PowerShell $PROFILE' : await getEnvConfigPath();
+        res.json({
+            success: true,
+            message: `Environment variables saved and reloaded! Config: ${configPath}`,
+            instructions: 'Environment variables are now active.',
+            platform: IS_WINDOWS ? 'windows' : 'unix',
+            hotReloaded: true,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/reload-env', async (_req, res) => {
+    try {
+        const success = await reloadEnvFromProfile();
+        if (success) {
+            res.json({
+                success: true,
+                message: 'Environment variables reloaded successfully',
+                platform: IS_WINDOWS ? 'windows' : 'unix',
+                variables: {
+                    ANTHROPIC_BASE_URL: process.env.ANTHROPIC_BASE_URL ?? '',
+                    ANTHROPIC_API_KEY: process.env.ANTHROPIC_API_KEY ? '***' : '',
+                    ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL ?? '',
+                    ANTHROPIC_DEFAULT_OPUS_MODEL: process.env.ANTHROPIC_DEFAULT_OPUS_MODEL ?? '',
+                    ANTHROPIC_DEFAULT_SONNET_MODEL: process.env.ANTHROPIC_DEFAULT_SONNET_MODEL ?? '',
+                },
+            });
+        }
+        else {
+            res.json({ success: false, message: 'Failed to reload environment variables' });
+        }
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/shell-config-content', async (_req, res) => {
+    try {
+        let configPath = '';
+        let content = '';
+        const platform = IS_WINDOWS ? 'windows' : 'unix';
+        if (IS_WINDOWS) {
+            try {
+                // We can't call getPowerShellProfile directly (it's unexported from platform),
+                // so we re-use readEnvFromShellConfig path logic via exec
+                const { stdout } = await new Promise((resolve, reject) => {
+                    exec('pwsh -Command "$PROFILE" 2>$null || powershell -Command "$PROFILE"', (err, stdout) => {
+                        if (err)
+                            reject(err);
+                        else
+                            resolve({ stdout });
+                    });
+                });
+                configPath = stdout.trim();
+                try {
+                    content = await fs.readFile(configPath, 'utf-8');
+                }
+                catch {
+                    content = '# PowerShell Profile not found or empty';
+                }
+            }
+            catch {
+                configPath = 'PowerShell $PROFILE';
+                content = '# Error reading PowerShell Profile';
+            }
+        }
+        else {
+            configPath = await getEnvConfigPath();
+            await ensureFileExists(configPath, '');
+            content = await fs.readFile(configPath, 'utf-8');
+            if (!content.trim()) {
+                content = `# ${configPath} is empty\n# Add environment variables using:\n# export VARIABLE_NAME="value"`;
+            }
+        }
+        res.json({ configPath, content, platform });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/claude-settings-content', async (_req, res) => {
+    try {
+        let content = '';
+        try {
+            content = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+        }
+        catch {
+            content = '# ~/.claude/settings.json not found or empty';
+        }
+        res.json({ configPath: CLAUDE_SETTINGS_PATH, content });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/shell-config-content', async (req, res) => {
+    try {
+        const { content } = req.body;
+        if (typeof content !== 'string') {
+            res.status(400).json({ error: 'content must be a string' });
+            return;
+        }
+        let configPath = '';
+        if (IS_WINDOWS) {
+            const { stdout } = await new Promise((resolve, reject) => {
+                exec('pwsh -Command "$PROFILE" 2>$null || powershell -Command "$PROFILE"', (err, stdout) => {
+                    if (err)
+                        reject(err);
+                    else
+                        resolve({ stdout });
+                });
+            });
+            configPath = stdout.trim();
+        }
+        else {
+            configPath = await getEnvConfigPath();
+            await ensureFileExists(configPath, '');
+        }
+        await fs.writeFile(configPath, content, 'utf-8');
+        res.json({ success: true, configPath });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/claude-settings-content', async (req, res) => {
+    try {
+        const { content } = req.body;
+        if (typeof content !== 'string') {
+            res.status(400).json({ error: 'content must be a string' });
+            return;
+        }
+        await fs.mkdir(path.dirname(CLAUDE_SETTINGS_PATH), { recursive: true });
+        await fs.writeFile(CLAUDE_SETTINGS_PATH, content, 'utf-8');
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: Commands
+// ============================================================
+app.get('/api/commands', async (_req, res) => {
+    try {
+        await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
+        const files = await fs.readdir(CLAUDE_COMMANDS_DIR);
+        const commands = await Promise.all(files.map(async (file) => ({
+            name: file,
+            content: await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, file), 'utf-8'),
+        })));
+        res.json(commands);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/commands', async (req, res) => {
+    try {
+        const { name, content } = req.body;
+        await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
+        await fs.writeFile(path.join(CLAUDE_COMMANDS_DIR, name), content);
+        res.json({ success: true, message: 'Command saved successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.delete('/api/commands/:name', async (req, res) => {
+    try {
+        const { name } = req.params;
+        await fs.unlink(path.join(CLAUDE_COMMANDS_DIR, name));
+        res.json({ success: true, message: 'Command deleted successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: Skills
+// ============================================================
+app.get('/api/skills', async (_req, res) => {
+    try {
+        await fs.mkdir(CLAUDE_SKILLS_DIR, { recursive: true });
+        const dirs = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true });
+        const skills = (await Promise.all(dirs
+            .filter((d) => d.isDirectory())
+            .map(async (dir) => {
+            try {
+                const skillFile = path.join(CLAUDE_SKILLS_DIR, dir.name, 'SKILL.md');
+                const content = await fs.readFile(skillFile, 'utf-8');
+                const { frontmatter } = parseFrontmatter(content);
+                return {
+                    name: dir.name,
+                    content,
+                    description: frontmatter.description ?? '',
+                    allowedTools: frontmatter['allowed-tools'] ?? '',
+                };
+            }
+            catch {
+                return null;
+            }
+        }))).filter(Boolean);
+        res.json(skills);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/skills', async (req, res) => {
+    try {
+        const { name, content } = req.body;
+        if (!name || !content)
+            return res.status(400).json({ error: 'Name and content are required' });
+        if (!validateSkillName(name))
+            return res.status(400).json({
+                error: 'Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
+            });
+        const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
+        await fs.mkdir(skillPath, { recursive: true });
+        await fs.writeFile(path.join(skillPath, 'SKILL.md'), content, 'utf-8');
+        res.json({ success: true, message: 'Skill saved successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.delete('/api/skills/:name', async (req, res) => {
+    try {
+        const { name } = req.params;
+        await fs.rm(path.join(CLAUDE_SKILLS_DIR, name), {
+            recursive: true,
+            force: true,
+        });
+        res.json({ success: true, message: 'Skill deleted successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: Environment profiles
+// ============================================================
+app.get('/api/env-profiles', async (_req, res) => {
+    try {
+        const data = await readProfiles();
+        const activeProfileId = await getCurrentActiveProfileId();
+        res.json({ profiles: data.profiles, activeProfileId });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/env-profiles', async (req, res) => {
+    try {
+        const { name, baseUrl = '', apiKey = '', authToken = '', haikuModel = '', opusModel = '', sonnetModel = '', smallFastModel = '', } = req.body;
+        if (!name)
+            return res.status(400).json({ error: 'Profile name is required' });
+        const data = await readProfiles();
+        if (data.profiles.some((p) => p.name === name))
+            return res.status(400).json({ error: 'Profile name already exists' });
+        const newProfile = {
+            id: crypto.randomUUID(),
+            name,
+            baseUrl,
+            apiKey,
+            authToken,
+            haikuModel,
+            opusModel,
+            sonnetModel,
+            smallFastModel,
+            createdAt: new Date().toISOString(),
+        };
+        data.profiles.push(newProfile);
+        await writeProfiles(data);
+        res.json({ success: true, profile: newProfile, message: 'Profile created successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.put('/api/env-profiles/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const updates = req.body;
+        const data = await readProfiles();
+        const idx = data.profiles.findIndex((p) => p.id === id);
+        if (idx === -1)
+            return res.status(404).json({ error: 'Profile not found' });
+        if (updates.name &&
+            data.profiles.some((p, i) => p.name === updates.name && i !== idx))
+            return res.status(400).json({ error: 'Profile name already exists' });
+        data.profiles[idx] = {
+            ...data.profiles[idx],
+            ...updates,
+            updatedAt: new Date().toISOString(),
+        };
+        await writeProfiles(data);
+        // If active, sync env
+        const activeId = await getCurrentActiveProfileId();
+        if (activeId === id) {
+            await persistProfileEnvVars(data.profiles[idx]);
+        }
+        res.json({
+            success: true,
+            profile: data.profiles[idx],
+            message: activeId === id
+                ? 'Profile updated and shell config synchronized successfully'
+                : 'Profile updated successfully',
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.delete('/api/env-profiles/:id', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = await readProfiles();
+        const idx = data.profiles.findIndex((p) => p.id === id);
+        if (idx === -1)
+            return res.status(404).json({ error: 'Profile not found' });
+        const activeId = await getCurrentActiveProfileId();
+        if (activeId === id)
+            return res
+                .status(400)
+                .json({ error: 'Cannot delete the active profile. Please activate another profile first.' });
+        data.profiles.splice(idx, 1);
+        await writeProfiles(data);
+        res.json({ success: true, message: 'Profile deleted successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/env-profiles/:id/activate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = await readProfiles();
+        const profile = data.profiles.find((p) => p.id === id);
+        if (!profile)
+            return res.status(404).json({ error: 'Profile not found' });
+        const method = await persistProfileEnvVars(profile);
+        data.activeProfileId = id;
+        await writeProfiles(data);
+        res.json({
+            success: true,
+            message: `Profile "${profile.name}" activated and reloaded!`,
+            method,
+            hotReloaded: true,
+        });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/env-profiles/:id/deactivate', async (req, res) => {
+    try {
+        const { id } = req.params;
+        const data = await readProfiles();
+        const profile = data.profiles.find((p) => p.id === id);
+        if (!profile)
+            return res.status(404).json({ error: 'Profile not found' });
+        // Clear from settings.json
+        await clearSettingsEnv(CLAUDE_SETTINGS_PATH);
+        // Clear from shell config
+        await clearEnvFromShellConfig();
+        await reloadEnvFromProfile();
+        data.activeProfileId = null;
+        await writeProfiles(data);
+        res.json({ success: true, message: `Profile "${profile.name}" deactivated!`, hotReloaded: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/env-profiles/reorder', async (req, res) => {
+    try {
+        const { orderedIds } = req.body;
+        if (!Array.isArray(orderedIds))
+            return res.status(400).json({ error: 'orderedIds must be an array' });
+        const data = await readProfiles();
+        const profileMap = new Map(data.profiles.map((p) => [p.id, p]));
+        const reordered = orderedIds.map((id) => profileMap.get(id)).filter((p) => p !== undefined);
+        // Preserve any profiles not in orderedIds at the end
+        const remaining = data.profiles.filter((p) => !orderedIds.includes(p.id));
+        data.profiles = [...reordered, ...remaining];
+        await writeProfiles(data);
+        res.json({ success: true });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: File system helpers
+// ============================================================
+app.get('/api/default-paths', async (_req, res) => {
+    try {
+        const homeDir = os.homedir();
+        const response = {
+            homeDir,
+            homeDirSymbol: IS_WINDOWS ? '%USERPROFILE%' : '~',
+            platform: IS_WINDOWS ? 'windows' : 'unix',
+        };
+        if (IS_WINDOWS) {
+            response.quickPaths = {
+                home: homeDir,
+                desktop: path.join(homeDir, 'Desktop'),
+                documents: path.join(homeDir, 'Documents'),
+                downloads: path.join(homeDir, 'Downloads'),
+            };
+            response.drives = await getWindowsDrives();
+        }
+        else {
+            response.quickPaths = {
+                home: '~',
+                desktop: '~/Desktop',
+                documents: '~/Documents',
+                downloads: '~/Downloads',
+                root: '/',
+            };
+        }
+        res.json(response);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/list-files', async (req, res) => {
+    try {
+        const { directory } = req.body;
+        if (!directory)
+            return res.status(400).json({ error: 'Directory is required' });
+        const expandedDir = expandPath(directory);
+        try {
+            const stats = await fs.stat(expandedDir);
+            if (!stats.isDirectory())
+                return res.status(400).json({ error: 'Path is not a directory' });
+        }
+        catch {
+            return res.status(404).json({ error: `Directory not found: ${expandedDir}` });
+        }
+        const files = await fs.readdir(expandedDir, { withFileTypes: true });
+        const fileList = files
+            .map((f) => ({
+            name: f.name,
+            isDirectory: f.isDirectory(),
+            path: path.join(expandedDir, f.name),
+        }))
+            .sort((a, b) => {
+            if (a.isDirectory && !b.isDirectory)
+                return -1;
+            if (!a.isDirectory && b.isDirectory)
+                return 1;
+            return a.name.localeCompare(b.name);
+        });
+        res.json({ files: fileList, directory: expandedDir });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message, files: [] });
+    }
+});
+// ============================================================
+// Routes: MCP process management
+// ============================================================
+app.post('/api/mcp/:name/start', async (req, res) => {
+    const serverName = req.params.name;
+    try {
+        if (mcpProcesses.get(serverName)?.status === 'running')
+            return res.status(400).json({ error: 'Server already running' });
+        const configContent = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+        const config = JSON.parse(configContent);
+        const serverConfig = config.mcpServers?.[serverName];
+        if (!serverConfig)
+            return res.status(404).json({ error: 'Server not found in config' });
+        const { command, args = [], env = {} } = serverConfig;
+        addLog(serverName, 'info', `Starting MCP server: ${serverName}`);
+        addLog(serverName, 'info', `Command: ${command} ${args.join(' ')}`);
+        let childProcess;
+        try {
+            childProcess = spawn(command, args, {
+                env: { ...process.env, ...env },
+                shell: IS_WINDOWS,
+                stdio: ['pipe', 'pipe', 'pipe'],
+            });
+        }
+        catch (spawnErr) {
+            const msg = spawnErr.message;
+            addLog(serverName, 'error', `Failed to spawn: ${msg}`);
+            mcpProcesses.set(serverName, {
+                process: null,
+                pid: null,
+                status: 'error',
+                startTime: new Date().toISOString(),
+                command,
+                args,
+                error: msg,
+                keepAliveInterval: null,
+            });
+            return res.status(500).json({ error: `Failed to start server: ${msg}`, details: msg });
+        }
+        const processInfo = {
+            process: childProcess,
+            pid: childProcess.pid ?? null,
+            status: 'running',
+            startTime: new Date().toISOString(),
+            command,
+            args,
+            keepAliveInterval: null,
+        };
+        mcpProcesses.set(serverName, processInfo);
+        childProcess.stdout?.on('data', (data) => {
+            const msg = data.toString().trim();
+            if (msg)
+                addLog(serverName, 'stdout', msg);
+        });
+        childProcess.stderr?.on('data', (data) => {
+            const msg = data.toString().trim();
+            if (msg)
+                addLog(serverName, 'stderr', msg);
+        });
+        childProcess.on('exit', (code, signal) => {
+            addLog(serverName, 'info', `Process exited with code ${code} ${signal ? `and signal ${signal}` : ''}`);
+            const info = mcpProcesses.get(serverName);
+            if (info) {
+                info.status = 'stopped';
+                info.exitCode = code;
+                info.exitSignal = signal;
+                if (info.keepAliveInterval) {
+                    clearInterval(info.keepAliveInterval);
+                    info.keepAliveInterval = null;
+                }
+            }
+        });
+        childProcess.on('error', (error) => {
+            addLog(serverName, 'error', `Process error: ${error.message}`);
+            const info = mcpProcesses.get(serverName);
+            if (info) {
+                info.status = 'error';
+                info.error = error.message;
+                if (info.keepAliveInterval) {
+                    clearInterval(info.keepAliveInterval);
+                    info.keepAliveInterval = null;
+                }
+            }
+        });
+        childProcess.stdin?.on('error', (error) => {
+            addLog(serverName, 'warn', `stdin error: ${error.message}`);
+        });
+        // Keep-alive timer (keeps the interval tracked so we can clear it)
+        const keepAliveInterval = setInterval(() => {
+            // Connection is kept alive by keeping stdin open
+        }, 30000);
+        processInfo.keepAliveInterval = keepAliveInterval;
+        addLog(serverName, 'info', `Process started with PID ${childProcess.pid}`);
+        res.json({
+            message: 'Server started successfully',
+            pid: childProcess.pid,
+            status: 'running',
+            logs: mcpLogs.get(serverName) ?? [],
+        });
+    }
+    catch (err) {
+        addLog(serverName, 'error', `Failed to start: ${err.message}`);
+        res.status(500).json({ error: err.message, details: err.stack });
+    }
+});
+app.post('/api/mcp/:name/stop', (req, res) => {
+    const serverName = req.params.name;
+    try {
+        const processInfo = mcpProcesses.get(serverName);
+        if (!processInfo)
+            return res.status(404).json({ error: 'Server not running' });
+        if (processInfo.status !== 'running')
+            return res.status(400).json({ error: 'Server is not running' });
+        addLog(serverName, 'info', 'Stopping server...');
+        if (processInfo.keepAliveInterval) {
+            clearInterval(processInfo.keepAliveInterval);
+            processInfo.keepAliveInterval = null;
+        }
+        try {
+            processInfo.process?.stdin?.end();
+            addLog(serverName, 'info', 'Closed stdin, waiting for graceful shutdown...');
+        }
+        catch (e) {
+            addLog(serverName, 'warn', `Error closing stdin: ${e.message}`);
+        }
+        if (IS_WINDOWS) {
+            exec(`taskkill /pid ${processInfo.pid} /T /F`, (error) => {
+                if (error)
+                    addLog(serverName, 'error', `Error stopping: ${error.message}`);
+            });
+        }
+        else {
+            processInfo.process?.kill('SIGTERM');
+        }
+        processInfo.status = 'stopping';
+        setTimeout(() => {
+            const info = mcpProcesses.get(serverName);
+            if (info?.status === 'stopping') {
+                addLog(serverName, 'info', 'Force killing process...');
+                info.process?.kill('SIGKILL');
+                info.status = 'stopped';
+            }
+            if (info?.keepAliveInterval) {
+                clearInterval(info.keepAliveInterval);
+                info.keepAliveInterval = null;
+            }
+        }, 5000);
+        res.json({ message: 'Server stop initiated', status: 'stopping' });
+    }
+    catch (err) {
+        addLog(serverName, 'error', `Failed to stop: ${err.message}`);
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/mcp/:name/status', (req, res) => {
+    const serverName = req.params.name;
+    const processInfo = mcpProcesses.get(serverName);
+    if (!processInfo) {
+        return res.json({ status: 'stopped', running: false });
+    }
+    res.json({
+        status: processInfo.status,
+        running: processInfo.status === 'running',
+        pid: processInfo.pid,
+        startTime: processInfo.startTime,
+        command: processInfo.command,
+        args: processInfo.args,
+        exitCode: processInfo.exitCode,
+        exitSignal: processInfo.exitSignal,
+        error: processInfo.error,
+    });
+});
+app.get('/api/mcp/status/all', async (_req, res) => {
+    try {
+        const configContent = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+        const config = JSON.parse(configContent);
+        const servers = config.mcpServers ?? {};
+        const statuses = {};
+        for (const serverName of Object.keys(servers)) {
+            const info = mcpProcesses.get(serverName);
+            statuses[serverName] = info
+                ? {
+                    status: info.status,
+                    running: info.status === 'running',
+                    pid: info.pid,
+                    startTime: info.startTime,
+                }
+                : { status: 'stopped', running: false };
+        }
+        res.json(statuses);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/mcp/:name/logs', (req, res) => {
+    const serverName = req.params.name;
+    const limit = parseInt(req.query.limit ?? '50', 10);
+    const logs = mcpLogs.get(serverName) ?? [];
+    const recent = logs.slice(-limit);
+    res.json({ logs: recent, total: logs.length, displayed: recent.length });
+});
+app.post('/api/mcp/:name/logs/clear', (req, res) => {
+    mcpLogs.delete(req.params.name);
+    res.json({ success: true, message: 'Logs cleared' });
+});
+app.post('/api/mcp/:name/restart', async (req, res) => {
+    const serverName = req.params.name;
+    try {
+        const info = mcpProcesses.get(serverName);
+        if (info?.status === 'running') {
+            if (info.keepAliveInterval) {
+                clearInterval(info.keepAliveInterval);
+                info.keepAliveInterval = null;
+            }
+            try {
+                info.process?.stdin?.end();
+            }
+            catch { /* ignore */ }
+            info.process?.kill('SIGTERM');
+            await new Promise((r) => setTimeout(r, 2000));
+        }
+        const response = await fetch(`http://localhost:${PORT}/api/mcp/${serverName}/start`, {
+            method: 'POST',
+        });
+        const result = await response.json();
+        res.json(result);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: Marketplace
+// ============================================================
+app.get('/api/plugins/marketplaces', async (_req, res) => {
+    try {
+        const marketplaces = await readKnownMarketplaces();
+        const installedPlugins = await readInstalledPlugins();
+        const result = await Promise.all(Object.entries(marketplaces).map(async ([name, info]) => {
+            const manifest = await readMarketplaceManifest(name);
+            if (!manifest)
+                return null;
+            return {
+                name,
+                source: info.source,
+                lastUpdated: info.lastUpdated,
+                manifest,
+                installedPlugins: installedPlugins.plugins,
+            };
+        }));
+        res.json(result.filter(Boolean));
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/plugins/marketplaces', async (req, res) => {
+    try {
+        const { url } = req.body;
+        if (!url)
+            return res.status(400).json({ error: 'url is required' });
+        const gitAvailable = await checkGitAvailable();
+        if (!gitAvailable) {
+            return res.status(400).json({ error: 'Git is not installed. Please install git to use marketplaces.' });
+        }
+        const normalizedUrl = normalizeGitUrl(url);
+        const name = extractMarketplaceName(url);
+        const existing = await readKnownMarketplaces();
+        if (existing[name]) {
+            return res.status(409).json({ error: `Marketplace '${name}' is already added.` });
+        }
+        await ensurePluginsDirs();
+        const destDir = path.join(MARKETPLACES_DIR, name);
+        await gitCloneShallow(normalizedUrl, destDir);
+        const manifest = await readMarketplaceManifest(name);
+        if (!manifest) {
+            try {
+                await fs.rm(destDir, { recursive: true, force: true });
+            }
+            catch { /* ignore */ }
+            return res.status(400).json({ error: 'Repository does not contain a valid .claude-plugin/marketplace.json file.' });
+        }
+        const sha = await getGitCommitSha(destDir);
+        const updated = {
+            ...existing,
+            [name]: {
+                source: { source: 'github', repo: normalizedUrl.replace(/https:\/\/github\.com\//, '').replace(/\.git$/, '') },
+                installLocation: destDir,
+                lastUpdated: new Date().toISOString(),
+                sha,
+            },
+        };
+        await writeKnownMarketplaces(updated);
+        res.json({ name, source: updated[name].source, lastUpdated: updated[name].lastUpdated, manifest });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/plugins/marketplaces/:name/update', async (req, res) => {
+    try {
+        const { name } = req.params;
+        const marketplaces = await readKnownMarketplaces();
+        if (!marketplaces[name]) {
+            return res.status(404).json({ error: `Marketplace '${name}' not found.` });
+        }
+        const repoDir = path.join(MARKETPLACES_DIR, name);
+        await gitPull(repoDir);
+        const updated = {
+            ...marketplaces,
+            [name]: { ...marketplaces[name], lastUpdated: new Date().toISOString() },
+        };
+        await writeKnownMarketplaces(updated);
+        const manifest = await readMarketplaceManifest(name);
+        res.json({ name, source: updated[name].source, lastUpdated: updated[name].lastUpdated, manifest });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.delete('/api/plugins/marketplaces/:name', async (req, res) => {
+    try {
+        const { name } = req.params;
+        const marketplaces = await readKnownMarketplaces();
+        if (!marketplaces[name]) {
+            return res.status(404).json({ error: `Marketplace '${name}' not found.` });
+        }
+        await fs.rm(path.join(MARKETPLACES_DIR, name), { recursive: true, force: true });
+        const updated = { ...marketplaces };
+        delete updated[name];
+        await writeKnownMarketplaces(updated);
+        res.json({ success: true, message: `Marketplace '${name}' removed.` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/plugins/install', async (req, res) => {
+    try {
+        const { marketplace, plugin } = req.body;
+        if (!marketplace || !plugin) {
+            return res.status(400).json({ error: 'marketplace and plugin are required' });
+        }
+        const marketplaces = await readKnownMarketplaces();
+        if (!marketplaces[marketplace]) {
+            return res.status(404).json({ error: `Marketplace '${marketplace}' not found.` });
+        }
+        const manifest = await readMarketplaceManifest(marketplace);
+        if (!manifest) {
+            return res.status(404).json({ error: `Cannot read manifest for marketplace '${marketplace}'.` });
+        }
+        const pluginEntry = manifest.plugins.find((p) => p.name === plugin);
+        if (!pluginEntry) {
+            return res.status(404).json({ error: `Plugin '${plugin}' not found in marketplace '${marketplace}'.` });
+        }
+        const marketplaceDir = path.join(MARKETPLACES_DIR, marketplace);
+        const sha = await getGitCommitSha(marketplaceDir);
+        const installedData = await readInstalledPlugins();
+        const key = `${plugin}@${marketplace}`;
+        const existing = installedData.plugins[key] || [];
+        if (existing.some((e) => e.gitCommitSha === sha)) {
+            return res.json({ success: true, message: 'Plugin already installed at this version.', alreadyInstalled: true });
+        }
+        const cacheDir = path.join(CACHE_DIR, marketplace, plugin, sha);
+        await fs.mkdir(cacheDir, { recursive: true });
+        if (pluginEntry.skills && pluginEntry.skills.length > 0) {
+            for (const skillPath of pluginEntry.skills) {
+                const relativePath = skillPath.replace(/^\.\//, '');
+                const srcDir = path.join(marketplaceDir, relativePath);
+                const skillName = path.basename(relativePath);
+                const destDir = path.join(cacheDir, skillName);
+                try {
+                    await fs.cp(srcDir, destDir, { recursive: true });
+                }
+                catch (copyErr) {
+                    console.error(`Failed to copy skill ${skillPath}:`, copyErr);
+                }
+            }
+        }
+        else if (pluginEntry.source) {
+            const relativeSrc = pluginEntry.source.replace(/^\.\//, '');
+            const srcDir = path.join(marketplaceDir, relativeSrc);
+            try {
+                await fs.cp(srcDir, cacheDir, { recursive: true });
+            }
+            catch (copyErr) {
+                console.error(`Failed to copy plugin source ${pluginEntry.source}:`, copyErr);
+            }
+        }
+        const now = new Date().toISOString();
+        const installRecord = {
+            scope: 'user',
+            installPath: cacheDir,
+            version: sha,
+            installedAt: now,
+            lastUpdated: now,
+            gitCommitSha: sha,
+        };
+        const updatedInstalled = {
+            ...installedData,
+            plugins: {
+                ...installedData.plugins,
+                [key]: [...existing, installRecord],
+            },
+        };
+        await writeInstalledPlugins(updatedInstalled);
+        // Add to enabledPlugins in settings.json so the CLI picks it up
+        try {
+            const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+            const settings = JSON.parse(settingsRaw);
+            const enabledPlugins = (settings.enabledPlugins ?? {});
+            enabledPlugins[key] = true;
+            settings.enabledPlugins = enabledPlugins;
+            await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 4), 'utf-8');
+        }
+        catch { /* settings.json missing or malformed — ignore */ }
+        res.json({ success: true, installPath: cacheDir, sha, plugin, marketplace });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/plugins/uninstall', async (req, res) => {
+    try {
+        const { marketplace, plugin } = req.body;
+        if (!marketplace || !plugin) {
+            return res.status(400).json({ error: 'marketplace and plugin are required' });
+        }
+        const key = `${plugin}@${marketplace}`;
+        const installedData = await readInstalledPlugins();
+        const records = installedData.plugins[key];
+        if (!records || records.length === 0) {
+            return res.status(404).json({ error: `Plugin '${plugin}' from '${marketplace}' is not installed.` });
+        }
+        for (const record of records) {
+            try {
+                await fs.rm(record.installPath, { recursive: true, force: true });
+            }
+            catch { /* ignore */ }
+        }
+        const pluginCacheDir = path.join(CACHE_DIR, marketplace, plugin);
+        const marketplaceCacheDir = path.join(CACHE_DIR, marketplace);
+        try {
+            await fs.rm(pluginCacheDir, { recursive: true, force: true });
+        }
+        catch { /* ignore */ }
+        try {
+            const marketplaceContents = await fs.readdir(marketplaceCacheDir);
+            if (marketplaceContents.length === 0)
+                await fs.rm(marketplaceCacheDir, { recursive: true, force: true });
+        }
+        catch { /* ignore */ }
+        const updatedPlugins = { ...installedData.plugins };
+        delete updatedPlugins[key];
+        await writeInstalledPlugins({ ...installedData, plugins: updatedPlugins });
+        // Also remove from enabledPlugins in settings.json (the CLI's authoritative source).
+        // Use regex line-deletion to avoid touching any other content in the file.
+        try {
+            const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+            const escapedKey = key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const linePattern = new RegExp(`^[ \\t]*"${escapedKey}"[ \\t]*:[ \\t]*(true|false),?[ \\t]*(\\r?\\n|$)`, 'm');
+            let updated = settingsRaw.replace(linePattern, '');
+            // Fix trailing comma on the new last entry inside enabledPlugins (makes JSON invalid)
+            updated = updated.replace(/(true|false),(?=\s*\n[ \t]*})/g, '$1');
+            if (updated !== settingsRaw) {
+                await fs.writeFile(CLAUDE_SETTINGS_PATH, updated, 'utf-8');
+            }
+        }
+        catch { /* settings.json missing or unreadable — ignore */ }
+        res.json({ success: true, message: `Plugin '${plugin}' uninstalled.` });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/plugins/installed-details', async (_req, res) => {
+    try {
+        const installedData = await readInstalledPlugins();
+        const results = [];
+        for (const [key, records] of Object.entries(installedData.plugins)) {
+            if (!records || records.length === 0)
+                continue;
+            const atIndex = key.lastIndexOf('@');
+            if (atIndex <= 0)
+                continue;
+            const pluginName = key.substring(0, atIndex);
+            const marketplaceName = key.substring(atIndex + 1);
+            const latest = records[records.length - 1];
+            const installPath = latest.installPath;
+            const version = latest.version || '';
+            try {
+                await fs.access(installPath);
+            }
+            catch {
+                continue;
+            }
+            const commands = [];
+            const skills = [];
+            const agents = [];
+            // Scan commands/
+            try {
+                const commandsDir = path.join(installPath, 'commands');
+                const commandEntries = await fs.readdir(commandsDir);
+                for (const entry of commandEntries) {
+                    if (entry.endsWith('.md')) {
+                        commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+                    }
+                }
+            }
+            catch { /* directory doesn't exist */ }
+            // Scan skills/
+            try {
+                const skillsDir = path.join(installPath, 'skills');
+                const skillEntries = await fs.readdir(skillsDir);
+                for (const entry of skillEntries) {
+                    const entryPath = path.join(skillsDir, entry);
+                    const stat = await fs.stat(entryPath);
+                    if (stat.isDirectory()) {
+                        try {
+                            await fs.access(path.join(entryPath, 'SKILL.md'));
+                            skills.push({ name: entry, filename: 'SKILL.md' });
+                        }
+                        catch { /* no SKILL.md in this subdir */ }
+                    }
+                }
+            }
+            catch { /* directory doesn't exist */ }
+            // Scan agents/
+            try {
+                const agentsDir = path.join(installPath, 'agents');
+                const agentEntries = await fs.readdir(agentsDir);
+                for (const entry of agentEntries) {
+                    if (entry.endsWith('.md')) {
+                        agents.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+                    }
+                }
+            }
+            catch { /* directory doesn't exist */ }
+            results.push({ key, pluginName, marketplaceName, installPath, version, commands, skills, agents });
+        }
+        res.json(results);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/plugins/command-content', async (req, res) => {
+    try {
+        const { installPath, filename } = req.query;
+        if (!installPath || !filename) {
+            res.status(400).json({ error: 'installPath and filename are required' });
+            return;
+        }
+        const filePath = path.join(installPath, 'commands', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        res.json({ content });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Start
+// ============================================================
+registerAIAssistantRoutes(app);
+const server = app.listen(PORT, () => {
+    console.log(`🚀 Claude Config Service backend running on http://localhost:${PORT}`);
+    console.log('📡 MCP Process Manager ready');
+    if (isElectron)
+        console.log(`📱 Frontend available at http://localhost:${PORT}`);
+});
+export default server;
+//# sourceMappingURL=server.js.map

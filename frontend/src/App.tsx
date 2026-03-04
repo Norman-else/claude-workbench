@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Command, RefreshCw, Server, Settings, Terminal, Trash2, X, Zap } from 'lucide-react';
+import { Check, Command, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
 import {
@@ -19,6 +19,7 @@ import { McpTab } from './components/tabs/McpTab';
 import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
 import { SkillsTab } from './components/tabs/SkillsTab';
+import { AIAssistantDrawer } from './components/AIAssistantDrawer';
 import { UpdateNotification } from './components/UpdateNotification';
 
 function App() {
@@ -64,6 +65,7 @@ function App() {
     type: 'success' | 'error';
   }>({ show: false, message: '', type: 'success' });
 
+  const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -236,6 +238,7 @@ function App() {
 
 
   return (
+    <>
     <div className="min-h-screen relative overflow-hidden">
       {notification.show && (
         <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] animate-slide-down">
@@ -350,6 +353,7 @@ function App() {
               <span className="font-medium text-white">Skills</span>
               {activeTab === 'skills' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
             </button>
+
           </div>
 
           <button
@@ -558,9 +562,44 @@ function App() {
           </div>
         )}
       </div>
-
-      <UpdateNotification />
     </div>
+
+
+      {/* AI Assistant FAB — outside overflow-hidden to ensure correct fixed positioning */}
+      <button
+        onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+          isAIDrawerOpen
+            ? 'bg-purple-700 shadow-purple-500/40 ring-2 ring-purple-400 pulse-ring'
+            : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/30 hover:shadow-purple-500/50'
+        }`}
+        title="AI Assistant"
+      >
+        <Sparkles className="w-6 h-6 text-white" />
+      </button>
+
+      <AIAssistantDrawer
+        isOpen={isAIDrawerOpen}
+        onClose={() => setIsAIDrawerOpen(false)}
+        onToolCall={(toolName) => {
+          const writeTools = [
+            // Environment
+            'create_environment', 'update_environment', 'activate_environment',
+            'deactivate_environment', 'delete_environment', 'reorder_environments',
+            // MCP servers
+            'start_mcp_server', 'stop_mcp_server', 'restart_mcp_server',
+            // Commands
+            'create_command', 'update_command', 'delete_command',
+            // Skills
+            'create_skill', 'delete_skill',
+            // Marketplaces & plugins
+            'add_marketplace', 'remove_marketplace', 'install_plugin', 'uninstall_plugin',
+          ];
+          if (writeTools.includes(toolName)) loadConfig();
+        }}
+      />
+      <UpdateNotification />
+    </>
   );
 }
 

@@ -22,7 +22,7 @@ export async function startBackend(): Promise<void> {
   try {
     // In production, the backend is bundled in app.asar
     // We need to use dynamic import to load the ES module
-    const backendPath = path.join(app.getAppPath(), 'backend/src/server.js');
+    const backendPath = path.join(app.getAppPath(), 'backend/dist/server.js');
     console.log('[Backend] Loading backend from:', backendPath);
     
     // Dynamic import to load ES module from asar
