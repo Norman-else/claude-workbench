@@ -11,7 +11,7 @@ interface UseAIChatReturn {
   loadHistory: () => Promise<void>;
 }
 
-export function useAIChat(): UseAIChatReturn {
+export function useAIChat(options?: { onToolCall?: (toolName: string) => void }): UseAIChatReturn {
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -97,6 +97,9 @@ export function useAIChat(): UseAIChatReturn {
                 m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m
               )
             );
+            if (options?.onToolCall) {
+              options.onToolCall(tc.name);
+            }
           } else if (event.type === 'error') {
             throw new Error(event.error || 'Stream error');
           } else if (event.type === 'done') {
@@ -131,7 +134,7 @@ export function useAIChat(): UseAIChatReturn {
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, []);
+  }, [options?.onToolCall]);
 
   const clearHistory = useCallback(async () => {
     await clearAIChatHistory();

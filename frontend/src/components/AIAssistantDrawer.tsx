@@ -11,11 +11,12 @@ import remarkGfm from 'remark-gfm';
 interface AIAssistantDrawerProps {
   isOpen: boolean;
   onClose: () => void;
+  onToolCall?: (toolName: string) => void;
 }
 
 
-export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory, clearHistory } = useAIChat();
+export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDrawerProps) {
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory, clearHistory } = useAIChat({ onToolCall });
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');

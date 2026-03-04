@@ -578,7 +578,15 @@ function App() {
         <Sparkles className="w-6 h-6 text-white" />
       </button>
 
-      <AIAssistantDrawer isOpen={isAIDrawerOpen} onClose={() => setIsAIDrawerOpen(false)} />
+      <AIAssistantDrawer
+        isOpen={isAIDrawerOpen}
+        onClose={() => setIsAIDrawerOpen(false)}
+        onToolCall={(toolName) => {
+          const envTools = ['create_environment', 'update_environment', 'activate_environment',
+            'deactivate_environment', 'delete_environment', 'reorder_environments'];
+          if (envTools.includes(toolName)) loadConfig();
+        }}
+      />
       <UpdateNotification />
     </>
   );
