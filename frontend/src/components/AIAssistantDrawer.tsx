@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, X, Send, User, Bot } from 'lucide-react';
-import type { AIModelOption } from '../types';
+import { Sparkles, X, Send, User, Bot, Trash2 } from 'lucide-react';
+import type { AIToolCall, AIModelOption } from '../types';
 import { getAvailableModels } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
 import ReactMarkdown from 'react-markdown';
@@ -12,8 +12,40 @@ interface AIAssistantDrawerProps {
   onClose: () => void;
 }
 
+interface ToolCallDisplayProps {
+  toolCall: AIToolCall;
+}
+
+function ToolCallDisplay({ toolCall }: ToolCallDisplayProps) {
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <div className="text-xs border border-white/10 rounded-lg overflow-hidden">
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="w-full flex items-center gap-2 px-2 py-1.5 bg-white/5 hover:bg-white/10 transition-colors text-left"
+      >
+        <span className="text-white/50">🔧</span>
+        <span className="text-white/60 font-mono">{toolCall.name}</span>
+        <span className="ml-auto text-white/30">{expanded ? '▲' : '▼'}</span>
+      </button>
+      {expanded && (
+        <div className="px-2 py-2 bg-black/20 text-white/50 font-mono text-xs overflow-x-auto whitespace-pre-wrap break-all">
+          {(() => {
+            try {
+              return JSON.stringify(JSON.parse(toolCall.result || '{}'), null, 2);
+            } catch {
+              return toolCall.result || '(no result)';
+            }
+          })()}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory } = useAIChat();
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory, clearHistory } = useAIChat();
   const [input, setInput] = useState('');
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -113,6 +145,18 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
             )}
           </select>
           <button
+            onClick={() => {
+              if (window.confirm('Clear all conversation history?')) {
+                clearHistory();
+              }
+            }}
+            className="text-white/40 hover:text-white/70 p-1 rounded transition-colors"
+            aria-label="Clear history"
+            title="Clear history"
+          >
+            <Trash2 className="w-4 h-4" />
+          </button>
+          <button
             onClick={onClose}
             className="text-white/60 hover:text-white p-1 rounded transition-colors"
             aria-label="Close AI Assistant"
@@ -187,6 +231,13 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
                     >
                       {msg.content + (chatIsLoading && chatMessages[chatMessages.length - 1]?.id === msg.id ? '▌' : '')}
                     </ReactMarkdown>
+                  </div>
+                )}
+                {msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0 && (
+                  <div className="mt-2 space-y-1">
+                    {msg.toolCalls.map((tc, i) => (
+                      <ToolCallDisplay key={i} toolCall={tc} />
+                    ))}
                   </div>
                 )}
                 <p className="text-xs text-white/30 mt-1">
