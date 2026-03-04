@@ -6,6 +6,7 @@ import { useAIChat } from '../hooks/useAIChat';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
+import remarkGfm from 'remark-gfm';
 
 interface AIAssistantDrawerProps {
   isOpen: boolean;
@@ -245,6 +246,7 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
                       </div>
                     ) : (
                     <ReactMarkdown
+                      remarkPlugins={[remarkGfm]}
                       components={{
                         code({ className, children, ...props }: { className?: string; children?: React.ReactNode; [key: string]: unknown }) {
                           const match = /language-(\w+)/.exec(className || '');
