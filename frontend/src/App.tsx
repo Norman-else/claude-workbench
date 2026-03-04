@@ -238,6 +238,7 @@ function App() {
 
 
   return (
+    <>
     <div className="min-h-screen relative overflow-hidden">
       {notification.show && (
         <div className="fixed top-8 left-1/2 transform -translate-x-1/2 z-[100] animate-slide-down">
@@ -353,24 +354,6 @@ function App() {
               {activeTab === 'skills' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
             </button>
 
-            <button
-              onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                isAIDrawerOpen
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  isAIDrawerOpen ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
-              >
-                <Sparkles className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">AI Assistant</span>
-              {isAIDrawerOpen && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
           </div>
 
           <button
@@ -579,10 +562,25 @@ function App() {
           </div>
         )}
       </div>
+    </div>
+
+
+      {/* AI Assistant FAB — outside overflow-hidden to ensure correct fixed positioning */}
+      <button
+        onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
+        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+          isAIDrawerOpen
+            ? 'bg-purple-700 shadow-purple-500/40 ring-2 ring-purple-400 pulse-ring'
+            : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/30 hover:shadow-purple-500/50'
+        }`}
+        title="AI Assistant"
+      >
+        <Sparkles className="w-6 h-6 text-white" />
+      </button>
 
       <AIAssistantDrawer isOpen={isAIDrawerOpen} onClose={() => setIsAIDrawerOpen(false)} />
       <UpdateNotification />
-    </div>
+    </>
   );
 }
 

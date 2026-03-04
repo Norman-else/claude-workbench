@@ -657,3 +657,9 @@ html[data-theme="light"] .glass-dark select.glass {
   color: #18181b !important;
   border-color: rgba(0, 0, 0, 0.15) !important;
 }
+
+/* AI Assistant FAB — keep icon white in light mode (purple bg needs white icon) */
+html[data-theme="light"] .bg-purple-600 .text-white,
+html[data-theme="light"] .bg-purple-700 .text-white {
+  color: #ffffff !important;
+}
