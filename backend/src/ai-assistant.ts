@@ -1,5 +1,5 @@
 import Anthropic from '@anthropic-ai/sdk';
-import type { Express } from 'express';
+import type { Express, Request, Response } from 'express';
 import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
@@ -12,6 +12,7 @@ const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
+const AI_HISTORY_PATH = path.join(HOME_DIR, '.claude', 'ai-assistant-history.json');
 
 export interface ActiveProfileCredentials {
   baseUrl: string;
@@ -69,8 +70,226 @@ export function getAnthropicClient(creds: ActiveProfileCredentials): Anthropic {
   });
 }
 
-export function registerAIAssistantRoutes(_app: Express): void {
-  // Routes will be implemented in subsequent tasks
+export function registerAIAssistantRoutes(app: Express): void {
+  // GET /api/ai/history
+  app.get('/api/ai/history', async (_req: Request, res: Response) => {
+    try {
+      const history = await loadHistory();
+      res.json(history);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // DELETE /api/ai/history
+  app.delete('/api/ai/history', async (_req: Request, res: Response) => {
+    try {
+      await fs.unlink(AI_HISTORY_PATH).catch(() => {});
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // GET /api/ai/models
+  app.get('/api/ai/models', async (_req: Request, res: Response) => {
+    try {
+      const creds = await getActiveProfileCredentials();
+      if (!creds) {
+        res.status(400).json({ error: 'No active environment profile' });
+        return;
+      }
+      const models = [
+        { id: creds.models.sonnet, label: 'Sonnet', source: 'profile' },
+        { id: creds.models.opus, label: 'Opus', source: 'profile' },
+        { id: creds.models.haiku, label: 'Haiku', source: 'profile' },
+        { id: creds.models.smallFast, label: 'Small/Fast', source: 'profile' },
+      ];
+      res.json(models);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // POST /api/ai/chat — SSE streaming with tool use loop
+  app.post('/api/ai/chat', async (req: Request, res: Response) => {
+    const { message, model } = req.body as { message: string; model: string };
+
+    // Validate active profile BEFORE opening SSE
+    const creds = await getActiveProfileCredentials();
+    if (!creds) {
+      res.status(400).json({ error: 'No active environment profile' });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    // AbortController for client disconnect
+    const abortController = new AbortController();
+    req.on('close', () => abortController.abort());
+
+    const client = getAnthropicClient(creds);
+
+    function sendSSE(event: object): void {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+
+    try {
+      // Load history and append user message
+      const historyFile = await loadHistory();
+      const userMsg: AIChatMessageForHistory = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: message,
+        timestamp: new Date().toISOString(),
+      };
+      historyFile.messages.push(userMsg);
+
+      // Build conversation for Anthropic API (convert history format)
+      const conversationMessages: Anthropic.MessageParam[] = historyFile.messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      const SYSTEM_PROMPT = `You are an AI assistant for Claude Workbench, a GUI management tool for Claude Code CLI.
+You help users manage their Claude Code environment through natural language.
+
+You have access to these tools:
+- list_environments: List all environment profiles
+- get_environment: Get details of a specific environment profile
+- create_environment: Create a new environment profile
+- update_environment: Update an existing environment profile
+- activate_environment: Activate an environment profile
+- deactivate_environment: Deactivate the current environment profile
+- get_mcp_server_statuses: Get MCP server configurations
+- list_commands: List available custom commands
+- list_skills: List available agent skills
+- get_app_config: Get overview of the app configuration
+
+Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.`;
+
+      let iteration = 0;
+      const MAX_ITERATIONS = 10;
+
+      // Track current assistant message for history
+      let currentAssistantContent = '';
+      const toolCallsForHistory: Array<{ name: string; input: Record<string, unknown>; result: string }> = [];
+
+      while (iteration < MAX_ITERATIONS) {
+        iteration++;
+
+        // Stream from Anthropic
+        const stream = client.messages.stream({
+          model,
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          messages: conversationMessages,
+          tools: toolDefinitions as unknown as Anthropic.Messages.Tool[],
+        }, { signal: abortController.signal });
+
+        let hasToolUse = false;
+        const toolUseBlocks: Anthropic.Messages.ToolUseBlock[] = [];
+
+        for await (const event of stream) {
+          if (abortController.signal.aborted) break;
+
+          if (event.type === 'content_block_delta') {
+            if (event.delta.type === 'text_delta') {
+              currentAssistantContent += event.delta.text;
+              sendSSE({ type: 'text_delta', text: event.delta.text });
+            }
+          }
+        }
+
+        if (abortController.signal.aborted) break;
+
+        // Get the final message to check stop_reason and tool use blocks
+        const finalMessage = await stream.finalMessage();
+
+        // Collect tool_use blocks from content
+        for (const block of finalMessage.content) {
+          if (block.type === 'tool_use') {
+            hasToolUse = true;
+            toolUseBlocks.push(block);
+          }
+        }
+
+        if (hasToolUse) {
+          // Add assistant turn to conversation
+          conversationMessages.push({
+            role: 'assistant' as const,
+            content: finalMessage.content as unknown as Anthropic.MessageParam['content'],
+          });
+
+          // Execute each tool and collect results
+          const toolResultContents: Anthropic.Messages.ToolResultBlockParam[] = [];
+
+          for (const toolBlock of toolUseBlocks) {
+            const result = await executeToolHandler(toolBlock.name, toolBlock.input as ToolInput);
+
+            toolCallsForHistory.push({
+              name: toolBlock.name,
+              input: toolBlock.input as Record<string, unknown>,
+              result,
+            });
+
+            sendSSE({
+              type: 'tool_call',
+              tool: {
+                name: toolBlock.name,
+                input: toolBlock.input,
+                result,
+              },
+            });
+
+            toolResultContents.push({
+              type: 'tool_result' as const,
+              tool_use_id: toolBlock.id,
+              content: result,
+            });
+          }
+
+          // Add tool results to conversation
+          conversationMessages.push({
+            role: 'user' as const,
+            content: toolResultContents as unknown as Anthropic.MessageParam['content'],
+          });
+
+          // Continue loop for next AI response
+          continue;
+        }
+
+        // No tool use — we're done
+        break;
+      }
+
+      // Save updated history
+      const assistantMsg: AIChatMessageForHistory = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: currentAssistantContent,
+        timestamp: new Date().toISOString(),
+        toolCalls: toolCallsForHistory.length > 0 ? toolCallsForHistory : undefined,
+      };
+      historyFile.messages.push(assistantMsg);
+      historyFile.updatedAt = new Date().toISOString();
+      await saveHistory(historyFile);
+
+      sendSSE({ type: 'done' });
+      res.end();
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        res.end();
+        return;
+      }
+      sendSSE({ type: 'error', error: (err as Error).message });
+      res.end();
+    }
+  });
 }
 
 // ============================================================
@@ -122,6 +341,66 @@ async function writeProfilesForAI(data: ProfilesData): Promise<void> {
   const dir = path.dirname(CLAUDE_PROFILES_PATH);
   await fs.mkdir(dir, { recursive: true });
   await fs.writeFile(CLAUDE_PROFILES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+
+// ============================================================
+// History management
+// ============================================================
+
+interface AIChatMessageForHistory {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  toolCalls?: Array<{ name: string; input: Record<string, unknown>; result?: string }>;
+}
+
+interface AIChatHistoryFile {
+  messages: AIChatMessageForHistory[];
+  updatedAt: string;
+}
+
+export async function loadHistory(): Promise<AIChatHistoryFile> {
+  try {
+    const content = await fs.readFile(AI_HISTORY_PATH, 'utf-8');
+    return JSON.parse(content) as AIChatHistoryFile;
+  } catch {
+    return { messages: [], updatedAt: '' };
+  }
+}
+
+export async function saveHistory(history: AIChatHistoryFile): Promise<void> {
+  const trimmed = trimHistory(history);
+  const redacted = redactHistoryCredentials(trimmed);
+  const dir = path.dirname(AI_HISTORY_PATH);
+  await fs.mkdir(dir, { recursive: true });
+  await fs.writeFile(AI_HISTORY_PATH, JSON.stringify(redacted, null, 2), 'utf-8');
+}
+
+export function trimHistory(history: AIChatHistoryFile): AIChatHistoryFile {
+  const MAX_MESSAGES = 100;
+  if (history.messages.length <= MAX_MESSAGES) return history;
+  return {
+    ...history,
+    messages: history.messages.slice(history.messages.length - MAX_MESSAGES),
+  };
+}
+
+function redactHistoryCredentials(history: AIChatHistoryFile): AIChatHistoryFile {
+  // Redact any potential credential leakage in tool call results
+  return {
+    ...history,
+    messages: history.messages.map((msg) => ({
+      ...msg,
+      toolCalls: msg.toolCalls?.map((tc) => ({
+        ...tc,
+        result: tc.result
+          ? tc.result.replace(/"apiKey"\s*:\s*"[^"]*"/g, '"apiKey":"***"')
+              .replace(/"authToken"\s*:\s*"[^"]*"/g, '"authToken":"***"')
+          : tc.result,
+      })),
+    })),
+  };
 }
 
 // ============================================================
