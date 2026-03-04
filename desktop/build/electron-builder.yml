@@ -2,8 +2,14 @@ appId: com.claude.workbench
 productName: Claude Workbench
 copyright: Copyright © 2025 Claude Workbench
 
-# ASAR configuration - disabled so icon files are directly accessible
-asar: false
+# ASAR configuration - packages app files into a single archive.
+# Required for proper macOS code signature validation during auto-updates.
+asar: true
+
+# Files that must remain outside the ASAR archive
+asarUnpack:
+  - "**/*.node"
+  - "desktop/assets/**/*"
 
 # Directories
 directories:

@@ -38,6 +38,14 @@ export function setupAutoUpdater(): void {
   autoUpdater.autoDownload = true;
   autoUpdater.autoInstallOnAppQuit = false;
 
+  // Skip macOS code signature verification for unsigned builds.
+  // This fixes the auto-update error on macOS:
+  //   "Code signature at URL did not pass validation:
+  //    代码不含资源，但签名指示这些资源必须存在"
+  if (process.platform === 'darwin') {
+    autoUpdater.verifyUpdateCodeSignature = false;
+  }
+
   autoUpdater.on('checking-for-update', () => {
     sendStatus({ type: 'checking' });
   });
