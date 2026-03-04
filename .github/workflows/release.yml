@@ -92,6 +92,7 @@ jobs:
       - name: Build macOS
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
         run: npm run build:desktop:mac
 
       - name: Upload macOS artifacts
