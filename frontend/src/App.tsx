@@ -582,9 +582,20 @@ function App() {
         isOpen={isAIDrawerOpen}
         onClose={() => setIsAIDrawerOpen(false)}
         onToolCall={(toolName) => {
-          const envTools = ['create_environment', 'update_environment', 'activate_environment',
-            'deactivate_environment', 'delete_environment', 'reorder_environments'];
-          if (envTools.includes(toolName)) loadConfig();
+          const writeTools = [
+            // Environment
+            'create_environment', 'update_environment', 'activate_environment',
+            'deactivate_environment', 'delete_environment', 'reorder_environments',
+            // MCP servers
+            'start_mcp_server', 'stop_mcp_server', 'restart_mcp_server',
+            // Commands
+            'create_command', 'update_command', 'delete_command',
+            // Skills
+            'create_skill', 'delete_skill',
+            // Marketplaces & plugins
+            'add_marketplace', 'remove_marketplace', 'install_plugin', 'uninstall_plugin',
+          ];
+          if (writeTools.includes(toolName)) loadConfig();
         }}
       />
       <UpdateNotification />
