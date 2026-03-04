@@ -202,6 +202,9 @@ Marketplace:
 App Overview:
 - get_app_config: Get high-level app config overview
 
+File System:
+- read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
+
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
 
@@ -747,6 +750,26 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       required: ['marketplaceName', 'pluginName'],
     },
   },
+  {
+    name: 'read_local_path',
+    description: 'Read a local file\'s text content or list a directory\'s entries. Supports ~ (home dir) expansion. Use this to inspect any config file, log file, or directory on the user\'s machine.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: {
+          type: 'string',
+          description: 'Absolute path or ~ relative path to a file or directory. Examples: "~/.claude/settings.json", "~/.claude", "C:\\\\Users\\\\name\\\\.gitconfig"',
+        },
+        max_bytes: {
+          type: 'number',
+          description: 'Max bytes to read for files (default: 32768, max: 1048576). Ignored for directories.',
+          minimum: 1,
+          maximum: 1048576,
+        },
+      },
+      required: ['path'],
+    },
+  },
 ];
 
 // ============================================================
@@ -1160,7 +1183,7 @@ async function handleInstallPlugin(input: ToolInput): Promise<string> {
     const resp = await fetch('http://localhost:3001/api/plugins/install', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketplaceName, pluginName }),
+      body: JSON.stringify({ marketplace: marketplaceName, plugin: pluginName }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
@@ -1177,12 +1200,116 @@ async function handleUninstallPlugin(input: ToolInput): Promise<string> {
     const resp = await fetch('http://localhost:3001/api/plugins/uninstall', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ marketplaceName, pluginName }),
+      body: JSON.stringify({ marketplace: marketplaceName, plugin: pluginName }),
     });
     const data = await resp.json();
     if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
     return JSON.stringify(data);
   } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleReadLocalPath(input: ToolInput): Promise<string> {
+  // [Mi4] Type guard — reject non-string path early
+  if (typeof input.path !== 'string' || input.path.trim() === '') {
+    return JSON.stringify({ error: 'Invalid path: must be a non-empty string' });
+  }
+
+  const rawPath = input.path;
+  // [C2] Clamp max_bytes to [1, 1MB] to prevent huge Buffer allocations
+  const maxBytes =
+    typeof input.max_bytes === 'number'
+      ? Math.min(Math.max(1, Math.floor(input.max_bytes)), 1_048_576)
+      : 32_768;
+
+  // [M1] Expand ~ correctly: slice(2) to remove '~/' prefix (not slice(1))
+  let targetPath: string;
+  if (rawPath === '~') {
+    targetPath = HOME_DIR;
+  } else if (rawPath.startsWith('~/') || rawPath.startsWith('~\\')) {
+    targetPath = path.join(HOME_DIR, rawPath.slice(2));
+  } else {
+    targetPath = rawPath;
+  }
+
+  // [C1] Resolve symlinks and verify the path stays within HOME_DIR
+  let resolvedPath: string;
+  try {
+    resolvedPath = await fs.realpath(targetPath);
+  } catch {
+    // realpath fails when path does not exist
+    return JSON.stringify({ error: 'Path not found: path does not exist or is inaccessible' });
+  }
+
+  const normalizedHome = path.normalize(HOME_DIR);
+  const isUnderHome =
+    resolvedPath === normalizedHome ||
+    resolvedPath.startsWith(normalizedHome + path.sep);
+  if (!isUnderHome) {
+    return JSON.stringify({ error: 'Access denied: path must be within the home directory' });
+  }
+
+  try {
+    const stats = await fs.stat(resolvedPath);
+
+    if (stats.isDirectory()) {
+      const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+      const items = entries
+        .map((e) => ({
+          name: e.name,
+          type: e.isDirectory() ? 'directory' : 'file',
+          path: path.join(resolvedPath, e.name),
+        }))
+        .sort((a, b) => {
+          if (a.type === 'directory' && b.type !== 'directory') return -1;
+          if (a.type !== 'directory' && b.type === 'directory') return 1;
+          return a.name.localeCompare(b.name);
+        });
+      return JSON.stringify({
+        type: 'directory',
+        path: resolvedPath,
+        entries: items,
+        count: items.length,
+      });
+    }
+
+    if (stats.isFile()) {
+      if (stats.size > maxBytes) {
+        // [M3] Use try/finally to guarantee file descriptor is closed
+        const fileHandle = await fs.open(resolvedPath, 'r');
+        try {
+          const buffer = Buffer.alloc(maxBytes);
+          await fileHandle.read(buffer, 0, maxBytes, 0);
+          return JSON.stringify({
+            type: 'file',
+            path: resolvedPath,
+            size: stats.size,
+            truncated: true,
+            content: buffer.toString('utf-8'),
+            note: `File truncated: showing first ${maxBytes} of ${stats.size} bytes`,
+          });
+        } finally {
+          await fileHandle.close();
+        }
+      }
+      const content = await fs.readFile(resolvedPath, 'utf-8');
+      return JSON.stringify({
+        type: 'file',
+        path: resolvedPath,
+        size: stats.size,
+        truncated: false,
+        content,
+      });
+    }
+
+    return JSON.stringify({ error: `Path is neither a file nor a directory: ${resolvedPath}` });
+  } catch (err) {
+    const e = err as NodeJS.ErrnoException;
+    if (e.code === 'ENOENT') return JSON.stringify({ error: 'Path not found' });
+    if (e.code === 'EACCES') return JSON.stringify({ error: 'Permission denied' });
+    if (e.code === 'EMFILE') return JSON.stringify({ error: 'Too many open files, please retry' });
+    if (e.code === 'ENOTDIR') return JSON.stringify({ error: 'Path component is not a directory' });
     return JSON.stringify({ error: (err as Error).message });
   }
 }
@@ -1219,6 +1346,7 @@ export async function executeToolHandler(name: string, input: ToolInput): Promis
     case 'uninstall_plugin': return handleUninstallPlugin(input);
     case 'add_marketplace': return handleAddMarketplace(input);
     case 'remove_marketplace': return handleRemoveMarketplace(input);
+    case 'read_local_path': return handleReadLocalPath(input);
     default: return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 }
