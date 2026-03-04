@@ -11,6 +11,10 @@ asarUnpack:
   - "**/*.node"
   - "desktop/assets/**/*"
 
+# Re-sign macOS .app with ad-hoc signature after packaging to fix auto-update
+# code signature validation errors (electron-builder #7364, #8419)
+afterPack: desktop/build/afterPack.cjs
+
 # Directories
 directories:
   output: dist-electron
