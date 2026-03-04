@@ -1,0 +1,257 @@
+import Anthropic from '@anthropic-ai/sdk';
+import fs from 'fs/promises';
+import path from 'path';
+import os from 'os';
+import crypto from 'crypto';
+import { writeSettingsEnv, ensureFileExists, clearSettingsEnv } from './platform.js';
+const HOME_DIR = os.homedir();
+const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
+const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+export async function getActiveProfileCredentials() {
+    // Read settings.json for ANTHROPIC_PROFILE_ID, then read env-profiles.json
+    // Return null if no active profile found
+    try {
+        const settingsRaw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8').catch(() => '{}');
+        const settings = JSON.parse(settingsRaw);
+        const profileId = settings.env?.ANTHROPIC_PROFILE_ID;
+        if (!profileId)
+            return null;
+        const profilesRaw = await fs.readFile(CLAUDE_PROFILES_PATH, 'utf-8').catch(() => '{"profiles":[],"activeProfileId":null}');
+        const profilesData = JSON.parse(profilesRaw);
+        const profile = profilesData.profiles?.find((p) => p.id === profileId);
+        if (!profile)
+            return null;
+        return {
+            baseUrl: profile.baseUrl || '',
+            apiKey: profile.apiKey || '',
+            authToken: profile.authToken || '',
+            models: {
+                sonnet: profile.sonnetModel || 'claude-sonnet-4-20250514',
+                opus: profile.opusModel || 'claude-opus-4-20250514',
+                haiku: profile.haikuModel || 'claude-haiku-3-5-20241022',
+                smallFast: profile.smallFastModel || 'claude-haiku-3-5-20241022',
+            },
+        };
+    }
+    catch {
+        return null;
+    }
+}
+export function getAnthropicClient(creds) {
+    if (creds.apiKey) {
+        return new Anthropic({
+            apiKey: creds.apiKey,
+            ...(creds.baseUrl ? { baseURL: creds.baseUrl } : {}),
+        });
+    }
+    return new Anthropic({
+        apiKey: creds.authToken,
+        ...(creds.baseUrl ? { baseURL: creds.baseUrl } : {}),
+        defaultHeaders: { 'Authorization': `Bearer ${creds.authToken}` },
+    });
+}
+export function registerAIAssistantRoutes(_app) {
+    // Routes will be implemented in subsequent tasks
+}
+// ============================================================
+// Profile helpers
+// ============================================================
+export function redactProfile(profile) {
+    return {
+        ...profile,
+        apiKey: profile.apiKey ? '***' : '',
+        authToken: profile.authToken ? '***' : '',
+    };
+}
+async function readProfilesForAI() {
+    try {
+        await ensureFileExists(CLAUDE_PROFILES_PATH, JSON.stringify({ profiles: [], activeProfileId: null }, null, 2));
+        const content = await fs.readFile(CLAUDE_PROFILES_PATH, 'utf-8');
+        return JSON.parse(content);
+    }
+    catch {
+        return { profiles: [], activeProfileId: null };
+    }
+}
+async function writeProfilesForAI(data) {
+    const dir = path.dirname(CLAUDE_PROFILES_PATH);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.writeFile(CLAUDE_PROFILES_PATH, JSON.stringify(data, null, 2), 'utf-8');
+}
+export const toolDefinitions = [
+    {
+        name: 'list_environments',
+        description: 'List all environment profiles. Returns all profiles with their activeProfileId. Credentials are redacted.',
+        input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'get_environment',
+        description: 'Get a single environment profile by ID. Credentials are redacted.',
+        input_schema: {
+            type: 'object',
+            properties: { id: { type: 'string', description: 'Profile ID' } },
+            required: ['id'],
+        },
+    },
+    {
+        name: 'create_environment',
+        description: 'Create a new environment profile.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Profile name' },
+                baseUrl: { type: 'string', description: 'Base URL for Anthropic API' },
+                apiKey: { type: 'string', description: 'API key' },
+                authToken: { type: 'string', description: 'Auth token (alternative to API key)' },
+                haikuModel: { type: 'string', description: 'Haiku model override' },
+                opusModel: { type: 'string', description: 'Opus model override' },
+                sonnetModel: { type: 'string', description: 'Sonnet model override' },
+                smallFastModel: { type: 'string', description: 'Small/fast model override' },
+            },
+            required: ['name'],
+        },
+    },
+    {
+        name: 'update_environment',
+        description: 'Update an existing environment profile by ID.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                id: { type: 'string', description: 'Profile ID to update' },
+                name: { type: 'string' },
+                baseUrl: { type: 'string' },
+                apiKey: { type: 'string' },
+                authToken: { type: 'string' },
+                haikuModel: { type: 'string' },
+                opusModel: { type: 'string' },
+                sonnetModel: { type: 'string' },
+                smallFastModel: { type: 'string' },
+            },
+            required: ['id'],
+        },
+    },
+    {
+        name: 'activate_environment',
+        description: 'Activate an environment profile by ID. This sets it as the current active profile.',
+        input_schema: {
+            type: 'object',
+            properties: { id: { type: 'string', description: 'Profile ID to activate' } },
+            required: ['id'],
+        },
+    },
+    {
+        name: 'deactivate_environment',
+        description: 'Deactivate the currently active environment profile.',
+        input_schema: { type: 'object', properties: {} },
+    },
+];
+async function handleListEnvironments(_input) {
+    const data = await readProfilesForAI();
+    return JSON.stringify({
+        profiles: data.profiles.map(redactProfile),
+        activeProfileId: data.activeProfileId,
+    });
+}
+async function handleGetEnvironment(input) {
+    const data = await readProfilesForAI();
+    const profile = data.profiles.find((p) => p.id === input.id);
+    if (!profile)
+        return JSON.stringify({ error: `Profile not found: ${input.id}` });
+    return JSON.stringify(redactProfile(profile));
+}
+async function handleCreateEnvironment(input) {
+    const data = await readProfilesForAI();
+    const now = new Date().toISOString();
+    const newProfile = {
+        id: crypto.randomUUID(),
+        name: input.name || 'New Profile',
+        baseUrl: input.baseUrl || '',
+        apiKey: input.apiKey || '',
+        authToken: input.authToken || '',
+        haikuModel: input.haikuModel || '',
+        opusModel: input.opusModel || '',
+        sonnetModel: input.sonnetModel || '',
+        smallFastModel: input.smallFastModel || '',
+        createdAt: now,
+    };
+    data.profiles.push(newProfile);
+    await writeProfilesForAI(data);
+    return JSON.stringify({ success: true, profile: redactProfile(newProfile) });
+}
+async function handleUpdateEnvironment(input) {
+    const data = await readProfilesForAI();
+    const idx = data.profiles.findIndex((p) => p.id === input.id);
+    if (idx === -1)
+        return JSON.stringify({ error: `Profile not found: ${input.id}` });
+    const profile = data.profiles[idx];
+    const updated = {
+        ...profile,
+        ...(input.name !== undefined && { name: input.name }),
+        ...(input.baseUrl !== undefined && { baseUrl: input.baseUrl }),
+        ...(input.apiKey !== undefined && { apiKey: input.apiKey }),
+        ...(input.authToken !== undefined && { authToken: input.authToken }),
+        ...(input.haikuModel !== undefined && { haikuModel: input.haikuModel }),
+        ...(input.opusModel !== undefined && { opusModel: input.opusModel }),
+        ...(input.sonnetModel !== undefined && { sonnetModel: input.sonnetModel }),
+        ...(input.smallFastModel !== undefined && { smallFastModel: input.smallFastModel }),
+        updatedAt: new Date().toISOString(),
+    };
+    data.profiles[idx] = updated;
+    await writeProfilesForAI(data);
+    return JSON.stringify({ success: true, profile: redactProfile(updated) });
+}
+async function handleActivateEnvironment(input) {
+    const data = await readProfilesForAI();
+    const profile = data.profiles.find((p) => p.id === input.id);
+    if (!profile)
+        return JSON.stringify({ error: `Profile not found: ${input.id}` });
+    data.activeProfileId = profile.id;
+    await writeProfilesForAI(data);
+    // Write env vars to settings.json
+    try {
+        const vars = { ANTHROPIC_PROFILE_ID: profile.id };
+        if (profile.baseUrl)
+            vars.ANTHROPIC_BASE_URL = profile.baseUrl;
+        if (profile.apiKey)
+            vars.ANTHROPIC_API_KEY = profile.apiKey;
+        if (profile.authToken)
+            vars.ANTHROPIC_AUTH_TOKEN = profile.authToken;
+        if (profile.haikuModel)
+            vars.ANTHROPIC_DEFAULT_HAIKU_MODEL = profile.haikuModel;
+        if (profile.opusModel)
+            vars.ANTHROPIC_DEFAULT_OPUS_MODEL = profile.opusModel;
+        if (profile.sonnetModel)
+            vars.ANTHROPIC_DEFAULT_SONNET_MODEL = profile.sonnetModel;
+        if (profile.smallFastModel)
+            vars.ANTHROPIC_DEFAULT_SMALL_FAST_MODEL = profile.smallFastModel;
+        await writeSettingsEnv(CLAUDE_SETTINGS_PATH, vars);
+    }
+    catch {
+        // Ignore settings write errors
+    }
+    return JSON.stringify({ success: true, message: `Activated profile: ${profile.name}` });
+}
+async function handleDeactivateEnvironment(_input) {
+    const data = await readProfilesForAI();
+    data.activeProfileId = null;
+    await writeProfilesForAI(data);
+    try {
+        await clearSettingsEnv(CLAUDE_SETTINGS_PATH);
+    }
+    catch {
+        // Ignore
+    }
+    return JSON.stringify({ success: true, message: 'Deactivated active profile' });
+}
+export async function executeToolHandler(name, input) {
+    switch (name) {
+        case 'list_environments': return handleListEnvironments(input);
+        case 'get_environment': return handleGetEnvironment(input);
+        case 'create_environment': return handleCreateEnvironment(input);
+        case 'update_environment': return handleUpdateEnvironment(input);
+        case 'activate_environment': return handleActivateEnvironment(input);
+        case 'deactivate_environment': return handleDeactivateEnvironment(input);
+        default: return JSON.stringify({ error: `Unknown tool: ${name}` });
+    }
+}
+//# sourceMappingURL=ai-assistant.js.map
