@@ -35,8 +35,6 @@ mac:
   hardenedRuntime: false
   gatekeeperAssess: false
   identity: null
-  entitlements: desktop/build/entitlements.mac.plist
-  entitlementsInherit: desktop/build/entitlements.mac.plist
   artifactName: Claude-Workbench-${version}-${arch}-mac.${ext}
 
 dmg:
