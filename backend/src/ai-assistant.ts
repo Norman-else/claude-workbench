@@ -205,13 +205,12 @@ App Overview:
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
 
-      // Only enable web search when using the official Anthropic API (no custom baseURL)
-      const supportsWebSearch = !creds.baseUrl || creds.baseUrl.includes('api.anthropic.com');
-      const webSearchTool = supportsWebSearch ? [{
+      // Enable web search for all profiles — let the API decide if it's supported
+      const webSearchTool = [{
         type: 'web_search_20250305' as const,
         name: 'web_search' as const,
         max_uses: 5,
-      }] : [];
+      }];
 
       let iteration = 0;
       const MAX_ITERATIONS = 10;
