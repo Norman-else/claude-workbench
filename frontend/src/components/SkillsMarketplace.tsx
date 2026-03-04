@@ -157,13 +157,13 @@ export function SkillsMarketplace({
                   <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdownOpen && (
-                  <div className="absolute left-0 right-0 top-full mt-1 bg-zinc-900/95 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                  <div className="absolute left-0 right-0 top-full mt-1 glass border border-zinc-700 rounded-xl shadow-xl z-[200] overflow-hidden">
                     {marketplaces.map((m) => (
                       <button
                         key={m.name}
                         type="button"
                         onClick={() => { setSelectedName(m.name); setDropdownOpen(false); }}
-                        className={`w-full flex items-center justify-between px-3 py-2 text-sm text-white text-left hover:bg-zinc-800 transition-colors ${m.name === selectedName ? 'bg-zinc-800/60' : ''}`}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-sm text-white text-left hover:bg-zinc-800 transition-colors ${m.name === selectedName ? 'bg-zinc-800' : ''}`}
                       >
                         <span className="truncate">{m.name}</span>
                         {m.name === selectedName && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
