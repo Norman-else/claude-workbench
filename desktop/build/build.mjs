@@ -64,8 +64,9 @@ run('npx tsc -p desktop/tsconfig.json');
 console.log('\n📦 Step 3: Building Frontend');
 run('cd frontend && npm run build');
 
-// Step 4: Ensure backend is ready (no build needed for plain JS)
-console.log('\n📦 Step 4: Backend files ready (no compilation needed)');
+// Step 4: Compile backend TypeScript
+console.log('\n📦 Step 4: Compiling Backend TypeScript');
+run('npx tsc', path.join(rootDir, 'backend'));
 
 // Step 5: Run electron-builder
 console.log('\n📦 Step 5: Running electron-builder');
