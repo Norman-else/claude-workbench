@@ -21,6 +21,7 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
   const [modelOptions, setModelOptions] = useState<AIModelOption[]>([]);
   const [modelsLoading, setModelsLoading] = useState(false);
   const [noProfile, setNoProfile] = useState(false);
+  const [dismissedError, setDismissedError] = useState<string | null>(null);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -72,6 +73,7 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
+    setDismissedError(null);
     sendMessage(msg, selectedModel);
   }, [input, chatIsLoading, sendMessage, selectedModel]);
 
@@ -121,7 +123,20 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
 
         {/* Messages area */}
         <div className="flex-1 overflow-y-auto p-4 space-y-4">
-          {chatMessages.length === 0 && (
+          {noProfile && (
+            <div className="flex flex-col items-center justify-center h-full gap-4 px-8">
+              <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center">
+                <Sparkles className="w-6 h-6 text-yellow-400" />
+              </div>
+              <div className="text-center">
+                <p className="text-white/80 font-medium mb-2">No active environment profile</p>
+                <p className="text-white/40 text-sm leading-relaxed">
+                  Activate an environment profile in the Environments tab to use AI Assistant
+                </p>
+              </div>
+            </div>
+          )}
+          {!noProfile && chatMessages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <p className="text-white/40 text-sm text-center px-8">
                 Ask me about your environments, MCP servers, or commands
@@ -198,9 +213,16 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
         </div>
 
         {/* Input area */}
-        {chatError && (
-          <div className="px-4 py-2 bg-red-900/20 border-t border-red-700/30 text-red-300 text-xs">
-            Error: {chatError}
+        {chatError && chatError !== dismissedError && (
+          <div className="px-4 py-2 bg-red-900/20 border-t border-red-700/30 text-red-300 text-xs flex items-center justify-between">
+            <span>Error: {chatError}</span>
+            <button
+              onClick={() => setDismissedError(chatError)}
+              className="ml-2 text-red-400/60 hover:text-red-300 transition-colors"
+              aria-label="Dismiss error"
+            >
+              <X className="w-3.5 h-3.5" />
+            </button>
           </div>
         )}
 
@@ -209,7 +231,7 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
             <textarea
               ref={textareaRef}
               className="flex-1 bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 resize-none focus:outline-none focus:border-white/40 transition-colors"
-              placeholder="Type a message..."
+              placeholder={noProfile ? "Activate a profile to start chatting..." : "Type a message..."}
               value={input}
               rows={1}
               onChange={(e) => {
@@ -217,11 +239,11 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
                 autoResize();
               }}
               onKeyDown={handleKeyDown}
-              disabled={chatIsLoading}
+              disabled={chatIsLoading || noProfile}
             />
             <button
               onClick={handleSend}
-              disabled={!input.trim() || chatIsLoading}
+              disabled={!input.trim() || chatIsLoading || noProfile}
               className="shrink-0 w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
               aria-label="Send message"
             >
