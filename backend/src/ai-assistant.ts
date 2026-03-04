@@ -193,6 +193,8 @@ Skills:
 
 Marketplace:
 - list_marketplaces: List registered marketplace sources
+- add_marketplace: Add a new marketplace source by GitHub URL
+- remove_marketplace: Remove a marketplace source by name
 - list_installed_plugins: List all installed plugins
 - install_plugin: Install a plugin from a marketplace
 - uninstall_plugin: Uninstall a plugin
@@ -684,6 +686,28 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     input_schema: { type: 'object', properties: {} },
   },
   {
+    name: 'add_marketplace',
+    description: 'Add a new marketplace source by GitHub URL. The URL should point to a GitHub repository containing a .claude-plugin/marketplace.json file.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        url: { type: 'string', description: 'GitHub repository URL, e.g. https://github.com/owner/repo' },
+      },
+      required: ['url'],
+    },
+  },
+  {
+    name: 'remove_marketplace',
+    description: 'Remove a registered marketplace source by name.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Marketplace name to remove (as shown in list_marketplaces)' },
+      },
+      required: ['name'],
+    },
+  },
+  {
     name: 'list_installed_plugins',
     description: 'List all installed plugins with details.',
     input_schema: { type: 'object', properties: {} },
@@ -1079,6 +1103,32 @@ async function handleListMarketplaces(_input: ToolInput): Promise<string> {
   }
 }
 
+async function handleAddMarketplace(input: ToolInput): Promise<string> {
+  const url = input.url as string;
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/marketplaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleRemoveMarketplace(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/plugins/marketplaces/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
 async function handleListInstalledPlugins(_input: ToolInput): Promise<string> {
   try {
     const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
@@ -1151,6 +1201,8 @@ export async function executeToolHandler(name: string, input: ToolInput): Promis
     case 'list_installed_plugins': return handleListInstalledPlugins(input);
     case 'install_plugin': return handleInstallPlugin(input);
     case 'uninstall_plugin': return handleUninstallPlugin(input);
+    case 'add_marketplace': return handleAddMarketplace(input);
+    case 'remove_marketplace': return handleRemoveMarketplace(input);
     default: return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 }
