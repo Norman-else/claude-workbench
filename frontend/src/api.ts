@@ -9,6 +9,8 @@ import type {
   Skill,
   MarketplaceInfo,
   InstalledPluginDetails,
+  AIChatHistory,
+  AIModelOption,
 } from './types';
 
 async function parseError(response: Response): Promise<string> {
@@ -209,4 +211,31 @@ export function getInstalledPluginDetails(): Promise<InstalledPluginDetails[]> {
 
 export function getPluginCommandContent(installPath: string, filename: string): Promise<{ content: string }> {
   return requestJson(`/api/plugins/command-content?installPath=${encodeURIComponent(installPath)}&filename=${encodeURIComponent(filename)}`);
+}
+
+
+// AI Assistant API
+export function streamAIChat(
+  message: string,
+  model: string,
+  signal?: AbortSignal
+): Promise<Response> {
+  return fetch('/api/ai/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, model }),
+    signal,
+  });
+}
+
+export async function getAIChatHistory(): Promise<AIChatHistory> {
+  return requestJson<AIChatHistory>('/api/ai/history');
+}
+
+export async function clearAIChatHistory(): Promise<void> {
+  await requestVoid('/api/ai/history', { method: 'DELETE' });
+}
+
+export async function getAvailableModels(): Promise<AIModelOption[]> {
+  return requestJson<AIModelOption[]>('/api/ai/models');
 }

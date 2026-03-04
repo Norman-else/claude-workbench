@@ -23,6 +23,7 @@ import {
   expandPath,
   getWindowsDrives,
 } from './platform.js';
+import { registerAIAssistantRoutes } from './ai-assistant.js';
 
 // ============================================================
 // Types
@@ -1622,6 +1623,7 @@ app.get('/api/plugins/command-content', async (req: Request, res: Response) => {
 // Start
 // ============================================================
 
+registerAIAssistantRoutes(app);
 const server = app.listen(PORT, () => {
   console.log(`🚀 Claude Config Service backend running on http://localhost:${PORT}`);
   console.log('📡 MCP Process Manager ready');

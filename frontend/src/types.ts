@@ -188,3 +188,36 @@ export interface InstalledPluginDetails {
   skills: PluginContentFile[];     // skills/ 目录下的子目录（含 SKILL.md 的）
   agents: PluginContentFile[];     // agents/ 目录下的 .md 文件
 }
+
+
+export interface AIToolCall {
+  name: string;
+  input: Record<string, unknown>;
+  result?: string;
+}
+
+export interface AIChatMessage {
+  id: string;
+  role: 'user' | 'assistant';
+  content: string;
+  timestamp: string;
+  toolCalls?: AIToolCall[];
+}
+
+export interface AIChatStreamEvent {
+  type: 'text_delta' | 'tool_call' | 'error' | 'done';
+  text?: string;
+  tool?: { name: string; input?: Record<string, unknown>; result?: string };
+  error?: string;
+}
+
+export interface AIModelOption {
+  id: string;      // e.g. 'claude-sonnet-4-20250514'
+  label: string;   // e.g. 'Sonnet'
+  source: 'profile' | 'default';
+}
+
+export interface AIChatHistory {
+  messages: AIChatMessage[];
+  updatedAt: string;
+}
