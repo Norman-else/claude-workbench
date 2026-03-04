@@ -45,10 +45,10 @@ export async function getActiveProfileCredentials(): Promise<ActiveProfileCreden
       apiKey: profile.apiKey || '',
       authToken: profile.authToken || '',
       models: {
-        sonnet: profile.sonnetModel || 'claude-sonnet-4-20250514',
-        opus: profile.opusModel || 'claude-opus-4-20250514',
-        haiku: profile.haikuModel || 'claude-haiku-3-5-20241022',
-        smallFast: profile.smallFastModel || 'claude-haiku-3-5-20241022',
+        sonnet: profile.sonnetModel || 'claude-sonnet-4-6',
+        opus: profile.opusModel || 'claude-opus-4-6',
+        haiku: profile.haikuModel || 'claude-haiku-4-5-20251001',
+        smallFast: profile.smallFastModel || 'claude-haiku-4-5-20251001',
       },
     };
   } catch {
