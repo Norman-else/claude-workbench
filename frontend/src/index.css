@@ -729,7 +729,64 @@ html[data-theme="light"] .glass-dark .border-white\/40 {
   border-color: rgba(0, 0, 0, 0.35) !important;
 }
 
-/* Textarea and input within drawer */
+/* Chat input container & textarea */
+.ai-chat-textarea {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+}
+.ai-chat-textarea::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-chat-textarea::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-chat-textarea::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+.ai-chat-textarea {
+  outline: none !important;
+  border: none !important;
+}
+.ai-chat-textarea:focus {
+  outline: none !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+/* Light mode — chat input container */
+html[data-theme="light"] .glass-dark .ai-chat-input-container {
+  background-color: #ffffff !important;
+  border-color: #d4d4d8 !important;  /* zinc-300 — clearly visible */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04) !important;
+}
+html[data-theme="light"] .glass-dark .ai-chat-input-container:has(.ai-chat-textarea:focus) {
+  border-color: rgba(0, 0, 0, 0.3) !important;
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.12) !important;
+}
+
+/* Light mode — chat textarea */
+html[data-theme="light"] .glass-dark .ai-chat-textarea {
+  color: #18181b !important;
+}
+html[data-theme="light"] .glass-dark .ai-chat-textarea::placeholder {
+  color: rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="light"] .glass-dark .ai-chat-textarea::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+/* Light mode — send button inside container */
+html[data-theme="light"] .glass-dark .ai-chat-input-container .bg-white\/10 {
+  background-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Light mode — hint text */
+html[data-theme="light"] .glass-dark .text-white\/20 {
+  color: rgba(0, 0, 0, 0.25) !important;
+}
+
+/* Legacy textarea selectors for backwards compat */
 html[data-theme="light"] .glass-dark textarea.bg-white\/10 {
   background-color: rgba(0, 0, 0, 0.05) !important;
   color: #18181b !important;

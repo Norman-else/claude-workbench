@@ -27,6 +27,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [noProfile, setNoProfile] = useState(false);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const [inputFocused, setInputFocused] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -264,11 +265,15 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           </div>
         )}
 
-        <div className="p-4 border-t border-white/10">
-          <div className="flex gap-2 items-end">
+        <div className="px-4 pt-3 pb-5">
+          <div className={`ai-chat-input-container overflow-hidden relative flex items-end rounded-2xl border transition-all duration-200 ${
+            inputFocused
+              ? 'border-white/30 shadow-[0_0_0_2px_rgba(59,130,246,0.15)]'
+              : 'border-white/[0.15]'
+          } bg-white/[0.07]`}>
             <textarea
               ref={textareaRef}
-              className="flex-1 bg-white/10 border border-white/20 rounded-xl px-3 py-2 text-white text-sm placeholder-white/30 resize-none focus:outline-none focus:border-white/40 transition-colors"
+              className="ai-chat-textarea flex-1 bg-transparent border-none px-4 py-3 text-white text-[14px] placeholder-white/30 resize-none focus:outline-none focus:ring-0"
               placeholder={noProfile ? "Activate a profile to start chatting..." : "Type a message..."}
               value={input}
               rows={1}
@@ -277,17 +282,24 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                 autoResize();
               }}
               onKeyDown={handleKeyDown}
+              onFocus={() => setInputFocused(true)}
+              onBlur={() => setInputFocused(false)}
               disabled={chatIsLoading || noProfile}
             />
             <button
               onClick={handleSend}
               disabled={!input.trim() || chatIsLoading || noProfile}
-              className="shrink-0 w-9 h-9 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center transition-colors"
+              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 mb-1.5 mr-1.5 ${
+                input.trim() && !chatIsLoading && !noProfile
+                  ? 'bg-blue-600 hover:bg-blue-500 hover:scale-105 shadow-lg shadow-blue-600/20 cursor-pointer'
+                  : 'bg-white/10 opacity-40 cursor-not-allowed'
+              }`}
               aria-label="Send message"
             >
-              <Send className="w-4 h-4 text-white" />
+              <Send className="w-3.5 h-3.5 text-white" />
             </button>
           </div>
+          <p className="text-[11px] text-white/20 mt-1.5 text-center select-none">Enter 发送 · Shift+Enter 换行</p>
         </div>
       </div>
 
