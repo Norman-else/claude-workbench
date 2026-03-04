@@ -651,11 +651,60 @@ html[data-theme="light"] .glass-dark .bg-white\/40 {
 
 /* Send button (bg-blue-600 hover:bg-blue-500) stays fine in light mode - no changes needed */
 
-/* Model selector */
-html[data-theme="light"] .glass-dark select.glass {
-  background-color: rgba(0, 0, 0, 0.05) !important;
-  color: #18181b !important;
-  border-color: rgba(0, 0, 0, 0.15) !important;
+/* Custom Model Dropdown — dark mode (default) */
+.ai-model-trigger {
+  background: rgba(255, 255, 255, 0.08);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: rgba(255, 255, 255, 0.8);
+  cursor: pointer;
+}
+.ai-model-trigger:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+.ai-model-dropdown {
+  background: #18181b;  /* zinc-900 */
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.ai-model-option {
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+}
+.ai-model-option:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+.ai-model-option--selected {
+  color: #ffffff;
+}
+
+/* Custom Model Dropdown — light mode */
+html[data-theme="light"] .ai-model-trigger {
+  background: rgba(0, 0, 0, 0.06);
+  border-color: rgba(0, 0, 0, 0.14);
+  color: #27272a;
+}
+html[data-theme="light"] .ai-model-trigger:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.10);
+}
+
+html[data-theme="light"] .ai-model-dropdown {
+  background: #ffffff;
+  border-color: rgba(0, 0, 0, 0.12);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+html[data-theme="light"] .ai-model-option {
+  color: #52525b;  /* zinc-600 */
+}
+html[data-theme="light"] .ai-model-option:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+html[data-theme="light"] .ai-model-option--selected {
+  color: #18181b;
+}
+html[data-theme="light"] .ai-model-option .text-blue-400 {
+  color: #2563eb !important; /* blue-600 */
 }
 
 /* AI Assistant FAB — keep icon white in light mode (purple bg needs white icon) */

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2 } from 'lucide-react';
+import { Sparkles, X, Send, User, Bot, Trash2, ChevronDown, Check } from 'lucide-react';
 import type { AIToolCall, AIModelOption } from '../types';
 import { getAvailableModels } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
@@ -54,12 +54,27 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
   const [modelsLoading, setModelsLoading] = useState(false);
   const [noProfile, setNoProfile] = useState(false);
   const [dismissedError, setDismissedError] = useState<string | null>(null);
+  const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
+  const modelDropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [chatMessages]);
+
+  // Close model dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (modelDropdownRef.current && !modelDropdownRef.current.contains(e.target as Node)) {
+        setModelDropdownOpen(false);
+      }
+    }
+    if (modelDropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [modelDropdownOpen]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -109,6 +124,9 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
     sendMessage(msg, selectedModel);
   }, [input, chatIsLoading, sendMessage, selectedModel]);
 
+  const isDropdownDisabled = modelsLoading || noProfile || modelOptions.length === 0;
+  const selectedLabel = modelOptions.find((opt) => opt.id === selectedModel)?.label ?? '';
+
   if (!isOpen) return null;
 
   return (
@@ -125,25 +143,38 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
           <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
           <h2 className="text-white font-semibold flex-1">AI Assistant</h2>
-          {/* Model selector — dynamic from API */}
-          <select
-            className="glass text-white text-sm rounded px-2 py-1 border border-white/20 bg-transparent mr-2 disabled:opacity-50"
-            value={selectedModel}
-            onChange={(e) => setSelectedModel(e.target.value)}
-            disabled={modelsLoading || noProfile || modelOptions.length === 0}
-          >
-            {noProfile && (
-              <option value="">No profile</option>
+          {/* Model selector — custom dropdown */}
+          <div ref={modelDropdownRef} className="relative mr-2">
+            <button
+              type="button"
+              onClick={() => !isDropdownDisabled && setModelDropdownOpen((v) => !v)}
+              disabled={isDropdownDisabled}
+              className="ai-model-trigger flex items-center gap-1.5 text-sm rounded-full px-3 py-1 border transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <span className="truncate max-w-[100px]">
+                {noProfile ? 'No profile' : (!modelsLoading && selectedLabel) ? selectedLabel : 'Loading…'}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
+            </button>
+
+            {modelDropdownOpen && modelOptions.length > 0 && (
+              <div className="ai-model-dropdown absolute right-0 top-full mt-1.5 min-w-[170px] rounded-lg border shadow-xl z-50 overflow-hidden animate-fade-in">
+                {modelOptions.map((opt) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    onClick={() => { setSelectedModel(opt.id); setModelDropdownOpen(false); }}
+                    className={`ai-model-option w-full flex items-center justify-between gap-3 px-3 py-2 text-sm text-left transition-colors duration-100 ${
+                      opt.id === selectedModel ? 'ai-model-option--selected' : ''
+                    }`}
+                  >
+                    <span className="truncate">{opt.label}</span>
+                    {opt.id === selectedModel && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
+                  </button>
+                ))}
+              </div>
             )}
-            {modelOptions.map((opt) => (
-              <option key={opt.id} value={opt.id}>
-                {opt.label}
-              </option>
-            ))}
-            {!noProfile && modelOptions.length === 0 && (
-              <option value={selectedModel}>Loading...</option>
-            )}
-          </select>
+          </div>
           <button
             onClick={() => {
               if (window.confirm('Clear all conversation history?')) {
