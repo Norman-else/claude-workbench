@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { X, Store, Package, ChevronDown, ChevronUp, RefreshCw, Trash2, Download, Plus } from 'lucide-react';
+import { useState, useEffect, useRef } from 'react';
+import { X, Store, Package, ChevronDown, ChevronUp, RefreshCw, Trash2, Download, Plus, Check } from 'lucide-react';
 import type { MarketplaceInfo, InstalledPluginsFile } from '../types';
 
 interface SkillsMarketplaceProps {
@@ -32,6 +32,8 @@ export function SkillsMarketplace({
   const [operatingPlugin, setOperatingPlugin] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [removing, setRemoving] = useState(false);
+  const [dropdownOpen, setDropdownOpen] = useState(false);
+  const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (open && marketplaces.length > 0 && !selectedName) {
@@ -42,6 +44,19 @@ export function SkillsMarketplace({
       setExpanded({});
     }
   }, [open, marketplaces]);
+
+  // Close marketplace dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+        setDropdownOpen(false);
+      }
+    }
+    if (dropdownOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [dropdownOpen]);
 
   const selected = marketplaces.find((m) => m.name === selectedName) ?? null;
 
@@ -132,17 +147,31 @@ export function SkillsMarketplace({
             <span className="text-sm text-zinc-500">No marketplaces added</span>
           ) : (
             <>
-              <select
-                value={selectedName ?? ''}
-                onChange={(e) => setSelectedName(e.target.value)}
-                className="flex-1 mr-3 glass border border-zinc-800 rounded-xl px-3 py-2 text-white text-sm bg-zinc-900 focus:border-zinc-600 focus:outline-none"
-              >
-                {marketplaces.map((m) => (
-                  <option key={m.name} value={m.name} className="bg-zinc-900">
-                    {m.name}
-                  </option>
-                ))}
-              </select>
+              <div ref={dropdownRef} className="relative flex-1 mr-3">
+                <button
+                  type="button"
+                  onClick={() => setDropdownOpen((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2 glass border border-zinc-700 rounded-xl text-white text-sm hover:border-zinc-600 transition-colors"
+                >
+                  <span className="truncate">{selectedName}</span>
+                  <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {dropdownOpen && (
+                  <div className="absolute left-0 right-0 top-full mt-1 bg-zinc-900/95 border border-zinc-700 rounded-xl shadow-xl z-50 overflow-hidden">
+                    {marketplaces.map((m) => (
+                      <button
+                        key={m.name}
+                        type="button"
+                        onClick={() => { setSelectedName(m.name); setDropdownOpen(false); }}
+                        className={`w-full flex items-center justify-between px-3 py-2 text-sm text-white text-left hover:bg-zinc-800 transition-colors ${m.name === selectedName ? 'bg-zinc-800/60' : ''}`}
+                      >
+                        <span className="truncate">{m.name}</span>
+                        {m.name === selectedName && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
               <div className="flex items-center space-x-1">
                 <button
                   onClick={handleUpdate}
