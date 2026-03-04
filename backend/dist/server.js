@@ -180,7 +180,7 @@ async function readMarketplaceManifest(marketplaceName) {
                     throw new Error(`Path traversal detected in skill path: ${skill}`);
                 }
             }
-            if (plugin.source && (plugin.source.includes('..') || (path.isAbsolute(plugin.source) && !plugin.source.startsWith('./')))) {
+            if (plugin.source && typeof plugin.source === 'string' && (plugin.source.includes('..') || (path.isAbsolute(plugin.source) && !plugin.source.startsWith('./')))) {
                 // Allow "./" relative paths
             }
         }
@@ -1123,17 +1123,15 @@ app.get('/api/plugins/marketplaces', async (_req, res) => {
         const installedPlugins = await readInstalledPlugins();
         const result = await Promise.all(Object.entries(marketplaces).map(async ([name, info]) => {
             const manifest = await readMarketplaceManifest(name);
-            if (!manifest)
-                return null;
             return {
                 name,
                 source: info.source,
                 lastUpdated: info.lastUpdated,
-                manifest,
+                manifest: manifest ?? { name, plugins: [], description: 'Manifest unavailable' },
                 installedPlugins: installedPlugins.plugins,
             };
         }));
-        res.json(result.filter(Boolean));
+        res.json(result);
     }
     catch (err) {
         res.status(500).json({ error: err.message });
