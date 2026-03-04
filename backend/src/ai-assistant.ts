@@ -1108,6 +1108,7 @@ async function handleListMarketplaces(_input: ToolInput): Promise<string> {
   try {
     const resp = await fetch('http://localhost:3001/api/plugins/marketplaces');
     const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
     return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -1123,6 +1124,7 @@ async function handleAddMarketplace(input: ToolInput): Promise<string> {
       body: JSON.stringify({ url }),
     });
     const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
     return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -1134,6 +1136,7 @@ async function handleRemoveMarketplace(input: ToolInput): Promise<string> {
   try {
     const resp = await fetch(`http://localhost:3001/api/plugins/marketplaces/${encodeURIComponent(name)}`, { method: 'DELETE' });
     const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
     return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -1160,6 +1163,7 @@ async function handleInstallPlugin(input: ToolInput): Promise<string> {
       body: JSON.stringify({ marketplaceName, pluginName }),
     });
     const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
     return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -1176,6 +1180,7 @@ async function handleUninstallPlugin(input: ToolInput): Promise<string> {
       body: JSON.stringify({ marketplaceName, pluginName }),
     });
     const data = await resp.json();
+    if (!resp.ok) throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
     return JSON.stringify(data);
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });

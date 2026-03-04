@@ -169,6 +169,8 @@ Skills:
 
 Marketplace:
 - list_marketplaces: List registered marketplace sources
+- add_marketplace: Add a new marketplace source by GitHub URL
+- remove_marketplace: Remove a marketplace source by name
 - list_installed_plugins: List all installed plugins
 - install_plugin: Install a plugin from a marketplace
 - uninstall_plugin: Uninstall a plugin
@@ -176,7 +178,14 @@ Marketplace:
 App Overview:
 - get_app_config: Get high-level app config overview
 
-Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.`;
+Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
+If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
+            // Enable web search for all profiles — let the API decide if it's supported
+            const webSearchTool = [{
+                    type: 'web_search_20250305',
+                    name: 'web_search',
+                    max_uses: 5,
+                }];
             let iteration = 0;
             const MAX_ITERATIONS = 10;
             // Track current assistant message for history
@@ -190,7 +199,7 @@ Use tools to answer questions accurately. Be concise and helpful. Never expose A
                     max_tokens: 4096,
                     system: SYSTEM_PROMPT,
                     messages: conversationMessages,
-                    tools: toolDefinitions,
+                    tools: [...webSearchTool, ...toolDefinitions],
                 }, { signal: abortController.signal });
                 let hasToolUse = false;
                 const toolUseBlocks = [];
@@ -224,6 +233,9 @@ Use tools to answer questions accurately. Be concise and helpful. Never expose A
                     // Execute each tool and collect results
                     const toolResultContents = [];
                     for (const toolBlock of toolUseBlocks) {
+                        // web_search is executed server-side by Anthropic — skip our handler
+                        if (toolBlock.name === 'web_search')
+                            continue;
                         const result = await executeToolHandler(toolBlock.name, toolBlock.input);
                         toolCallsForHistory.push({
                             name: toolBlock.name,
@@ -580,6 +592,28 @@ export const toolDefinitions = [
         name: 'list_marketplaces',
         description: 'List registered marketplace sources for plugins.',
         input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'add_marketplace',
+        description: 'Add a new marketplace source by GitHub URL. The URL should point to a GitHub repository containing a .claude-plugin/marketplace.json file.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                url: { type: 'string', description: 'GitHub repository URL, e.g. https://github.com/owner/repo' },
+            },
+            required: ['url'],
+        },
+    },
+    {
+        name: 'remove_marketplace',
+        description: 'Remove a registered marketplace source by name.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Marketplace name to remove (as shown in list_marketplaces)' },
+            },
+            required: ['name'],
+        },
     },
     {
         name: 'list_installed_plugins',
@@ -970,6 +1004,38 @@ async function handleListMarketplaces(_input) {
     try {
         const resp = await fetch('http://localhost:3001/api/plugins/marketplaces');
         const data = await resp.json();
+        if (!resp.ok)
+            throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
+        return JSON.stringify(data);
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleAddMarketplace(input) {
+    const url = input.url;
+    try {
+        const resp = await fetch('http://localhost:3001/api/plugins/marketplaces', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ url }),
+        });
+        const data = await resp.json();
+        if (!resp.ok)
+            throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
+        return JSON.stringify(data);
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleRemoveMarketplace(input) {
+    const name = input.name;
+    try {
+        const resp = await fetch(`http://localhost:3001/api/plugins/marketplaces/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const data = await resp.json();
+        if (!resp.ok)
+            throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
         return JSON.stringify(data);
     }
     catch (err) {
@@ -996,6 +1062,8 @@ async function handleInstallPlugin(input) {
             body: JSON.stringify({ marketplaceName, pluginName }),
         });
         const data = await resp.json();
+        if (!resp.ok)
+            throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
         return JSON.stringify(data);
     }
     catch (err) {
@@ -1012,6 +1080,8 @@ async function handleUninstallPlugin(input) {
             body: JSON.stringify({ marketplaceName, pluginName }),
         });
         const data = await resp.json();
+        if (!resp.ok)
+            throw new Error(data?.error || data?.message || `HTTP ${resp.status}`);
         return JSON.stringify(data);
     }
     catch (err) {
@@ -1048,6 +1118,8 @@ export async function executeToolHandler(name, input) {
         case 'list_installed_plugins': return handleListInstalledPlugins(input);
         case 'install_plugin': return handleInstallPlugin(input);
         case 'uninstall_plugin': return handleUninstallPlugin(input);
+        case 'add_marketplace': return handleAddMarketplace(input);
+        case 'remove_marketplace': return handleRemoveMarketplace(input);
         default: return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
 }
