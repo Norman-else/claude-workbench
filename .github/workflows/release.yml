@@ -141,8 +141,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get previous release tag
-          PREV_TAG=$(gh release list --repo ${{ github.repository }} --limit 1 --json tagName -q '.[0].tagName' 2>/dev/null || echo "")
+          # Get previous tag from git tags (sorted by version), excluding the current one
+          CURRENT_VERSION="${{ inputs.version }}"
+          PREV_TAG=$(git tag --sort=-version:refname | grep -v "^${CURRENT_VERSION}$" | head -1 || echo "")
 
           # Build changelog from git log
           if [ -n "$PREV_TAG" ]; then
