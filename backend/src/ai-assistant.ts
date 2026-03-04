@@ -9,6 +9,9 @@ import { readSettingsEnv, writeSettingsEnv, ensureFileExists, clearSettingsEnv }
 const HOME_DIR = os.homedir();
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
+const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
+const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
+const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 
 export interface ActiveProfileCredentials {
   baseUrl: string;
@@ -201,6 +204,26 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Deactivate the currently active environment profile.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'get_mcp_server_statuses',
+    description: 'Get the list of configured MCP servers from ~/.claude.json. Returns server names, commands, and whether env vars are configured.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_commands',
+    description: 'List custom Claude CLI slash-commands stored in ~/.claude/commands/. Returns command names and their first line as description.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_skills',
+    description: 'List agent skills stored in ~/.claude/skills/. Returns skill names and descriptions from SKILL.md files.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_app_config',
+    description: 'Get a high-level overview of the app config: active profile name, MCP server count, command count, skill count. No credentials returned.',
+    input_schema: { type: 'object', properties: {} },
+  },
 ];
 
 // ============================================================
@@ -301,6 +324,94 @@ async function handleDeactivateEnvironment(_input: ToolInput): Promise<string> {
   return JSON.stringify({ success: true, message: 'Deactivated active profile' });
 }
 
+async function handleGetMcpServerStatuses(_input: ToolInput): Promise<string> {
+  try {
+    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const config = JSON.parse(content) as { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> };
+    const servers = config.mcpServers || {};
+    const result = Object.entries(servers).map(([name, srv]) => ({
+      name,
+      command: srv.command,
+      args: srv.args || [],
+      hasEnvVars: !!(srv.env && Object.keys(srv.env).length > 0),
+    }));
+    return JSON.stringify({ servers: result, count: result.length });
+  } catch {
+    return JSON.stringify({ servers: [], count: 0 });
+  }
+}
+
+async function handleListCommands(_input: ToolInput): Promise<string> {
+  try {
+    const entries = await fs.readdir(CLAUDE_COMMANDS_DIR).catch(() => [] as string[]);
+    const commands = [];
+    for (const entry of entries.filter((e) => e.endsWith('.md'))) {
+      try {
+        const content = await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, entry), 'utf-8');
+        const firstLine = content.split('\n').find((l) => l.trim()) || '';
+        commands.push({ name: entry.replace(/\.md$/, ''), description: firstLine.replace(/^#+\s*/, '') });
+      } catch {
+        commands.push({ name: entry.replace(/\.md$/, ''), description: '' });
+      }
+    }
+    return JSON.stringify({ commands, count: commands.length });
+  } catch {
+    return JSON.stringify({ commands: [], count: 0 });
+  }
+}
+
+async function handleListSkills(_input: ToolInput): Promise<string> {
+  try {
+    const entries = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
+    const skills = [];
+    for (const entry of entries.filter((e) => e.isDirectory())) {
+      try {
+        const skillMdPath = path.join(CLAUDE_SKILLS_DIR, entry.name, 'SKILL.md');
+        const content = await fs.readFile(skillMdPath, 'utf-8');
+        const lines = content.split('\n').slice(0, 5).filter((l) => l.trim());
+        const description = lines.find((l) => !l.startsWith('#') && !l.startsWith('---')) || '';
+        skills.push({ name: entry.name, description });
+      } catch {
+        skills.push({ name: entry.name, description: '' });
+      }
+    }
+    return JSON.stringify({ skills, count: skills.length });
+  } catch {
+    return JSON.stringify({ skills: [], count: 0 });
+  }
+}
+
+async function handleGetAppConfig(_input: ToolInput): Promise<string> {
+  const creds = await getActiveProfileCredentials();
+  const activeProfileName = creds ? 'Active profile found' : null;
+
+  let mcpCount = 0;
+  try {
+    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const config = JSON.parse(content) as { mcpServers?: Record<string, unknown> };
+    mcpCount = Object.keys(config.mcpServers || {}).length;
+  } catch { /* ignore */ }
+
+  let commandCount = 0;
+  try {
+    const entries = await fs.readdir(CLAUDE_COMMANDS_DIR).catch(() => [] as string[]);
+    commandCount = entries.filter((e) => e.endsWith('.md')).length;
+  } catch { /* ignore */ }
+
+  let skillCount = 0;
+  try {
+    const entries = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
+    skillCount = entries.filter((e) => e.isDirectory()).length;
+  } catch { /* ignore */ }
+
+  return JSON.stringify({
+    activeProfile: activeProfileName,
+    mcpServers: mcpCount,
+    commandCount,
+    skillCount,
+  });
+}
+
 export async function executeToolHandler(name: string, input: ToolInput): Promise<string> {
   switch (name) {
     case 'list_environments': return handleListEnvironments(input);
@@ -309,6 +420,10 @@ export async function executeToolHandler(name: string, input: ToolInput): Promis
     case 'update_environment': return handleUpdateEnvironment(input);
     case 'activate_environment': return handleActivateEnvironment(input);
     case 'deactivate_environment': return handleDeactivateEnvironment(input);
+    case 'get_mcp_server_statuses': return handleGetMcpServerStatuses(input);
+    case 'list_commands': return handleListCommands(input);
+    case 'list_skills': return handleListSkills(input);
+    case 'get_app_config': return handleGetAppConfig(input);
     default: return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 }

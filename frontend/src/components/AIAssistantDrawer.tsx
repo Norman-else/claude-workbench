@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { Sparkles, X, Send, User, Bot } from 'lucide-react';
-import type { AIChatMessage } from '../types';
+import type { AIChatMessage, AIModelOption } from '../types';
+import { getAvailableModels } from '../api';
 
 interface AIAssistantDrawerProps {
   isOpen: boolean;
@@ -14,12 +15,33 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [modelOptions, setModelOptions] = useState<AIModelOption[]>([]);
+  const [modelsLoading, setModelsLoading] = useState(false);
+  const [noProfile, setNoProfile] = useState(false);
 
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
     }
   }, [messages]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setModelsLoading(true);
+    setNoProfile(false);
+    getAvailableModels()
+      .then((opts) => {
+        setModelOptions(opts);
+        if (opts.length > 0) {
+          setSelectedModel(opts[0].id);
+        }
+      })
+      .catch(() => {
+        setNoProfile(true);
+        setModelOptions([]);
+      })
+      .finally(() => setModelsLoading(false));
+  }, [isOpen]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -68,13 +90,24 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
           <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
           <h2 className="text-white font-semibold flex-1">AI Assistant</h2>
-          {/* Model selector placeholder — wired in Task 10 */}
+          {/* Model selector — dynamic from API */}
           <select
-            className="glass text-white text-sm rounded px-2 py-1 border border-white/20 bg-transparent mr-2"
+            className="glass text-white text-sm rounded px-2 py-1 border border-white/20 bg-transparent mr-2 disabled:opacity-50"
             value={selectedModel}
             onChange={(e) => setSelectedModel(e.target.value)}
+            disabled={modelsLoading || noProfile || modelOptions.length === 0}
           >
-            <option value="claude-sonnet-4-20250514">Sonnet</option>
+            {noProfile && (
+              <option value="">No profile</option>
+            )}
+            {modelOptions.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.label}
+              </option>
+            ))}
+            {!noProfile && modelOptions.length === 0 && (
+              <option value={selectedModel}>Loading...</option>
+            )}
           </select>
           <button
             onClick={onClose}
