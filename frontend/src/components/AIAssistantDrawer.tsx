@@ -209,6 +209,13 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
                   <p className="whitespace-pre-wrap">{msg.content}</p>
                 ) : (
                   <div className="prose prose-invert prose-sm max-w-none">
+                    {chatIsLoading && chatMessages[chatMessages.length - 1]?.id === msg.id && msg.content === '' ? (
+                      <div className="flex gap-1 py-1">
+                        <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                        <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                        <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                      </div>
+                    ) : (
                     <ReactMarkdown
                       components={{
                         code({ className, children, ...props }: { className?: string; children?: React.ReactNode; [key: string]: unknown }) {
@@ -229,8 +236,9 @@ export function AIAssistantDrawer({ isOpen, onClose }: AIAssistantDrawerProps) {
                         },
                       }}
                     >
-                      {msg.content + (chatIsLoading && chatMessages[chatMessages.length - 1]?.id === msg.id ? '▌' : '')}
+                      {msg.content}
                     </ReactMarkdown>
+                    )}
                   </div>
                 )}
                 {msg.role === 'assistant' && msg.toolCalls && msg.toolCalls.length > 0 && (
