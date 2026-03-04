@@ -159,16 +159,46 @@ export function registerAIAssistantRoutes(app: Express): void {
 You help users manage their Claude Code environment through natural language.
 
 You have access to these tools:
+
+Environment Profiles:
 - list_environments: List all environment profiles
-- get_environment: Get details of a specific environment profile
-- create_environment: Create a new environment profile
-- update_environment: Update an existing environment profile
-- activate_environment: Activate an environment profile
-- deactivate_environment: Deactivate the current environment profile
-- get_mcp_server_statuses: Get MCP server configurations
-- list_commands: List available custom commands
-- list_skills: List available agent skills
-- get_app_config: Get overview of the app configuration
+- get_environment: Get details of a specific profile by ID
+- create_environment: Create a new profile
+- update_environment: Update an existing profile
+- activate_environment: Activate a profile
+- deactivate_environment: Deactivate the current profile
+- delete_environment: Delete a profile by ID
+- reorder_environments: Reorder profiles (provide ordered list of IDs)
+
+MCP Servers:
+- get_mcp_server_statuses: Get MCP server config from ~/.claude.json
+- get_mcp_runtime_status: Get live runtime status (running/stopped) of MCP servers
+- start_mcp_server: Start an MCP server by name
+- stop_mcp_server: Stop an MCP server by name
+- restart_mcp_server: Restart an MCP server by name
+- get_mcp_server_logs: Get logs for an MCP server
+
+Commands:
+- list_commands: List all custom commands
+- get_command: Get full content of a specific command
+- create_command: Create a new command
+- update_command: Update an existing command's content
+- delete_command: Delete a command
+
+Skills:
+- list_skills: List all agent skills
+- get_skill: Get full SKILL.md content for a specific skill
+- create_skill: Create a new skill
+- delete_skill: Delete a skill
+
+Marketplace:
+- list_marketplaces: List registered marketplace sources
+- list_installed_plugins: List all installed plugins
+- install_plugin: Install a plugin from a marketplace
+- uninstall_plugin: Uninstall a plugin
+
+App Overview:
+- get_app_config: Get high-level app config overview
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.`;
 
@@ -503,6 +533,185 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Get a high-level overview of the app config: active profile name, MCP server count, command count, skill count. No credentials returned.',
     input_schema: { type: 'object', properties: {} },
   },
+  {
+    name: 'start_mcp_server',
+    description: 'Start an MCP server by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'MCP server name' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'stop_mcp_server',
+    description: 'Stop a running MCP server by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'MCP server name' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'restart_mcp_server',
+    description: 'Restart an MCP server by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'MCP server name' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'get_mcp_server_logs',
+    description: 'Get recent logs for an MCP server.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'MCP server name' },
+        lines: { type: 'number', description: 'Number of log lines to return' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'get_mcp_runtime_status',
+    description: 'Get live runtime status of MCP servers. If name is provided, returns status for that server; otherwise returns all.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Optional MCP server name. Omit to get all.' },
+      },
+    },
+  },
+  {
+    name: 'get_command',
+    description: 'Get the full content of a specific custom command by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Command name (without .md extension)' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'create_command',
+    description: 'Create a new custom slash-command.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Command name' },
+        content: { type: 'string', description: 'Command content (markdown)' },
+      },
+      required: ['name', 'content'],
+    },
+  },
+  {
+    name: 'update_command',
+    description: 'Update the content of an existing custom command.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Command name' },
+        content: { type: 'string', description: 'New command content (markdown)' },
+      },
+      required: ['name', 'content'],
+    },
+  },
+  {
+    name: 'delete_command',
+    description: 'Delete a custom command by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Command name to delete' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'get_skill',
+    description: 'Get the full SKILL.md content for a specific skill.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Skill name' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'create_skill',
+    description: 'Create a new agent skill.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Skill name' },
+        content: { type: 'string', description: 'SKILL.md content' },
+      },
+      required: ['name', 'content'],
+    },
+  },
+  {
+    name: 'delete_skill',
+    description: 'Delete an agent skill by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Skill name to delete' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'delete_environment',
+    description: 'Delete an environment profile by ID.',
+    input_schema: {
+      type: 'object',
+      properties: { id: { type: 'string', description: 'Profile ID to delete' } },
+      required: ['id'],
+    },
+  },
+  {
+    name: 'reorder_environments',
+    description: 'Reorder environment profiles by providing an ordered list of profile IDs.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        ids: {
+          type: 'array',
+          items: { type: 'string' },
+          description: 'Ordered list of profile IDs',
+        },
+      },
+      required: ['ids'],
+    },
+  },
+  {
+    name: 'list_marketplaces',
+    description: 'List registered marketplace sources for plugins.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_installed_plugins',
+    description: 'List all installed plugins with details.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'install_plugin',
+    description: 'Install a plugin from a marketplace.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        marketplaceName: { type: 'string', description: 'Marketplace source name' },
+        pluginName: { type: 'string', description: 'Plugin name to install' },
+      },
+      required: ['marketplaceName', 'pluginName'],
+    },
+  },
+  {
+    name: 'uninstall_plugin',
+    description: 'Uninstall an installed plugin.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        marketplaceName: { type: 'string', description: 'Marketplace source name' },
+        pluginName: { type: 'string', description: 'Plugin name to uninstall' },
+      },
+      required: ['marketplaceName', 'pluginName'],
+    },
+  },
 ];
 
 // ============================================================
@@ -691,6 +900,227 @@ async function handleGetAppConfig(_input: ToolInput): Promise<string> {
   });
 }
 
+async function handleStartMcpServer(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/mcp/${encodeURIComponent(name)}/start`, { method: 'POST' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleStopMcpServer(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/mcp/${encodeURIComponent(name)}/stop`, { method: 'POST' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleRestartMcpServer(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/mcp/${encodeURIComponent(name)}/restart`, { method: 'POST' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleGetMcpServerLogs(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/mcp/${encodeURIComponent(name)}/logs`);
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleGetMcpRuntimeStatus(input: ToolInput): Promise<string> {
+  const name = input.name as string | undefined;
+  try {
+    const url = name
+      ? `http://localhost:3001/api/mcp/${encodeURIComponent(name)}/status`
+      : 'http://localhost:3001/api/mcp/status/all';
+    const resp = await fetch(url);
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleGetCommand(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const content = await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, `${name}.md`), 'utf-8');
+    return JSON.stringify({ name, content });
+  } catch {
+    return JSON.stringify({ error: `Command not found: ${name}` });
+  }
+}
+
+async function handleCreateCommand(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  const content = input.content as string;
+  try {
+    const resp = await fetch('http://localhost:3001/api/commands', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleUpdateCommand(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  const content = input.content as string;
+  try {
+    await fs.writeFile(path.join(CLAUDE_COMMANDS_DIR, `${name}.md`), content, 'utf-8');
+    return JSON.stringify({ success: true });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleDeleteCommand(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/commands/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleGetSkill(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const content = await fs.readFile(path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md'), 'utf-8');
+    return JSON.stringify({ name, content });
+  } catch {
+    return JSON.stringify({ error: `Skill not found: ${name}` });
+  }
+}
+
+async function handleCreateSkill(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  const content = input.content as string;
+  try {
+    const resp = await fetch('http://localhost:3001/api/skills', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, content }),
+    });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleDeleteSkill(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleDeleteEnvironment(input: ToolInput): Promise<string> {
+  const id = input.id as string;
+  try {
+    const resp = await fetch(`http://localhost:3001/api/env-profiles/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleReorderEnvironments(input: ToolInput): Promise<string> {
+  const ids = input.ids as string[];
+  try {
+    const resp = await fetch('http://localhost:3001/api/env-profiles/reorder', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleListMarketplaces(_input: ToolInput): Promise<string> {
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/marketplaces');
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleListInstalledPlugins(_input: ToolInput): Promise<string> {
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleInstallPlugin(input: ToolInput): Promise<string> {
+  const marketplaceName = input.marketplaceName as string;
+  const pluginName = input.pluginName as string;
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/install', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketplaceName, pluginName }),
+    });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleUninstallPlugin(input: ToolInput): Promise<string> {
+  const marketplaceName = input.marketplaceName as string;
+  const pluginName = input.pluginName as string;
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/uninstall', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ marketplaceName, pluginName }),
+    });
+    const data = await resp.json();
+    return JSON.stringify(data);
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
 export async function executeToolHandler(name: string, input: ToolInput): Promise<string> {
   switch (name) {
     case 'list_environments': return handleListEnvironments(input);
@@ -703,6 +1133,24 @@ export async function executeToolHandler(name: string, input: ToolInput): Promis
     case 'list_commands': return handleListCommands(input);
     case 'list_skills': return handleListSkills(input);
     case 'get_app_config': return handleGetAppConfig(input);
+    case 'start_mcp_server': return handleStartMcpServer(input);
+    case 'stop_mcp_server': return handleStopMcpServer(input);
+    case 'restart_mcp_server': return handleRestartMcpServer(input);
+    case 'get_mcp_server_logs': return handleGetMcpServerLogs(input);
+    case 'get_mcp_runtime_status': return handleGetMcpRuntimeStatus(input);
+    case 'get_command': return handleGetCommand(input);
+    case 'create_command': return handleCreateCommand(input);
+    case 'update_command': return handleUpdateCommand(input);
+    case 'delete_command': return handleDeleteCommand(input);
+    case 'get_skill': return handleGetSkill(input);
+    case 'create_skill': return handleCreateSkill(input);
+    case 'delete_skill': return handleDeleteSkill(input);
+    case 'delete_environment': return handleDeleteEnvironment(input);
+    case 'reorder_environments': return handleReorderEnvironments(input);
+    case 'list_marketplaces': return handleListMarketplaces(input);
+    case 'list_installed_plugins': return handleListInstalledPlugins(input);
+    case 'install_plugin': return handleInstallPlugin(input);
+    case 'uninstall_plugin': return handleUninstallPlugin(input);
     default: return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 }
