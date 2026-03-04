@@ -202,7 +202,16 @@ Marketplace:
 App Overview:
 - get_app_config: Get high-level app config overview
 
-Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.`;
+Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
+If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
+
+      // Only enable web search when using the official Anthropic API (no custom baseURL)
+      const supportsWebSearch = !creds.baseUrl || creds.baseUrl.includes('api.anthropic.com');
+      const webSearchTool = supportsWebSearch ? [{
+        type: 'web_search_20250305' as const,
+        name: 'web_search' as const,
+        max_uses: 5,
+      }] : [];
 
       let iteration = 0;
       const MAX_ITERATIONS = 10;
@@ -220,7 +229,7 @@ Use tools to answer questions accurately. Be concise and helpful. Never expose A
           max_tokens: 4096,
           system: SYSTEM_PROMPT,
           messages: conversationMessages,
-          tools: toolDefinitions as unknown as Anthropic.Messages.Tool[],
+          tools: [...webSearchTool, ...toolDefinitions] as unknown as Anthropic.Messages.Tool[],
         }, { signal: abortController.signal });
 
         let hasToolUse = false;
@@ -261,6 +270,9 @@ Use tools to answer questions accurately. Be concise and helpful. Never expose A
           const toolResultContents: Anthropic.Messages.ToolResultBlockParam[] = [];
 
           for (const toolBlock of toolUseBlocks) {
+            // web_search is executed server-side by Anthropic — skip our handler
+            if (toolBlock.name === 'web_search') continue;
+
             const result = await executeToolHandler(toolBlock.name, toolBlock.input as ToolInput);
 
             toolCallsForHistory.push({
