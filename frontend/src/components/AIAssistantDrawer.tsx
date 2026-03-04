@@ -19,7 +19,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory, clearHistory } = useAIChat({ onToolCall });
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-20250514');
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [modelOptions, setModelOptions] = useState<AIModelOption[]>([]);

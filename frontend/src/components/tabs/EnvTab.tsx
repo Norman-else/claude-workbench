@@ -504,7 +504,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       value={editingProfile?.haikuModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, haikuModel: e.target.value } : null))}
                       className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
-                      placeholder="claude-3-5-haiku-..."
+                      placeholder="claude-haiku-4-5-..."
                     />
                   </div>
                   <div>
@@ -514,7 +514,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       value={editingProfile?.opusModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, opusModel: e.target.value } : null))}
                       className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
-                      placeholder="claude-3-opus-..."
+                      placeholder="claude-opus-4-6"
                     />
                   </div>
                   <div>
@@ -524,7 +524,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       value={editingProfile?.sonnetModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, sonnetModel: e.target.value } : null))}
                       className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
-                      placeholder="claude-3-5-sonnet-..."
+                      placeholder="claude-sonnet-4-6"
                     />
                   </div>
                   <div>
@@ -534,7 +534,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                       value={editingProfile?.smallFastModel || ''}
                       onChange={(e) => setEditingProfile((prev) => (prev ? { ...prev, smallFastModel: e.target.value } : null))}
                       className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
-                      placeholder="claude-3-5-haiku-..."
+                      placeholder="claude-haiku-4-5-..."
                     />
                   </div>
                 </div>
@@ -765,7 +765,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     value={newProfileForm.haikuModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, haikuModel: e.target.value })}
                     className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-5-haiku-..."
+                    placeholder="claude-haiku-4-5-..."
                   />
                 </div>
                 <div>
@@ -775,7 +775,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     value={newProfileForm.opusModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, opusModel: e.target.value })}
                     className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-opus-..."
+                    placeholder="claude-opus-4-6"
                   />
                 </div>
                 <div>
@@ -785,7 +785,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     value={newProfileForm.sonnetModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, sonnetModel: e.target.value })}
                     className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-5-sonnet-..."
+                    placeholder="claude-sonnet-4-6"
                   />
                 </div>
                 <div>
@@ -795,7 +795,7 @@ export function EnvTab({ envProfiles, activeProfileId, showNotification, loadCon
                     value={newProfileForm.smallFastModel}
                     onChange={(e) => setNewProfileForm({ ...newProfileForm, smallFastModel: e.target.value })}
                     className="w-full glass border border-zinc-800 rounded-xl px-4 py-3 text-white text-sm focus:border-zinc-600 focus:outline-none transition-all input-focus"
-                    placeholder="claude-3-5-haiku-..."
+                    placeholder="claude-haiku-4-5-..."
                   />
                 </div>
               </div>

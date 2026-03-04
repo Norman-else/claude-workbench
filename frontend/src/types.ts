@@ -212,7 +212,7 @@ export interface AIChatStreamEvent {
 }
 
 export interface AIModelOption {
-  id: string;      // e.g. 'claude-sonnet-4-20250514'
+  id: string;      // e.g. 'claude-sonnet-4-6'
   label: string;   // e.g. 'Sonnet'
   source: 'profile' | 'default';
 }
