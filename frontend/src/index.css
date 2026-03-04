@@ -712,3 +712,54 @@ html[data-theme="light"] .bg-purple-600 .text-white,
 html[data-theme="light"] .bg-purple-700 .text-white {
   color: #ffffff !important;
 }
+
+/* ======================================================
+   AI Confirm Dialog — Animation + Light Mode
+   ====================================================== */
+@keyframes dialog-pop {
+  from { opacity: 0; transform: scale(0.95); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.ai-confirm-dialog {
+  animation: dialog-pop 0.15s ease-out;
+}
+
+/* Light mode: confirmation dialog panel */
+html[data-theme="light"] .ai-confirm-dialog.glass-dark {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* Light mode: dialog icon circle */
+html[data-theme="light"] .ai-confirm-dialog .bg-red-500\/15 {
+  background-color: rgba(239, 68, 68, 0.1) !important;
+}
+html[data-theme="light"] .ai-confirm-dialog .text-red-400 {
+  color: #dc2626 !important;
+}
+
+/* Light mode: dialog title */
+html[data-theme="light"] .ai-confirm-dialog .text-white {
+  color: #18181b !important;
+}
+
+/* Light mode: dialog description */
+html[data-theme="light"] .ai-confirm-dialog .text-white\/60 {
+  color: rgba(0, 0, 0, 0.55) !important;
+}
+
+/* Light mode: cancel button */
+html[data-theme="light"] .ai-confirm-cancel {
+  background: rgba(0, 0, 0, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.14) !important;
+  color: #27272a !important;
+}
+html[data-theme="light"] .ai-confirm-cancel:hover {
+  background: rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Light mode: destructive button — keep red, but ensure white text */
+html[data-theme="light"] .ai-confirm-dialog .bg-red-600 {
+  color: #ffffff !important;
+}
