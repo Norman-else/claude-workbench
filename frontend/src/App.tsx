@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Command, RefreshCw, Server, Settings, Terminal, Trash2, X, Zap } from 'lucide-react';
+import { Check, Command, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
 import {
@@ -19,6 +19,7 @@ import { McpTab } from './components/tabs/McpTab';
 import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
 import { SkillsTab } from './components/tabs/SkillsTab';
+import { AIAssistantDrawer } from './components/AIAssistantDrawer';
 import { UpdateNotification } from './components/UpdateNotification';
 
 function App() {
@@ -64,6 +65,7 @@ function App() {
     type: 'success' | 'error';
   }>({ show: false, message: '', type: 'success' });
 
+  const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
@@ -350,6 +352,25 @@ function App() {
               <span className="font-medium text-white">Skills</span>
               {activeTab === 'skills' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
             </button>
+
+            <button
+              onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
+                isAIDrawerOpen
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
+              }`}
+            >
+              <div
+                className={`p-2 rounded-lg transition-all ${
+                  isAIDrawerOpen ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                }`}
+              >
+                <Sparkles className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-white">AI Assistant</span>
+              {isAIDrawerOpen && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
+            </button>
           </div>
 
           <button
@@ -559,6 +580,7 @@ function App() {
         )}
       </div>
 
+      <AIAssistantDrawer isOpen={isAIDrawerOpen} onClose={() => setIsAIDrawerOpen(false)} />
       <UpdateNotification />
     </div>
   );
