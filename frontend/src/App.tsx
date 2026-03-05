@@ -20,7 +20,7 @@ import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
 import { SkillsTab } from './components/tabs/SkillsTab';
 import { AIAssistantDrawer } from './components/AIAssistantDrawer';
-import { UpdateNotification } from './components/UpdateNotification';
+import { VersionBadge } from './components/VersionBadge';
 
 function App() {
   const electron = useElectron();
@@ -275,6 +275,7 @@ function App() {
                 <p className="text-xs text-gray-400">Workbench</p>
               </div>
             </div>
+            <VersionBadge appVersion={appVersion} isElectron={electron.isElectron} />
           </div>
 
           <div className="space-y-2 flex-1">
@@ -395,7 +396,6 @@ function App() {
             </div>
           )}
 
-          {electron.isElectron && <div className="mt-4 text-xs text-center text-zinc-500 dark:text-zinc-400">Desktop App {appVersion ? `v${appVersion}` : 'v1.0'}</div>}
         </nav>
 
         <div className="flex-1 overflow-y-auto relative z-10 titlebar-no-drag">
@@ -599,7 +599,6 @@ function App() {
           if (writeTools.includes(toolName)) loadConfig();
         }}
       />
-      <UpdateNotification />
     </>
   );
 }
