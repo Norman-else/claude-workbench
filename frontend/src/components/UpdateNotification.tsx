@@ -45,7 +45,7 @@ export function UpdateNotification() {
   }
 
   return (
-    <div className="fixed bottom-6 right-6 z-[200] w-80 animate-slide-up">
+    <div className="fixed bottom-6 left-80 z-[200] w-80 animate-slide-up">
       <div className="glass-dark border border-zinc-700 rounded-2xl p-4 shadow-2xl shadow-black/40">
         {status.type === 'checking' && (
           <div className="flex items-center space-x-3">
