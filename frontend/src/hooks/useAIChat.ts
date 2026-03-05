@@ -1,6 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
 import type { AIChatMessage, AIChatStreamEvent, AIToolCall } from '../types';
-import { streamAIChat, getAIChatHistory, clearAIChatHistory } from '../api';
+import { streamConversationChat, getConversation, deleteConversation } from '../api';
 
 interface UseAIChatReturn {
   messages: AIChatMessage[];
@@ -11,13 +11,39 @@ interface UseAIChatReturn {
   loadHistory: () => Promise<void>;
 }
 
-export function useAIChat(options?: { onToolCall?: (toolName: string) => void }): UseAIChatReturn {
+export function useAIChat(
+  conversationId: string | null,
+  options?: { onToolCall?: (toolName: string) => void }
+): UseAIChatReturn {
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
+  // Auto-load messages when conversationId changes
+  useEffect(() => {
+    if (!conversationId) {
+      setMessages([]);
+      return;
+    }
+    setMessages([]);
+    setError(null);
+    let cancelled = false;
+    getConversation(conversationId)
+      .then(result => {
+        if (!cancelled && result.messages && result.messages.length > 0) {
+          setMessages(result.messages);
+        }
+      })
+      .catch(() => {
+        // start fresh
+      });
+    return () => { cancelled = true; };
+  }, [conversationId]);
+
   const sendMessage = useCallback(async (message: string, model: string, forceTool?: string) => {
+    if (!conversationId) return;
+
     // Abort any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -48,7 +74,7 @@ export function useAIChat(options?: { onToolCall?: (toolName: string) => void })
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
-      const response = await streamAIChat(message, model, controller.signal, forceTool);
+      const response = await streamConversationChat(conversationId, message, model, controller.signal, forceTool);
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Request failed' }));
         throw new Error((errData as { error?: string }).error || `HTTP ${response.status}`);
@@ -134,24 +160,27 @@ export function useAIChat(options?: { onToolCall?: (toolName: string) => void })
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [options?.onToolCall]);
+  }, [conversationId, options?.onToolCall]);
 
   const clearHistory = useCallback(async () => {
-    await clearAIChatHistory();
+    if (!conversationId) return;
+    await deleteConversation(conversationId);
     setMessages([]);
     setError(null);
-  }, []);
+  }, [conversationId]);
 
   const loadHistory = useCallback(async () => {
+    if (!conversationId) return;
     try {
-      const history = await getAIChatHistory();
-      if (history.messages && history.messages.length > 0) {
-        setMessages(history.messages);
+      setMessages([]);
+      const data = await getConversation(conversationId);
+      if (data.messages && data.messages.length > 0) {
+        setMessages(data.messages);
       }
     } catch {
       // If history load fails, just start fresh
     }
-  }, []);
+  }, [conversationId]);
 
   return { messages, isLoading, error, sendMessage, clearHistory, loadHistory };
 }

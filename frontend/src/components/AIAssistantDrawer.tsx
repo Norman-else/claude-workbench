@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu } from 'lucide-react';
-import type { AIModelOption, AIToolInfo } from '../types';
-import { getAvailableModels, getAITools } from '../api';
+import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown } from 'lucide-react';
+import type { AIModelOption, AIToolInfo, AIConversation } from '../types';
+import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
@@ -43,6 +43,21 @@ function groupToolsByCategory(toolList: AIToolInfo[]): Record<string, AIToolInfo
   return sorted;
 }
 
+function formatRelativeTime(dateStr: string): string {
+  const now = Date.now();
+  const then = new Date(dateStr).getTime();
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return 'just now';
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr < 24) return `${diffHr}h ago`;
+  const diffDay = Math.floor(diffHr / 24);
+  if (diffDay === 1) return 'yesterday';
+  if (diffDay < 7) return `${diffDay}d ago`;
+  return new Date(dateStr).toLocaleDateString();
+}
+
 interface AIAssistantDrawerProps {
   isOpen: boolean;
   onClose: () => void;
@@ -51,9 +66,20 @@ interface AIAssistantDrawerProps {
 
 
 export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDrawerProps) {
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory, clearHistory } = useAIChat({ onToolCall });
+  // ── Conversation state ──
+  const [conversations, setConversations] = useState<AIConversation[]>([]);
+  const [activeConversationId, setActiveConversationId] = useState<string | null>(null);
+  const [showConversationList, setShowConversationList] = useState(false);
+  const [conversationsLoading, setConversationsLoading] = useState(false);
+  const conversationListRef = useRef<HTMLDivElement>(null);
+  const hasAutoNamed = useRef<Set<string>>(new Set());
+
+  // ── Chat hook (MUST be before any conditional returns) ──
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage } = useAIChat(activeConversationId, { onToolCall });
+
+  // ── Other state ──
   const [input, setInput] = useState('');
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -98,6 +124,12 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     );
   }, [modelSlashMenuOpen, modelSlashFilterText, modelOptions]);
 
+  // Get active conversation object
+  const activeConversation = useMemo(() => {
+    return conversations.find(c => c.id === activeConversationId) ?? null;
+  }, [conversations, activeConversationId]);
+
+  // ── Scroll to bottom on new messages ──
   useEffect(() => {
     if (messagesEndRef.current) {
       messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
@@ -130,12 +162,26 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => document.removeEventListener('mousedown', handleToolPaletteClick);
   }, [toolPaletteOpen]);
 
+  // Close conversation list on outside click
+  useEffect(() => {
+    function handleConvListClick(e: MouseEvent) {
+      if (conversationListRef.current && !conversationListRef.current.contains(e.target as Node)) {
+        setShowConversationList(false);
+      }
+    }
+    if (showConversationList) {
+      document.addEventListener('mousedown', handleConvListClick);
+    }
+    return () => document.removeEventListener('mousedown', handleConvListClick);
+  }, [showConversationList]);
+
   // Close floating panel on outside click
   useEffect(() => {
     if (!isOpen) return;
     function handleOutsideClick(e: MouseEvent) {
       // Skip outside-click handling when confirmation dialog is open
-      if (showClearConfirm) return;
+      if (showDeleteConfirm) return;
+      if (showConversationList) return;
       const panel = document.getElementById('ai-assistant-panel');
       const fab = document.getElementById('ai-assistant-fab');
       if (panel && !panel.contains(e.target as Node) && fab && !fab.contains(e.target as Node)) {
@@ -150,29 +196,75 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleOutsideClick);
     };
-  }, [isOpen, onClose, showClearConfirm]);
+  }, [isOpen, onClose, showDeleteConfirm, showConversationList]);
 
+  // ── Load conversations + models + tools on open ──
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
     setModelsLoading(true);
     setNoProfile(false);
     getAvailableModels()
       .then((opts) => {
+        if (cancelled) return;
         setModelOptions(opts);
         if (opts.length > 0) {
           setSelectedModel(opts[0].id);
         }
       })
       .catch(() => {
+        if (cancelled) return;
         setNoProfile(true);
         setModelOptions([]);
       })
-      .finally(() => setModelsLoading(false));
-    // Load tools
-    getAITools().then(setTools).catch(() => setTools([]));
-    // Load conversation history
-    loadHistory();
-  }, [isOpen, loadHistory]);
+      .finally(() => { if (!cancelled) setModelsLoading(false); });
+    getAITools().then(t => { if (!cancelled) setTools(t); }).catch(() => { if (!cancelled) setTools([]); });
+    setConversationsLoading(true);
+    getConversations()
+      .then(async (convs) => {
+        if (cancelled) return;
+        if (convs.length > 0) {
+          setConversations(convs);
+          setActiveConversationId(convs[0].id);
+        } else {
+          const newConv = await createConversation();
+          if (cancelled) return;
+          setConversations([newConv]);
+          setActiveConversationId(newConv.id);
+        }
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setConversations([]);
+        setActiveConversationId(null);
+      })
+      .finally(() => { if (!cancelled) setConversationsLoading(false); });
+    return () => { cancelled = true; };
+  }, [isOpen]);
+
+
+  // ── Auto-naming after first AI response ──
+  useEffect(() => {
+    if (!activeConversationId) return;
+    if (!activeConversation) return;
+    if (activeConversation.name !== 'New Chat') return;
+    if (hasAutoNamed.current.has(activeConversationId)) return;
+    // Need at least user message + non-empty assistant response
+    if (chatMessages.length < 2) return;
+    const lastMsg = chatMessages[chatMessages.length - 1];
+    if (lastMsg.role !== 'assistant' || !lastMsg.content || lastMsg.content === '' || chatIsLoading) return;
+
+    hasAutoNamed.current.add(activeConversationId);
+    generateConversationName(activeConversationId, selectedModel)
+      .then((name) => {
+        setConversations(prev =>
+          prev.map(c => c.id === activeConversationId ? { ...c, name } : c)
+        );
+      })
+      .catch(() => {
+        // Naming failed, not critical
+      });
+  }, [chatMessages, activeConversationId, activeConversation, chatIsLoading, selectedModel]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -182,6 +274,57 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     const maxH = lineH * 4 + 32;
     ta.style.height = Math.min(ta.scrollHeight, maxH) + 'px';
   };
+
+  const handleNewChat = useCallback(async () => {
+    try {
+      const newConv = await createConversation();
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversationId(newConv.id);
+      setShowConversationList(false);
+    } catch {
+      // Failed to create conversation
+    }
+  }, []);
+
+  const handleDeleteConversation = useCallback(async () => {
+    if (!activeConversationId) return;
+    try {
+      await deleteConversation(activeConversationId);
+      const remaining = conversations.filter(c => c.id !== activeConversationId);
+      if (remaining.length > 0) {
+        setConversations(remaining);
+        setActiveConversationId(remaining[0].id);
+      } else {
+        // Create a new conversation since we deleted the last one
+        const newConv = await createConversation();
+        setConversations([newConv]);
+        setActiveConversationId(newConv.id);
+      }
+      setShowDeleteConfirm(false);
+    } catch {
+      // Delete failed
+    }
+  }, [activeConversationId, conversations]);
+
+  const handleSwitchConversation = useCallback((id: string) => {
+    setActiveConversationId(id);
+    setShowConversationList(false);
+  }, []);
+
+  const handleDeleteFromList = useCallback(async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (conversations.length <= 1) return;
+    try {
+      await deleteConversation(id);
+      const remaining = conversations.filter(c => c.id !== id);
+      setConversations(remaining);
+      if (activeConversationId === id) {
+        setActiveConversationId(remaining[0]?.id ?? null);
+      }
+    } catch {
+      // Delete failed
+    }
+  }, [conversations, activeConversationId]);
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     // Model slash menu keyboard navigation
@@ -313,7 +456,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       setModelSlashMenuOpen(false);
       setModelSlashFilterText('');
     }
-  }, [forceTool, autoResize]);
+  }, [forceTool]);
 
   const handleSend = useCallback(() => {
     if (!input.trim() || chatIsLoading) return;
@@ -332,7 +475,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const selectedLabel = modelOptions.find((opt) => opt.id === selectedModel)?.label ?? '';
 
   if (!isOpen) {
-    if (showClearConfirm) setShowClearConfirm(false);
+    if (showDeleteConfirm) setShowDeleteConfirm(false);
     return null;
   }
 
@@ -347,15 +490,92 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         style={isFullscreen ? { left: 'calc(18rem)' } : { maxHeight: 'calc(100vh - 120px)' }}
       >
         {/* Header */}
-        <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
-          <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
-          <h2 className="text-white font-semibold flex-1">AI Assistant</h2>
+        <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 relative z-10">
+          {/* Left: conversation name dropdown */}
+          <div ref={conversationListRef} className="relative flex-1 min-w-0">
+            <button
+              type="button"
+              onClick={() => setShowConversationList(v => !v)}
+              className="flex items-center gap-2 min-w-0 max-w-full hover:bg-white/[0.06] rounded-lg px-2 py-1 transition-colors"
+            >
+              <Sparkles className="w-4 h-4 text-blue-400 shrink-0" />
+              <span className="text-white font-medium text-sm truncate">
+                {conversationsLoading ? 'Loading…' : (activeConversation?.name ?? 'AI Assistant')}
+              </span>
+              <ChevronDown className={`w-3.5 h-3.5 text-white/40 shrink-0 transition-transform ${showConversationList ? 'rotate-180' : ''}`} />
+            </button>
 
+            {/* Conversation list dropdown */}
+            {showConversationList && (
+              <div className="ai-conversation-list absolute top-full left-0 mt-1 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in z-30" style={{ minWidth: '300px', maxWidth: '400px' }}>
+                <div className="px-3 py-2 border-b border-white/[0.08] flex items-center justify-between">
+                  <span className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Conversations</span>
+                  <button
+                    type="button"
+                    onClick={handleNewChat}
+                    className="flex items-center gap-1 text-[11px] text-blue-400 hover:text-blue-300 transition-colors"
+                  >
+                    <Plus className="w-3 h-3" />
+                    New
+                  </button>
+                </div>
+                <div className="max-h-[300px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                  {conversations.map((conv) => (
+                    <button
+                      key={conv.id}
+                      type="button"
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        handleSwitchConversation(conv.id);
+                      }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors duration-75 group ${
+                        conv.id === activeConversationId
+                          ? 'bg-blue-600/15 text-white'
+                          : 'hover:bg-white/[0.04] text-white/80'
+                      }`}
+                    >
+                      <MessageSquare className={`w-3.5 h-3.5 shrink-0 ${
+                        conv.id === activeConversationId ? 'text-blue-400' : 'text-white/30'
+                      }`} />
+                      <div className="flex-1 min-w-0">
+                        <span className="text-xs truncate block">{conv.name}</span>
+                        <span className={`text-[10px] ${
+                          conv.id === activeConversationId ? 'text-white/40' : 'text-white/20'
+                        }`}>
+                          {formatRelativeTime(conv.updatedAt)}
+                        </span>
+                      </div>
+                      {conversations.length > 1 && (
+                        <button
+                          type="button"
+                          onMouseDown={(e) => handleDeleteFromList(e, conv.id)}
+                          className="opacity-0 group-hover:opacity-100 text-white/20 hover:text-red-400 transition-all p-0.5 rounded"
+                          aria-label="Delete conversation"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Right: action buttons */}
           <button
-            onClick={() => setShowClearConfirm(true)}
+            onClick={handleNewChat}
             className="text-white/40 hover:text-white/70 p-1 rounded transition-colors"
-            aria-label="Clear history"
-            title="Clear history"
+            aria-label="New conversation"
+            title="New conversation"
+          >
+            <Plus className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setShowDeleteConfirm(true)}
+            className="text-white/40 hover:text-white/70 p-1 rounded transition-colors"
+            aria-label="Delete conversation"
+            title="Delete conversation"
           >
             <Trash2 className="w-4 h-4" />
           </button>
@@ -721,11 +941,11 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         </div>
       </div>
 
-      {/* Clear history confirmation modal */}
-      {showClearConfirm && (
+      {/* Delete conversation confirmation modal */}
+      {showDeleteConfirm && (
         <div
           className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center"
-          onClick={(e) => { e.stopPropagation(); setShowClearConfirm(false); }}
+          onClick={(e) => { e.stopPropagation(); setShowDeleteConfirm(false); }}
         >
           <div
             className="ai-confirm-dialog glass-dark max-w-sm w-full mx-4 rounded-2xl p-6 shadow-2xl"
@@ -735,22 +955,22 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               <div className="w-12 h-12 rounded-full bg-red-500/15 flex items-center justify-center mb-4">
                 <Trash2 className="w-5 h-5 text-red-400" />
               </div>
-              <h3 className="text-white font-semibold text-lg">Clear conversation history</h3>
+              <h3 className="text-white font-semibold text-lg">Delete conversation</h3>
               <p className="text-white/60 text-sm mt-2 leading-relaxed">
-                This will permanently delete all messages in this conversation. This action cannot be undone.
+                This will permanently delete this conversation and all its messages. This action cannot be undone.
               </p>
               <div className="flex gap-3 mt-6 w-full">
                 <button
-                  onClick={() => setShowClearConfirm(false)}
+                  onClick={() => setShowDeleteConfirm(false)}
                   className="ai-confirm-cancel flex-1 rounded-xl py-2.5 text-sm font-medium border border-white/15 bg-white/8 text-white/80 hover:bg-white/12 transition-colors"
                 >
                   Cancel
                 </button>
                 <button
-                  onClick={async (e) => { e.stopPropagation(); await clearHistory(); setShowClearConfirm(false); }}
+                  onClick={async (e) => { e.stopPropagation(); await handleDeleteConversation(); }}
                   className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
                 >
-                  Delete All
+                  Delete
                 </button>
               </div>
             </div>
