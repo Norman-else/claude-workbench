@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, ChevronDown, Check, Wrench } from 'lucide-react';
+import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu } from 'lucide-react';
 import type { AIModelOption, AIToolInfo } from '../types';
 import { getAvailableModels, getAITools } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
@@ -54,6 +54,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, loadHistory, clearHistory } = useAIChat({ onToolCall });
   const [input, setInput] = useState('');
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
   const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -71,6 +72,9 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilterText, setSlashFilterText] = useState('');
   const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+  const [modelSlashMenuOpen, setModelSlashMenuOpen] = useState(false);
+  const [modelSlashFilterText, setModelSlashFilterText] = useState('');
+  const [modelSlashSelectedIndex, setModelSlashSelectedIndex] = useState(0);
 
   // Compute filtered tools for slash command menu
   const slashFilteredTools = useMemo(() => {
@@ -82,6 +86,17 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       t.description.toLowerCase().includes(lower)
     );
   }, [slashMenuOpen, slashFilterText, tools]);
+
+  // Compute filtered models for /model slash command menu
+  const modelSlashFilteredOptions = useMemo(() => {
+    if (!modelSlashMenuOpen || modelOptions.length === 0) return [];
+    if (!modelSlashFilterText) return modelOptions;
+    const lower = modelSlashFilterText.toLowerCase();
+    return modelOptions.filter(opt =>
+      opt.label.toLowerCase().includes(lower) ||
+      opt.id.toLowerCase().includes(lower)
+    );
+  }, [modelSlashMenuOpen, modelSlashFilterText, modelOptions]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -167,6 +182,47 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Model slash menu keyboard navigation
+    if (modelSlashMenuOpen && modelSlashFilteredOptions.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setModelSlashSelectedIndex(prev => (prev + 1) % modelSlashFilteredOptions.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setModelSlashSelectedIndex(prev => (prev - 1 + modelSlashFilteredOptions.length) % modelSlashFilteredOptions.length);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const selected = modelSlashFilteredOptions[modelSlashSelectedIndex];
+        if (selected) {
+          setSelectedModel(selected.id);
+          setInput('');
+          setModelSlashMenuOpen(false);
+          setModelSlashFilterText('');
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setModelSlashMenuOpen(false);
+        setModelSlashFilterText('');
+        return;
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const selected = modelSlashFilteredOptions[modelSlashSelectedIndex];
+        if (selected) {
+          setSelectedModel(selected.id);
+          setInput('');
+          setModelSlashMenuOpen(false);
+          setModelSlashFilterText('');
+        }
+        return;
+      }
+    }
     // Slash menu keyboard navigation
     if (slashMenuOpen && slashFilteredTools.length > 0) {
       if (e.key === 'ArrowDown') {
@@ -221,15 +277,39 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     setInput(val);
     autoResize();
 
-    // Slash command detection: input starts with "/"
-    if (val.startsWith('/') && !forceTool) {
-      const filterText = val.slice(1); // everything after "/"
+    // Slash command detection
+    if (val.startsWith('/model') && !forceTool) {
+      // /model slash menu
+      const afterModel = val.slice(6); // everything after '/model'
+      const filterText = afterModel.startsWith(' ') ? afterModel.slice(1) : (afterModel === '' ? '' : null);
+      if (filterText !== null) {
+        setModelSlashFilterText(filterText);
+        setModelSlashMenuOpen(true);
+        setModelSlashSelectedIndex(0);
+        setSlashMenuOpen(false);
+        setSlashFilterText('');
+      } else {
+        // Partial match like '/modela' — fall through to tool slash menu
+        setModelSlashMenuOpen(false);
+        setModelSlashFilterText('');
+        const filterTextSlash = val.slice(1);
+        setSlashFilterText(filterTextSlash);
+        setSlashMenuOpen(true);
+        setSlashSelectedIndex(0);
+      }
+    } else if (val.startsWith('/') && !forceTool) {
+      // Tool slash menu
+      const filterText = val.slice(1);
       setSlashFilterText(filterText);
       setSlashMenuOpen(true);
       setSlashSelectedIndex(0);
+      setModelSlashMenuOpen(false);
+      setModelSlashFilterText('');
     } else {
       setSlashMenuOpen(false);
       setSlashFilterText('');
+      setModelSlashMenuOpen(false);
+      setModelSlashFilterText('');
     }
   }, [forceTool, autoResize]);
 
@@ -254,45 +334,18 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   return (
     <>
       {/* Floating panel */}
-      <div id="ai-assistant-panel" className="fixed bottom-24 right-6 w-[420px] z-[150] glass-dark flex flex-col rounded-2xl"
-        style={{ maxHeight: 'calc(100vh - 120px)' }}
+      <div id="ai-assistant-panel" className={`fixed z-[150] glass-dark flex flex-col transition-all duration-300 ease-in-out ${
+        isFullscreen
+          ? 'top-0 right-0 bottom-0 rounded-none' 
+          : 'bottom-24 right-6 w-[520px] rounded-2xl'
+      }`}
+        style={isFullscreen ? { left: 'calc(18rem)' } : { maxHeight: 'calc(100vh - 120px)' }}
       >
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
           <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
           <h2 className="text-white font-semibold flex-1">AI Assistant</h2>
-          {/* Model selector — custom dropdown */}
-          <div ref={modelDropdownRef} className="relative mr-2">
-            <button
-              type="button"
-              onClick={() => !isDropdownDisabled && setModelDropdownOpen((v) => !v)}
-              disabled={isDropdownDisabled}
-              className="ai-model-trigger flex items-center gap-1.5 text-sm rounded-full px-3 py-1 border transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              <span className="truncate max-w-[130px]">
-                {noProfile ? 'No profile' : (!modelsLoading && selectedLabel) ? selectedLabel : 'Loading…'}
-              </span>
-              <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
-            </button>
 
-            {modelDropdownOpen && modelOptions.length > 0 && (
-              <div className="ai-model-dropdown absolute right-0 top-full mt-1.5 min-w-[170px] rounded-lg border shadow-xl z-50 overflow-hidden animate-fade-in">
-                {modelOptions.map((opt) => (
-                  <button
-                    key={opt.id}
-                    type="button"
-                    onClick={() => { setSelectedModel(opt.id); setModelDropdownOpen(false); }}
-                    className={`ai-model-option w-full flex items-center justify-between gap-3 px-3 py-2 text-sm text-left transition-colors duration-100 ${
-                      opt.id === selectedModel ? 'ai-model-option--selected' : ''
-                    }`}
-                  >
-                    <span className="truncate">{opt.label}</span>
-                    {opt.id === selectedModel && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
-                  </button>
-                ))}
-              </div>
-            )}
-          </div>
           <button
             onClick={() => setShowClearConfirm(true)}
             className="text-white/40 hover:text-white/70 p-1 rounded transition-colors"
@@ -300,6 +353,14 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             title="Clear history"
           >
             <Trash2 className="w-4 h-4" />
+          </button>
+          <button
+            onClick={() => setIsFullscreen(f => !f)}
+            className="text-white/40 hover:text-white/70 p-1 rounded transition-colors"
+            aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+            title={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
+          >
+            {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
           </button>
           <button
             onClick={onClose}
@@ -459,6 +520,51 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             </div>
           )}
 
+          {/* Model slash command autocomplete */}
+          {modelSlashMenuOpen && modelSlashFilteredOptions.length > 0 && (
+            <div className="ai-slash-menu absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in z-10">
+              <div className="px-3 py-1.5 border-b border-white/[0.08] flex items-center gap-2">
+                <span className="text-[10px] font-medium text-white/40">/model Select a model</span>
+                <span className="ml-auto text-[10px] text-white/20">↑↓ navigate · Enter select · Esc close</span>
+              </div>
+              <div className="max-h-[240px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                {modelSlashFilteredOptions.map((opt, idx) => (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    ref={idx === modelSlashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      setSelectedModel(opt.id);
+                      setInput('');
+                      setModelSlashMenuOpen(false);
+                      setModelSlashFilterText('');
+                      textareaRef.current?.focus();
+                    }}
+                    onMouseEnter={() => setModelSlashSelectedIndex(idx)}
+                    className={`w-full flex items-center gap-2.5 px-3 py-2 text-left transition-colors duration-75 ${
+                      idx === modelSlashSelectedIndex
+                        ? 'bg-blue-600/15 text-white'
+                        : 'hover:bg-white/[0.04] text-white/80'
+                    }`}
+                  >
+                    <span className={`text-xs shrink-0 ${
+                      idx === modelSlashSelectedIndex ? 'text-blue-400' : 'text-blue-400/60'
+                    }`}>
+                      {opt.label}
+                    </span>
+                    <span className={`font-mono text-[11px] ${
+                      idx === modelSlashSelectedIndex ? 'text-white/40' : 'text-white/20'
+                    }`}>
+                      {opt.id}
+                    </span>
+                    {opt.id === selectedModel && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400 ml-auto" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Tool palette popup */}
           {toolPaletteOpen && tools.length > 0 && !slashMenuOpen && (
             <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in">
@@ -519,14 +625,15 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             </div>
           )}
 
-          <div className={`ai-chat-input-container overflow-hidden relative flex items-end rounded-2xl border transition-all duration-200 ${
+          {/* Input container — textarea on top, toolbar on bottom */}
+          <div className={`ai-chat-input-container relative rounded-2xl border transition-all duration-200 ${
             inputFocused
               ? 'border-white/30 shadow-[0_0_0_2px_rgba(59,130,246,0.15)]'
               : 'border-white/[0.15]'
           } bg-white/[0.07]`}>
             <textarea
               ref={textareaRef}
-              className="ai-chat-textarea flex-1 bg-transparent border-none px-4 py-3 text-white text-[14px] placeholder-white/30 resize-none focus:outline-none focus:ring-0"
+              className="ai-chat-textarea w-full bg-transparent border-none px-4 pt-3 pb-2 text-white text-[14px] placeholder-white/30 resize-none focus:outline-none focus:ring-0"
               placeholder={noProfile ? 'Activate a profile to start chatting...' : 'Type a message...'}
               value={input}
               rows={1}
@@ -536,36 +643,76 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               onBlur={() => setInputFocused(false)}
               disabled={chatIsLoading || noProfile}
             />
-            {/* Tool picker button */}
-            <button
-              type="button"
-              onClick={() => { setToolPaletteOpen((v) => !v); setSlashMenuOpen(false); }}
-              disabled={noProfile || tools.length === 0}
-              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 mb-1.5 ${
-                toolPaletteOpen
-                  ? 'bg-blue-600/30 text-blue-300'
-                  : 'bg-transparent text-white/30 hover:text-white/60 hover:bg-white/[0.06]'
-              } disabled:opacity-30 disabled:cursor-not-allowed`}
-              aria-label="Select tool"
-              title="Force a specific tool"
-            >
-              <Wrench className="w-3.5 h-3.5" />
-            </button>
-            {/* Send button */}
-            <button
-              onClick={handleSend}
-              disabled={!input.trim() || chatIsLoading || noProfile}
-              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 mb-1.5 mr-1.5 ${
-                input.trim() && !chatIsLoading && !noProfile
-                  ? 'bg-blue-600 hover:bg-blue-500 hover:scale-105 shadow-lg shadow-blue-600/20 cursor-pointer'
-                  : 'bg-white/10 opacity-40 cursor-not-allowed'
-              }`}
-              aria-label="Send message"
-            >
-              <Send className="w-3.5 h-3.5 text-white" />
-            </button>
+            {/* Toolbar row */}
+            <div className="flex items-center justify-between px-2 pb-2">
+              {/* Left: model selector + tool picker */}
+              <div className="flex items-center gap-1">
+                <div ref={modelDropdownRef} className="relative">
+                  <button
+                    type="button"
+                    onClick={() => !isDropdownDisabled && setModelDropdownOpen((v) => !v)}
+                    disabled={isDropdownDisabled}
+                    className="ai-model-trigger flex items-center gap-1.5 text-[11px] rounded-lg px-2 py-1 transition-all duration-150 hover:bg-white/[0.06] disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    <Cpu className="w-3.5 h-3.5 shrink-0 text-blue-400/70" />
+                    <span className="truncate max-w-[100px] text-white/60">
+                      {noProfile ? 'No profile' : (!modelsLoading && selectedLabel) ? selectedLabel : '…'}
+                    </span>
+                  </button>
+
+                  {modelDropdownOpen && modelOptions.length > 0 && (
+                    <div className="ai-model-dropdown absolute left-0 bottom-full mb-1.5 min-w-[170px] rounded-lg border shadow-xl z-50 overflow-hidden animate-fade-in">
+                      {modelOptions.map((opt) => (
+                        <button
+                          key={opt.id}
+                          type="button"
+                          onClick={() => { setSelectedModel(opt.id); setModelDropdownOpen(false); }}
+                          className={`ai-model-option w-full flex items-center justify-between gap-3 px-3 py-2 text-sm text-left transition-colors duration-100 ${
+                            opt.id === selectedModel ? 'ai-model-option--selected' : ''
+                          }`}
+                        >
+                          <span className="truncate">{opt.label}</span>
+                          {opt.id === selectedModel && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => { setToolPaletteOpen((v) => !v); setSlashMenuOpen(false); }}
+                  disabled={noProfile || tools.length === 0}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 ${
+                    toolPaletteOpen
+                      ? 'bg-blue-600/30 text-blue-300'
+                      : 'text-white/30 hover:text-white/60 hover:bg-white/[0.06]'
+                  } disabled:opacity-30 disabled:cursor-not-allowed`}
+                  aria-label="Select tool"
+                  title="Force a specific tool"
+                >
+                  <Wrench className="w-3.5 h-3.5" />
+                </button>
+              </div>
+
+              {/* Right: send button */}
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={handleSend}
+                  disabled={!input.trim() || chatIsLoading || noProfile}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 ${
+                    input.trim() && !chatIsLoading && !noProfile
+                      ? 'bg-blue-600 hover:bg-blue-500 hover:scale-105 shadow-lg shadow-blue-600/20 cursor-pointer'
+                      : 'bg-white/10 opacity-40 cursor-not-allowed'
+                  }`}
+                  aria-label="Send message"
+                >
+                  <Send className="w-3.5 h-3.5 text-white" />
+                </button>
+              </div>
+            </div>
           </div>
-          <p className="text-[11px] text-white/20 mt-1.5 text-center select-none">Enter 发送 · Shift+Enter 换行 · / 选择工具</p>
+          <p className="text-[11px] text-white/20 mt-1.5 text-center select-none">Enter 发送 · Shift+Enter 换行 · / 选择工具 · /model 切换模型</p>
         </div>
       </div>
 
