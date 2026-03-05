@@ -567,6 +567,7 @@ function App() {
 
       {/* AI Assistant FAB — outside overflow-hidden to ensure correct fixed positioning */}
       <button
+        id="ai-assistant-fab"
         onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
         className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
           isAIDrawerOpen

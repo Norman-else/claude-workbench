@@ -115,6 +115,26 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => document.removeEventListener('mousedown', handleToolPaletteClick);
   }, [toolPaletteOpen]);
 
+  // Close floating panel on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleOutsideClick(e: MouseEvent) {
+      const panel = document.getElementById('ai-assistant-panel');
+      const fab = document.getElementById('ai-assistant-fab');
+      if (panel && !panel.contains(e.target as Node) && fab && !fab.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    // Delay to avoid closing immediately on the same click that opened it
+    const timer = setTimeout(() => {
+      document.addEventListener('mousedown', handleOutsideClick);
+    }, 100);
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('mousedown', handleOutsideClick);
+    };
+  }, [isOpen, onClose]);
+
   useEffect(() => {
     if (!isOpen) return;
     setModelsLoading(true);
@@ -233,14 +253,10 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
 
   return (
     <>
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 z-[140] bg-black/30"
-        onClick={onClose}
-      />
-
-      {/* Drawer panel */}
-      <div className="fixed inset-y-0 right-0 w-[560px] z-[150] glass-dark flex flex-col animate-slide-up">
+      {/* Floating panel */}
+      <div id="ai-assistant-panel" className="fixed bottom-24 right-6 w-[420px] z-[150] glass-dark flex flex-col rounded-2xl"
+        style={{ maxHeight: 'calc(100vh - 120px)' }}
+      >
         {/* Header */}
         <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
           <Sparkles className="w-5 h-5 text-blue-400 shrink-0" />
@@ -253,7 +269,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               disabled={isDropdownDisabled}
               className="ai-model-trigger flex items-center gap-1.5 text-sm rounded-full px-3 py-1 border transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <span className="truncate max-w-[100px]">
+              <span className="truncate max-w-[130px]">
                 {noProfile ? 'No profile' : (!modelsLoading && selectedLabel) ? selectedLabel : 'Loading…'}
               </span>
               <ChevronDown className={`w-3.5 h-3.5 shrink-0 transition-transform duration-150 ${modelDropdownOpen ? 'rotate-180' : ''}`} />
@@ -295,7 +311,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        <div className="flex-1 overflow-y-auto p-4 space-y-4 min-h-0">
           {noProfile && (
             <div className="flex flex-col items-center justify-center h-full gap-4 px-8">
               <div className="w-12 h-12 rounded-full bg-yellow-500/20 flex items-center justify-center">

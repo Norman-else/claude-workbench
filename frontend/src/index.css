@@ -555,18 +555,18 @@ html[data-theme="light"] .font-mono {
 
 /* Input / textarea */
 html[data-theme="light"] input,
-html[data-theme="light"] textarea,
+html[data-theme="light"] textarea:not(.ai-chat-textarea),
 html[data-theme="light"] select {
   background-color: #ffffff !important;
   color: #111111 !important;
   border-color: #d4d4d8 !important;
 }
 html[data-theme="light"] input::placeholder,
-html[data-theme="light"] textarea::placeholder {
+html[data-theme="light"] textarea:not(.ai-chat-textarea)::placeholder {
   color: #a1a1aa !important;
 }
 html[data-theme="light"] input:focus,
-html[data-theme="light"] textarea:focus {
+html[data-theme="light"] textarea:not(.ai-chat-textarea):focus {
   border-color: #71717a !important;
   box-shadow: 0 0 0 1px #71717a !important;
 }
@@ -1062,4 +1062,42 @@ html[data-theme="light"] .glass-dark .border-blue-500\/20 {
 }
 html[data-theme="light"] .glass-dark .text-blue-300\/60 {
   color: rgba(37, 99, 235, 0.6) !important;
+}
+
+
+/* Floating AI assistant panel — elevated glass effect */
+#ai-assistant-panel {
+  backdrop-filter: blur(24px) saturate(1.4);
+  -webkit-backdrop-filter: blur(24px) saturate(1.4);
+  background: rgba(9, 9, 11, 0.82) !important;
+  border: 1px solid rgba(255, 255, 255, 0.10) !important;
+  box-shadow:
+    0 0 0 1px rgba(255, 255, 255, 0.06),
+    0 4px 12px rgba(0, 0, 0, 0.25),
+    0 16px 48px rgba(0, 0, 0, 0.45),
+    0 32px 80px rgba(0, 0, 0, 0.35),
+    0 0 60px -12px rgba(59, 130, 246, 0.08) !important;
+  animation: ai-panel-float-in 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes ai-panel-float-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px) scale(0.97);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+html[data-theme="light"] #ai-assistant-panel {
+  background: rgba(255, 255, 255, 0.88) !important;
+  border: 1px solid rgba(0, 0, 0, 0.10) !important;
+  box-shadow:
+    0 0 0 1px rgba(0, 0, 0, 0.04),
+    0 4px 12px rgba(0, 0, 0, 0.06),
+    0 16px 48px rgba(0, 0, 0, 0.12),
+    0 32px 80px rgba(0, 0, 0, 0.08),
+    0 0 80px -20px rgba(59, 130, 246, 0.06) !important;
 }

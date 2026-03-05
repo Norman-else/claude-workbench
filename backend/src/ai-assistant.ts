@@ -91,6 +91,12 @@ export function registerAIAssistantRoutes(app: Express): void {
     }
   });
 
+  // Extract version from model ID (e.g. 'claude-sonnet-4-6' → '4.6')
+  function modelLabel(baseName: string, modelId: string): string {
+    const m = modelId.match(/^claude-[a-z]+-([\d]+)-([\d]+)/);
+    return m ? `${baseName} ${m[1]}.${m[2]}` : baseName;
+  }
+
   // GET /api/ai/models
   app.get('/api/ai/models', async (_req: Request, res: Response) => {
     try {
@@ -100,10 +106,10 @@ export function registerAIAssistantRoutes(app: Express): void {
         return;
       }
       const models = [
-        { id: creds.models.sonnet, label: 'Sonnet', source: 'profile' },
-        { id: creds.models.opus, label: 'Opus', source: 'profile' },
-        { id: creds.models.haiku, label: 'Haiku', source: 'profile' },
-        { id: creds.models.smallFast, label: 'Small/Fast', source: 'profile' },
+        { id: creds.models.sonnet, label: modelLabel('Sonnet', creds.models.sonnet), source: 'profile' },
+        { id: creds.models.opus, label: modelLabel('Opus', creds.models.opus), source: 'profile' },
+        { id: creds.models.haiku, label: modelLabel('Haiku', creds.models.haiku), source: 'profile' },
+        { id: creds.models.smallFast, label: modelLabel('Small/Fast', creds.models.smallFast), source: 'profile' },
       ];
       res.json(models);
     } catch (err) {
