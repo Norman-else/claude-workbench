@@ -13,6 +13,9 @@ const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const AI_HISTORY_PATH = path.join(HOME_DIR, '.claude', 'ai-assistant-history.json');
+const CONVERSATIONS_DIR = path.join(HOME_DIR, '.claude', 'ai-assistant-conversations');
+const CONVERSATIONS_INDEX_PATH = path.join(CONVERSATIONS_DIR, 'index.json');
+const DEFAULT_CONVERSATION_ID = '__default__';
 
 export interface ActiveProfileCredentials {
   baseUrl: string;
@@ -71,7 +74,7 @@ export function getAnthropicClient(creds: ActiveProfileCredentials): Anthropic {
 }
 
 export function registerAIAssistantRoutes(app: Express): void {
-  // GET /api/ai/history
+  // GET /api/ai/history (deprecated — delegates to default conversation)
   app.get('/api/ai/history', async (_req: Request, res: Response) => {
     try {
       const history = await loadHistory();
@@ -81,10 +84,19 @@ export function registerAIAssistantRoutes(app: Express): void {
     }
   });
 
-  // DELETE /api/ai/history
+  // DELETE /api/ai/history (deprecated — deletes default conversation)
   app.delete('/api/ai/history', async (_req: Request, res: Response) => {
     try {
+      // Also delete old file if it still exists
       await fs.unlink(AI_HISTORY_PATH).catch(() => {});
+      // Delete the default conversation from the index
+      const index = await loadConversationIndex();
+      if (index.conversations.length > 0) {
+        const defaultId = index.conversations[0].id;
+        await fs.unlink(path.join(CONVERSATIONS_DIR, `${defaultId}.json`)).catch(() => {});
+        index.conversations.shift();
+        await saveConversationIndex(index);
+      }
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -135,7 +147,386 @@ export function registerAIAssistantRoutes(app: Express): void {
     res.json(tools);
   });
 
-  // POST /api/ai/chat — SSE streaming with tool use loop
+  // ============================================================
+  // Conversation management routes
+  // ============================================================
+
+  // GET /api/ai/conversations
+  app.get('/api/ai/conversations', async (_req: Request, res: Response) => {
+    try {
+      const index = await loadConversationIndex();
+      // Sort by updatedAt descending
+      index.conversations.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
+      res.json({ conversations: index.conversations });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // POST /api/ai/conversations
+  app.post('/api/ai/conversations', async (_req: Request, res: Response) => {
+    try {
+      const now = new Date().toISOString();
+      const id = crypto.randomUUID();
+      const conv: ConversationFile = { id, name: 'New Chat', messages: [], createdAt: now, updatedAt: now };
+      await saveConversation(conv);
+      const index = await loadConversationIndex();
+      const meta: ConversationMeta = { id, name: conv.name, createdAt: now, updatedAt: now };
+      index.conversations.unshift(meta);
+      await saveConversationIndex(index);
+      res.json(meta);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // GET /api/ai/conversations/:id
+  app.get('/api/ai/conversations/:id', async (req: Request, res: Response) => {
+    try {
+      const conv = await loadConversation(req.params.id);
+      if (!conv) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      res.json(conv);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // DELETE /api/ai/conversations/:id
+  app.delete('/api/ai/conversations/:id', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const index = await loadConversationIndex();
+      const idx = index.conversations.findIndex((c) => c.id === id);
+      if (idx === -1) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      index.conversations.splice(idx, 1);
+      await saveConversationIndex(index);
+      await fs.unlink(path.join(CONVERSATIONS_DIR, `${id}.json`)).catch(() => {});
+      res.json({ success: true });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // PATCH /api/ai/conversations/:id
+  app.patch('/api/ai/conversations/:id', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { name } = req.body as { name: string };
+      if (!name || typeof name !== 'string') {
+        res.status(400).json({ error: 'name is required' });
+        return;
+      }
+      const conv = await loadConversation(id);
+      if (!conv) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      conv.name = name;
+      conv.updatedAt = new Date().toISOString();
+      await saveConversation(conv);
+      const index = await loadConversationIndex();
+      const meta = index.conversations.find((c) => c.id === id);
+      if (meta) {
+        meta.name = name;
+        meta.updatedAt = conv.updatedAt;
+        await saveConversationIndex(index);
+      }
+      const updatedMeta: ConversationMeta = { id, name, createdAt: conv.createdAt, updatedAt: conv.updatedAt };
+      res.json(updatedMeta);
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // POST /api/ai/conversations/:id/generate-name
+  app.post('/api/ai/conversations/:id/generate-name', async (req: Request, res: Response) => {
+    try {
+      const { id } = req.params;
+      const { model } = req.body as { model: string };
+      const creds = await getActiveProfileCredentials();
+      if (!creds) {
+        res.status(400).json({ error: 'No active environment profile' });
+        return;
+      }
+      const conv = await loadConversation(id);
+      if (!conv) {
+        res.status(404).json({ error: 'Conversation not found' });
+        return;
+      }
+      if (conv.messages.length === 0) {
+        res.json({ name: conv.name });
+        return;
+      }
+      // Take first 2-4 messages for context
+      const contextMessages = conv.messages.slice(0, 4);
+      const messagesText = contextMessages.map((m) => `${m.role}: ${m.content}`).join('\n');
+      const client = getAnthropicClient(creds);
+      const response = await client.messages.create({
+        model: model || creds.models.haiku,
+        max_tokens: 50,
+        system: 'Generate a brief title (3-6 words) for this conversation based on the messages below. Return ONLY the title, nothing else. No quotes, no punctuation at the end.',
+        messages: [{ role: 'user', content: messagesText }],
+      });
+      let generatedName = 'New Chat';
+      for (const block of response.content) {
+        if (block.type === 'text') {
+          generatedName = block.text.trim();
+          break;
+        }
+      }
+      // Save the generated name
+      conv.name = generatedName;
+      conv.updatedAt = new Date().toISOString();
+      await saveConversation(conv);
+      const index = await loadConversationIndex();
+      const meta = index.conversations.find((c) => c.id === id);
+      if (meta) {
+        meta.name = generatedName;
+        meta.updatedAt = conv.updatedAt;
+        await saveConversationIndex(index);
+      }
+      res.json({ name: generatedName });
+    } catch (err) {
+      res.status(500).json({ error: (err as Error).message });
+    }
+  });
+
+  // POST /api/ai/conversations/:id/chat — SSE streaming scoped to a conversation
+  app.post('/api/ai/conversations/:id/chat', async (req: Request, res: Response) => {
+    const { id } = req.params;
+    const { message, model, forceTool } = req.body as { message: string; model: string; forceTool?: string };
+
+    const creds = await getActiveProfileCredentials();
+    if (!creds) {
+      res.status(400).json({ error: 'No active environment profile' });
+      return;
+    }
+
+    const conv = await loadConversation(id);
+    if (!conv) {
+      res.status(404).json({ error: 'Conversation not found' });
+      return;
+    }
+
+    // Set SSE headers
+    res.setHeader('Content-Type', 'text/event-stream');
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Connection', 'keep-alive');
+    res.flushHeaders();
+
+    const abortController = new AbortController();
+    req.on('close', () => abortController.abort());
+
+    const client = getAnthropicClient(creds);
+
+    function sendSSE(event: object): void {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    }
+
+    try {
+      // Append user message
+      const userMsg: AIChatMessageForHistory = {
+        id: crypto.randomUUID(),
+        role: 'user',
+        content: message,
+        timestamp: new Date().toISOString(),
+      };
+      conv.messages.push(userMsg);
+
+      // Build conversation for Anthropic API
+      const conversationMessages: Anthropic.MessageParam[] = conv.messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+      }));
+
+      const SYSTEM_PROMPT = `You are an AI assistant for Claude Workbench, a GUI management tool for Claude Code CLI.
+You help users manage their Claude Code environment through natural language.
+
+Current date and time: ${new Date().toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})
+
+You have access to these tools:
+
+System:
+- get_current_datetime: Get current date, time, and timezone
+- get_system_info: Get OS, Node.js, Claude CLI version and system diagnostics
+
+Environment Profiles:
+- list_environments: List all environment profiles
+- get_environment: Get details of a specific profile by ID
+- create_environment: Create a new profile
+- update_environment: Update an existing profile
+- activate_environment: Activate a profile
+- deactivate_environment: Deactivate the current profile
+- delete_environment: Delete a profile by ID
+- reorder_environments: Reorder profiles (provide ordered list of IDs)
+
+MCP Servers:
+- get_mcp_server_statuses: Get MCP server config from ~/.claude.json
+- get_mcp_runtime_status: Get live runtime status (running/stopped) of MCP servers
+- start_mcp_server: Start an MCP server by name
+- stop_mcp_server: Stop an MCP server by name
+- restart_mcp_server: Restart an MCP server by name
+- get_mcp_server_logs: Get logs for an MCP server
+- add_mcp_server: Add a new MCP server to config
+- remove_mcp_server: Remove an MCP server from config
+- update_mcp_server: Update an MCP server's configuration
+
+Commands:
+- list_commands: List all custom commands
+- get_command: Get full content of a specific command
+- create_command: Create a new command
+- update_command: Update an existing command's content
+- delete_command: Delete a command
+
+Skills:
+- list_skills: List all agent skills
+- get_skill: Get full SKILL.md content for a specific skill
+- create_skill: Create a new skill
+- update_skill: Update an existing skill's SKILL.md content
+- delete_skill: Delete a skill
+
+Marketplace:
+- list_marketplaces: List registered marketplace sources
+- add_marketplace: Add a new marketplace source by GitHub URL
+- remove_marketplace: Remove a marketplace source by name
+- list_installed_plugins: List all installed plugins
+- install_plugin: Install a plugin from a marketplace
+- uninstall_plugin: Uninstall a plugin
+
+App Overview:
+- get_app_config: Get high-level app config overview
+
+File System:
+- read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
+- write_local_path: Write text content to a local file (home directory only)
+
+Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
+If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
+
+      const webSearchTool = [{
+        type: 'web_search_20250305' as const,
+        name: 'web_search' as const,
+        max_uses: 5,
+      }];
+
+      let iteration = 0;
+      const MAX_ITERATIONS = 10;
+      let currentAssistantContent = '';
+      const toolCallsForHistory: Array<{ name: string; input: Record<string, unknown>; result: string }> = [];
+      let isFirstIteration = true;
+
+      while (iteration < MAX_ITERATIONS) {
+        iteration++;
+
+        const stream = client.messages.stream({
+          model,
+          max_tokens: 4096,
+          system: SYSTEM_PROMPT,
+          messages: conversationMessages,
+          tools: [...webSearchTool, ...toolDefinitions] as unknown as Anthropic.Messages.Tool[],
+          ...(forceTool && isFirstIteration ? { tool_choice: { type: 'tool' as const, name: forceTool } } : {}),
+        }, { signal: abortController.signal });
+        isFirstIteration = false;
+
+        let hasToolUse = false;
+        const toolUseBlocks: Anthropic.Messages.ToolUseBlock[] = [];
+
+        for await (const event of stream) {
+          if (abortController.signal.aborted) break;
+          if (event.type === 'content_block_delta') {
+            if (event.delta.type === 'text_delta') {
+              currentAssistantContent += event.delta.text;
+              sendSSE({ type: 'text_delta', text: event.delta.text });
+            }
+          }
+        }
+
+        if (abortController.signal.aborted) break;
+
+        const finalMessage = await stream.finalMessage();
+
+        for (const block of finalMessage.content) {
+          if (block.type === 'tool_use') {
+            hasToolUse = true;
+            toolUseBlocks.push(block);
+          }
+        }
+
+        if (hasToolUse) {
+          conversationMessages.push({
+            role: 'assistant' as const,
+            content: finalMessage.content as unknown as Anthropic.MessageParam['content'],
+          });
+
+          const toolResultContents: Anthropic.Messages.ToolResultBlockParam[] = [];
+
+          for (const toolBlock of toolUseBlocks) {
+            if (toolBlock.name === 'web_search') continue;
+            const result = await executeToolHandler(toolBlock.name, toolBlock.input as ToolInput);
+            toolCallsForHistory.push({
+              name: toolBlock.name,
+              input: toolBlock.input as Record<string, unknown>,
+              result,
+            });
+            sendSSE({
+              type: 'tool_call',
+              tool: { name: toolBlock.name, input: toolBlock.input, result },
+            });
+            toolResultContents.push({
+              type: 'tool_result' as const,
+              tool_use_id: toolBlock.id,
+              content: result,
+            });
+          }
+
+          conversationMessages.push({
+            role: 'user' as const,
+            content: toolResultContents as unknown as Anthropic.MessageParam['content'],
+          });
+          continue;
+        }
+        break;
+      }
+
+      // Save updated conversation
+      const assistantMsg: AIChatMessageForHistory = {
+        id: crypto.randomUUID(),
+        role: 'assistant',
+        content: currentAssistantContent,
+        timestamp: new Date().toISOString(),
+        toolCalls: toolCallsForHistory.length > 0 ? toolCallsForHistory : undefined,
+      };
+      conv.messages.push(assistantMsg);
+      conv.updatedAt = new Date().toISOString();
+      await saveConversation(conv);
+
+      // Update index
+      const index = await loadConversationIndex();
+      const meta = index.conversations.find((c) => c.id === id);
+      if (meta) {
+        meta.updatedAt = conv.updatedAt;
+        await saveConversationIndex(index);
+      }
+
+      sendSSE({ type: 'done' });
+      res.end();
+    } catch (err) {
+      if ((err as Error).name === 'AbortError') {
+        res.end();
+        return;
+      }
+      sendSSE({ type: 'error', error: (err as Error).message });
+      res.end();
+    }
+  });
+
+  // POST /api/ai/chat (deprecated — delegates to default conversation via loadHistory/saveHistory)
   app.post('/api/ai/chat', async (req: Request, res: Response) => {
     const { message, model, forceTool } = req.body as { message: string; model: string; forceTool?: string };
 
@@ -444,21 +835,157 @@ interface AIChatHistoryFile {
   updatedAt: string;
 }
 
-export async function loadHistory(): Promise<AIChatHistoryFile> {
+interface ConversationMeta {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+interface ConversationIndex {
+  conversations: ConversationMeta[];
+}
+
+interface ConversationFile {
+  id: string;
+  name: string;
+  messages: AIChatMessageForHistory[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+// --- Conversation storage helpers ---
+
+async function migrateOldHistory(): Promise<void> {
   try {
-    const content = await fs.readFile(AI_HISTORY_PATH, 'utf-8');
-    return JSON.parse(content) as AIChatHistoryFile;
+    const oldContent = await fs.readFile(AI_HISTORY_PATH, 'utf-8');
+    const oldHistory = JSON.parse(oldContent) as AIChatHistoryFile;
+    if (oldHistory.messages.length === 0) {
+      await fs.unlink(AI_HISTORY_PATH).catch(() => {});
+      return;
+    }
+    const now = new Date().toISOString();
+    const id = crypto.randomUUID();
+    const conv: ConversationFile = {
+      id,
+      name: 'Previous Chat',
+      messages: oldHistory.messages,
+      createdAt: oldHistory.messages[0]?.timestamp || now,
+      updatedAt: oldHistory.updatedAt || now,
+    };
+    await fs.mkdir(CONVERSATIONS_DIR, { recursive: true });
+    await fs.writeFile(path.join(CONVERSATIONS_DIR, `${id}.json`), JSON.stringify(conv, null, 2), 'utf-8');
+    const index: ConversationIndex = {
+      conversations: [{ id, name: conv.name, createdAt: conv.createdAt, updatedAt: conv.updatedAt }],
+    };
+    await fs.writeFile(CONVERSATIONS_INDEX_PATH, JSON.stringify(index, null, 2), 'utf-8');
+    await fs.unlink(AI_HISTORY_PATH).catch(() => {});
   } catch {
-    return { messages: [], updatedAt: '' };
+    // Old history doesn't exist or is invalid — nothing to migrate
   }
 }
 
+async function loadConversationIndex(): Promise<ConversationIndex> {
+  try {
+    await fs.access(CONVERSATIONS_INDEX_PATH);
+  } catch {
+    // Index doesn't exist — check for old history to migrate
+    try {
+      await fs.access(AI_HISTORY_PATH);
+      await migrateOldHistory();
+    } catch {
+      // No old history either — return empty
+    }
+  }
+  try {
+    const content = await fs.readFile(CONVERSATIONS_INDEX_PATH, 'utf-8');
+    return JSON.parse(content) as ConversationIndex;
+  } catch {
+    return { conversations: [] };
+  }
+}
+
+async function saveConversationIndex(index: ConversationIndex): Promise<void> {
+  await fs.mkdir(CONVERSATIONS_DIR, { recursive: true });
+  await fs.writeFile(CONVERSATIONS_INDEX_PATH, JSON.stringify(index, null, 2), 'utf-8');
+}
+
+async function loadConversation(id: string): Promise<ConversationFile | null> {
+  try {
+    const content = await fs.readFile(path.join(CONVERSATIONS_DIR, `${id}.json`), 'utf-8');
+    return JSON.parse(content) as ConversationFile;
+  } catch {
+    return null;
+  }
+}
+
+async function saveConversation(conv: ConversationFile): Promise<void> {
+  const trimmed = trimConversationMessages(conv);
+  const redacted = redactConversationCredentials(trimmed);
+  await fs.mkdir(CONVERSATIONS_DIR, { recursive: true });
+  await fs.writeFile(path.join(CONVERSATIONS_DIR, `${redacted.id}.json`), JSON.stringify(redacted, null, 2), 'utf-8');
+}
+
+function trimConversationMessages(conv: ConversationFile): ConversationFile {
+  const MAX_MESSAGES = 100;
+  if (conv.messages.length <= MAX_MESSAGES) return conv;
+  return {
+    ...conv,
+    messages: conv.messages.slice(conv.messages.length - MAX_MESSAGES),
+  };
+}
+
+function redactConversationCredentials(conv: ConversationFile): ConversationFile {
+  return {
+    ...conv,
+    messages: conv.messages.map((msg) => ({
+      ...msg,
+      toolCalls: msg.toolCalls?.map((tc) => ({
+        ...tc,
+        result: tc.result
+          ? tc.result.replace(/"apiKey"\s*:\s*"[^"]*"/g, '"apiKey":"***"')
+              .replace(/"authToken"\s*:\s*"[^"]*"/g, '"authToken":"***"')
+          : tc.result,
+      })),
+    })),
+  };
+}
+
+async function getOrCreateDefaultConversation(): Promise<ConversationFile> {
+  const index = await loadConversationIndex();
+  // Use the first conversation as default, or create one
+  if (index.conversations.length > 0) {
+    const conv = await loadConversation(index.conversations[0].id);
+    if (conv) return conv;
+  }
+  // Create a default conversation
+  const now = new Date().toISOString();
+  const id = crypto.randomUUID();
+  const conv: ConversationFile = { id, name: 'New Chat', messages: [], createdAt: now, updatedAt: now };
+  await saveConversation(conv);
+  index.conversations.unshift({ id, name: conv.name, createdAt: now, updatedAt: now });
+  await saveConversationIndex(index);
+  return conv;
+}
+
+// Backward-compatible delegates for loadHistory/saveHistory (exported)
+export async function loadHistory(): Promise<AIChatHistoryFile> {
+  const conv = await getOrCreateDefaultConversation();
+  return { messages: conv.messages, updatedAt: conv.updatedAt };
+}
+
 export async function saveHistory(history: AIChatHistoryFile): Promise<void> {
-  const trimmed = trimHistory(history);
-  const redacted = redactHistoryCredentials(trimmed);
-  const dir = path.dirname(AI_HISTORY_PATH);
-  await fs.mkdir(dir, { recursive: true });
-  await fs.writeFile(AI_HISTORY_PATH, JSON.stringify(redacted, null, 2), 'utf-8');
+  const conv = await getOrCreateDefaultConversation();
+  conv.messages = history.messages;
+  conv.updatedAt = history.updatedAt || new Date().toISOString();
+  await saveConversation(conv);
+  // Update index
+  const index = await loadConversationIndex();
+  const meta = index.conversations.find((c) => c.id === conv.id);
+  if (meta) {
+    meta.updatedAt = conv.updatedAt;
+    await saveConversationIndex(index);
+  }
 }
 
 export function trimHistory(history: AIChatHistoryFile): AIChatHistoryFile {
