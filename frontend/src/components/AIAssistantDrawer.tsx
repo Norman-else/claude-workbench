@@ -134,6 +134,8 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   useEffect(() => {
     if (!isOpen) return;
     function handleOutsideClick(e: MouseEvent) {
+      // Skip outside-click handling when confirmation dialog is open
+      if (showClearConfirm) return;
       const panel = document.getElementById('ai-assistant-panel');
       const fab = document.getElementById('ai-assistant-fab');
       if (panel && !panel.contains(e.target as Node) && fab && !fab.contains(e.target as Node)) {
@@ -148,7 +150,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       clearTimeout(timer);
       document.removeEventListener('mousedown', handleOutsideClick);
     };
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, showClearConfirm]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -329,7 +331,10 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const isDropdownDisabled = modelsLoading || noProfile || modelOptions.length === 0;
   const selectedLabel = modelOptions.find((opt) => opt.id === selectedModel)?.label ?? '';
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    if (showClearConfirm) setShowClearConfirm(false);
+    return null;
+  }
 
   return (
     <>
@@ -720,7 +725,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       {showClearConfirm && (
         <div
           className="fixed inset-0 z-[200] bg-black/50 backdrop-blur-sm flex items-center justify-center"
-          onClick={() => setShowClearConfirm(false)}
+          onClick={(e) => { e.stopPropagation(); setShowClearConfirm(false); }}
         >
           <div
             className="ai-confirm-dialog glass-dark max-w-sm w-full mx-4 rounded-2xl p-6 shadow-2xl"
@@ -742,7 +747,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                   Cancel
                 </button>
                 <button
-                  onClick={() => { clearHistory(); setShowClearConfirm(false); }}
+                  onClick={async (e) => { e.stopPropagation(); await clearHistory(); setShowClearConfirm(false); }}
                   className="flex-1 rounded-xl py-2.5 text-sm font-medium bg-red-600 hover:bg-red-500 text-white transition-colors"
                 >
                   Delete All
