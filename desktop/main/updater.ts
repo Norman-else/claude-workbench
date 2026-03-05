@@ -1,4 +1,4 @@
-import { ipcMain, BrowserWindow } from 'electron';
+import { ipcMain, BrowserWindow, app } from 'electron';
 
 export type UpdateStatus =
   | { type: 'idle' }
@@ -87,7 +87,18 @@ export function setupAutoUpdater(): void {
   // IPC: quit and install downloaded update
   ipcMain.removeHandler('install-update');
   ipcMain.handle('install-update', () => {
-    autoUpdater.quitAndInstall(false, true);
+    // Enable auto-install on quit for macOS native updater
+    autoUpdater.autoInstallOnAppQuit = true;
+
+    // Mark app as quitting so the window close handler (window.ts)
+    // doesn't intercept the close event and hide the window instead
+    (app as any).isQuitting = true;
+
+    // Defer quitAndInstall to next tick so the IPC response reaches
+    // the renderer before the app starts quitting
+    setImmediate(() => {
+      autoUpdater.quitAndInstall(false, true);
+    });
   });
 
   // IPC: get current status snapshot
