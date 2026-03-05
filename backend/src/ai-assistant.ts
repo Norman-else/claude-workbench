@@ -111,9 +111,27 @@ export function registerAIAssistantRoutes(app: Express): void {
     }
   });
 
+  // GET /api/ai/tools — list available tool definitions
+  app.get('/api/ai/tools', (_req: Request, res: Response) => {
+    const tools = toolDefinitions.map(t => ({
+      name: t.name,
+      description: t.description,
+      parameters: t.input_schema.properties,
+      required: t.input_schema.required || [],
+    }));
+    // Also include web_search
+    tools.unshift({
+      name: 'web_search',
+      description: 'Search the web for current information, news, and real-time data.',
+      parameters: {},
+      required: [],
+    });
+    res.json(tools);
+  });
+
   // POST /api/ai/chat — SSE streaming with tool use loop
   app.post('/api/ai/chat', async (req: Request, res: Response) => {
-    const { message, model } = req.body as { message: string; model: string };
+    const { message, model, forceTool } = req.body as { message: string; model: string; forceTool?: string };
 
     // Validate active profile BEFORE opening SSE
     const creds = await getActiveProfileCredentials();
@@ -158,7 +176,13 @@ export function registerAIAssistantRoutes(app: Express): void {
       const SYSTEM_PROMPT = `You are an AI assistant for Claude Workbench, a GUI management tool for Claude Code CLI.
 You help users manage their Claude Code environment through natural language.
 
+Current date and time: ${new Date().toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})
+
 You have access to these tools:
+
+System:
+- get_current_datetime: Get current date, time, and timezone
+- get_system_info: Get OS, Node.js, Claude CLI version and system diagnostics
 
 Environment Profiles:
 - list_environments: List all environment profiles
@@ -177,6 +201,9 @@ MCP Servers:
 - stop_mcp_server: Stop an MCP server by name
 - restart_mcp_server: Restart an MCP server by name
 - get_mcp_server_logs: Get logs for an MCP server
+- add_mcp_server: Add a new MCP server to config
+- remove_mcp_server: Remove an MCP server from config
+- update_mcp_server: Update an MCP server's configuration
 
 Commands:
 - list_commands: List all custom commands
@@ -189,6 +216,7 @@ Skills:
 - list_skills: List all agent skills
 - get_skill: Get full SKILL.md content for a specific skill
 - create_skill: Create a new skill
+- update_skill: Update an existing skill's SKILL.md content
 - delete_skill: Delete a skill
 
 Marketplace:
@@ -204,6 +232,7 @@ App Overview:
 
 File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
+- write_local_path: Write text content to a local file (home directory only)
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
@@ -221,6 +250,7 @@ If the user asks about current events, real-time information, or anything requir
       // Track current assistant message for history
       let currentAssistantContent = '';
       const toolCallsForHistory: Array<{ name: string; input: Record<string, unknown>; result: string }> = [];
+      let isFirstIteration = true;
 
       while (iteration < MAX_ITERATIONS) {
         iteration++;
@@ -232,7 +262,9 @@ If the user asks about current events, real-time information, or anything requir
           system: SYSTEM_PROMPT,
           messages: conversationMessages,
           tools: [...webSearchTool, ...toolDefinitions] as unknown as Anthropic.Messages.Tool[],
+          ...(forceTool && isFirstIteration ? { tool_choice: { type: 'tool' as const, name: forceTool } } : {}),
         }, { signal: abortController.signal });
+        isFirstIteration = false;
 
         let hasToolUse = false;
         const toolUseBlocks: Anthropic.Messages.ToolUseBlock[] = [];
@@ -769,6 +801,77 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       },
       required: ['path'],
     },
+  },
+  {
+    name: 'get_current_datetime',
+    description: 'Get the current date, time, and timezone of the server.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'update_skill',
+    description: 'Update an existing agent skill by name. Overwrites the SKILL.md content.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Skill name to update' },
+        content: { type: 'string', description: 'New SKILL.md content' },
+      },
+      required: ['name', 'content'],
+    },
+  },
+  {
+    name: 'add_mcp_server',
+    description: 'Add a new MCP server to ~/.claude.json config.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Server name (unique identifier)' },
+        command: { type: 'string', description: 'Command to run (e.g. "npx", "node", "python")' },
+        args: { type: 'array', items: { type: 'string' }, description: 'Command arguments' },
+        env: { type: 'object', description: 'Environment variables as key-value pairs' },
+      },
+      required: ['name', 'command'],
+    },
+  },
+  {
+    name: 'remove_mcp_server',
+    description: 'Remove an MCP server from ~/.claude.json config by name.',
+    input_schema: {
+      type: 'object',
+      properties: { name: { type: 'string', description: 'Server name to remove' } },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'update_mcp_server',
+    description: 'Update an existing MCP server configuration in ~/.claude.json.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        name: { type: 'string', description: 'Server name to update' },
+        command: { type: 'string', description: 'New command' },
+        args: { type: 'array', items: { type: 'string' }, description: 'New args' },
+        env: { type: 'object', description: 'New environment variables' },
+      },
+      required: ['name'],
+    },
+  },
+  {
+    name: 'write_local_path',
+    description: 'Write text content to a local file. Supports ~ (home dir) expansion. The file must be within the home directory. Creates parent directories if needed.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Absolute path or ~ relative path to write to' },
+        content: { type: 'string', description: 'Text content to write' },
+      },
+      required: ['path', 'content'],
+    },
+  },
+  {
+    name: 'get_system_info',
+    description: 'Get system diagnostic information: OS, Node.js version, architecture, hostname, home directory, shell, and Claude CLI version.',
+    input_schema: { type: 'object', properties: {} },
   },
 ];
 
@@ -1314,6 +1417,163 @@ async function handleReadLocalPath(input: ToolInput): Promise<string> {
   }
 }
 
+async function handleGetCurrentDatetime(_input: ToolInput): Promise<string> {
+  return JSON.stringify({
+    dateTime: new Date().toLocaleString(),
+    iso: new Date().toISOString(),
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    timestamp: Date.now(),
+  });
+}
+
+async function handleUpdateSkill(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  const content = input.content as string;
+  try {
+    const skillPath = path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md');
+    // Check skill exists
+    try {
+      await fs.access(skillPath);
+    } catch {
+      return JSON.stringify({ error: `Skill not found: ${name}` });
+    }
+    await fs.writeFile(skillPath, content, 'utf-8');
+    return JSON.stringify({ success: true, message: `Updated skill: ${name}` });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleAddMcpServer(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  const command = input.command as string;
+  const args = (input.args as string[]) || [];
+  const env = (input.env as Record<string, string>) || undefined;
+  try {
+    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const config = JSON.parse(content) as { mcpServers?: Record<string, unknown>; [key: string]: unknown };
+    if (!config.mcpServers) config.mcpServers = {};
+    if (config.mcpServers[name]) {
+      return JSON.stringify({ error: `MCP server already exists: ${name}` });
+    }
+    const entry: { command: string; args: string[]; env?: Record<string, string> } = { command, args };
+    if (env) entry.env = env;
+    config.mcpServers[name] = entry;
+    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    return JSON.stringify({ success: true, message: `Added MCP server: ${name}` });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleRemoveMcpServer(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const config = JSON.parse(content) as { mcpServers?: Record<string, unknown>; [key: string]: unknown };
+    if (!config.mcpServers || !config.mcpServers[name]) {
+      return JSON.stringify({ error: `MCP server not found: ${name}` });
+    }
+    delete config.mcpServers[name];
+    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    return JSON.stringify({ success: true, message: `Removed MCP server: ${name}` });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleUpdateMcpServer(input: ToolInput): Promise<string> {
+  const name = input.name as string;
+  try {
+    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const config = JSON.parse(content) as { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>; [key: string]: unknown };
+    if (!config.mcpServers || !config.mcpServers[name]) {
+      return JSON.stringify({ error: `MCP server not found: ${name}` });
+    }
+    const server = config.mcpServers[name];
+    if (input.command !== undefined) server.command = input.command as string;
+    if (input.args !== undefined) server.args = input.args as string[];
+    if (input.env !== undefined) server.env = input.env as Record<string, string>;
+    config.mcpServers[name] = server;
+    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    return JSON.stringify({ success: true, message: `Updated MCP server: ${name}` });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleWriteLocalPath(input: ToolInput): Promise<string> {
+  if (typeof input.path !== 'string' || input.path.trim() === '') {
+    return JSON.stringify({ error: 'Invalid path: must be a non-empty string' });
+  }
+  if (typeof input.content !== 'string') {
+    return JSON.stringify({ error: 'Invalid content: must be a string' });
+  }
+
+  const rawPath = input.path;
+  const content = input.content;
+
+  // Reject content larger than 1MB
+  if (Buffer.byteLength(content, 'utf-8') > 1_048_576) {
+    return JSON.stringify({ error: 'Content too large: maximum size is 1MB' });
+  }
+
+  // Expand ~ paths
+  let targetPath: string;
+  if (rawPath === '~') {
+    return JSON.stringify({ error: 'Cannot write to home directory itself' });
+  } else if (rawPath.startsWith('~/') || rawPath.startsWith('~\\')) {
+    targetPath = path.join(HOME_DIR, rawPath.slice(2));
+  } else {
+    targetPath = rawPath;
+  }
+
+  // Security check: verify parent directory is under HOME_DIR
+  const parentDir = path.dirname(targetPath);
+  let resolvedParent: string;
+  try {
+    // Create parent dirs first so realpath can resolve
+    await fs.mkdir(parentDir, { recursive: true });
+    resolvedParent = await fs.realpath(parentDir);
+  } catch {
+    return JSON.stringify({ error: 'Cannot create or resolve parent directory' });
+  }
+
+  const normalizedHome = path.normalize(HOME_DIR);
+  const isUnderHome =
+    resolvedParent === normalizedHome ||
+    resolvedParent.startsWith(normalizedHome + path.sep);
+  if (!isUnderHome) {
+    return JSON.stringify({ error: 'Access denied: path must be within the home directory' });
+  }
+
+  try {
+    const resolvedTarget = path.join(resolvedParent, path.basename(targetPath));
+    await fs.writeFile(resolvedTarget, content, 'utf-8');
+    return JSON.stringify({ success: true, path: resolvedTarget, size: Buffer.byteLength(content, 'utf-8') });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleGetSystemInfo(_input: ToolInput): Promise<string> {
+  let claudeVersion = 'unknown';
+  try {
+    const { execSync } = await import('child_process');
+    claudeVersion = execSync('claude --version 2>/dev/null || echo "not installed"', { encoding: 'utf-8' }).trim();
+  } catch { claudeVersion = 'not installed'; }
+
+  return JSON.stringify({
+    os: { platform: os.platform(), release: os.release(), arch: os.arch(), hostname: os.hostname() },
+    node: process.version,
+    homeDir: HOME_DIR,
+    shell: process.env.SHELL || process.env.COMSPEC || 'unknown',
+    claudeVersion,
+    uptime: Math.round(os.uptime()),
+    memory: { total: os.totalmem(), free: os.freemem() },
+  });
+}
+
 export async function executeToolHandler(name: string, input: ToolInput): Promise<string> {
   switch (name) {
     case 'list_environments': return handleListEnvironments(input);
@@ -1347,6 +1607,13 @@ export async function executeToolHandler(name: string, input: ToolInput): Promis
     case 'add_marketplace': return handleAddMarketplace(input);
     case 'remove_marketplace': return handleRemoveMarketplace(input);
     case 'read_local_path': return handleReadLocalPath(input);
+    case 'get_current_datetime': return handleGetCurrentDatetime(input);
+    case 'update_skill': return handleUpdateSkill(input);
+    case 'add_mcp_server': return handleAddMcpServer(input);
+    case 'remove_mcp_server': return handleRemoveMcpServer(input);
+    case 'update_mcp_server': return handleUpdateMcpServer(input);
+    case 'write_local_path': return handleWriteLocalPath(input);
+    case 'get_system_info': return handleGetSystemInfo(input);
     default: return JSON.stringify({ error: `Unknown tool: ${name}` });
   }
 }

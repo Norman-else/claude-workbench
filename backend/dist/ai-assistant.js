@@ -30,10 +30,10 @@ export async function getActiveProfileCredentials() {
             apiKey: profile.apiKey || '',
             authToken: profile.authToken || '',
             models: {
-                sonnet: profile.sonnetModel || 'claude-sonnet-4-20250514',
-                opus: profile.opusModel || 'claude-opus-4-20250514',
-                haiku: profile.haikuModel || 'claude-haiku-3-5-20241022',
-                smallFast: profile.smallFastModel || 'claude-haiku-3-5-20241022',
+                sonnet: profile.sonnetModel || 'claude-sonnet-4-6',
+                opus: profile.opusModel || 'claude-opus-4-6',
+                haiku: profile.haikuModel || 'claude-haiku-4-5-20251001',
+                smallFast: profile.smallFastModel || 'claude-haiku-4-5-20251001',
             },
         };
     }
@@ -95,9 +95,26 @@ export function registerAIAssistantRoutes(app) {
             res.status(500).json({ error: err.message });
         }
     });
+    // GET /api/ai/tools — list available tool definitions
+    app.get('/api/ai/tools', (_req, res) => {
+        const tools = toolDefinitions.map(t => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.input_schema.properties,
+            required: t.input_schema.required || [],
+        }));
+        // Also include web_search
+        tools.unshift({
+            name: 'web_search',
+            description: 'Search the web for current information, news, and real-time data.',
+            parameters: {},
+            required: [],
+        });
+        res.json(tools);
+    });
     // POST /api/ai/chat — SSE streaming with tool use loop
     app.post('/api/ai/chat', async (req, res) => {
-        const { message, model } = req.body;
+        const { message, model, forceTool } = req.body;
         // Validate active profile BEFORE opening SSE
         const creds = await getActiveProfileCredentials();
         if (!creds) {
@@ -134,7 +151,13 @@ export function registerAIAssistantRoutes(app) {
             const SYSTEM_PROMPT = `You are an AI assistant for Claude Workbench, a GUI management tool for Claude Code CLI.
 You help users manage their Claude Code environment through natural language.
 
+Current date and time: ${new Date().toLocaleString()} (${Intl.DateTimeFormat().resolvedOptions().timeZone})
+
 You have access to these tools:
+
+System:
+- get_current_datetime: Get current date, time, and timezone
+- get_system_info: Get OS, Node.js, Claude CLI version and system diagnostics
 
 Environment Profiles:
 - list_environments: List all environment profiles
@@ -153,6 +176,9 @@ MCP Servers:
 - stop_mcp_server: Stop an MCP server by name
 - restart_mcp_server: Restart an MCP server by name
 - get_mcp_server_logs: Get logs for an MCP server
+- add_mcp_server: Add a new MCP server to config
+- remove_mcp_server: Remove an MCP server from config
+- update_mcp_server: Update an MCP server's configuration
 
 Commands:
 - list_commands: List all custom commands
@@ -165,6 +191,7 @@ Skills:
 - list_skills: List all agent skills
 - get_skill: Get full SKILL.md content for a specific skill
 - create_skill: Create a new skill
+- update_skill: Update an existing skill's SKILL.md content
 - delete_skill: Delete a skill
 
 Marketplace:
@@ -177,6 +204,10 @@ Marketplace:
 
 App Overview:
 - get_app_config: Get high-level app config overview
+
+File System:
+- read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
+- write_local_path: Write text content to a local file (home directory only)
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
@@ -191,6 +222,7 @@ If the user asks about current events, real-time information, or anything requir
             // Track current assistant message for history
             let currentAssistantContent = '';
             const toolCallsForHistory = [];
+            let isFirstIteration = true;
             while (iteration < MAX_ITERATIONS) {
                 iteration++;
                 // Stream from Anthropic
@@ -200,7 +232,9 @@ If the user asks about current events, real-time information, or anything requir
                     system: SYSTEM_PROMPT,
                     messages: conversationMessages,
                     tools: [...webSearchTool, ...toolDefinitions],
+                    ...(forceTool && isFirstIteration ? { tool_choice: { type: 'tool', name: forceTool } } : {}),
                 }, { signal: abortController.signal });
+                isFirstIteration = false;
                 let hasToolUse = false;
                 const toolUseBlocks = [];
                 for await (const event of stream) {
@@ -644,6 +678,97 @@ export const toolDefinitions = [
             required: ['marketplaceName', 'pluginName'],
         },
     },
+    {
+        name: 'read_local_path',
+        description: 'Read a local file\'s text content or list a directory\'s entries. Supports ~ (home dir) expansion. Use this to inspect any config file, log file, or directory on the user\'s machine.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                path: {
+                    type: 'string',
+                    description: 'Absolute path or ~ relative path to a file or directory. Examples: "~/.claude/settings.json", "~/.claude", "C:\\\\Users\\\\name\\\\.gitconfig"',
+                },
+                max_bytes: {
+                    type: 'number',
+                    description: 'Max bytes to read for files (default: 32768, max: 1048576). Ignored for directories.',
+                    minimum: 1,
+                    maximum: 1048576,
+                },
+            },
+            required: ['path'],
+        },
+    },
+    {
+        name: 'get_current_datetime',
+        description: 'Get the current date, time, and timezone of the server.',
+        input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'update_skill',
+        description: 'Update an existing agent skill by name. Overwrites the SKILL.md content.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Skill name to update' },
+                content: { type: 'string', description: 'New SKILL.md content' },
+            },
+            required: ['name', 'content'],
+        },
+    },
+    {
+        name: 'add_mcp_server',
+        description: 'Add a new MCP server to ~/.claude.json config.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Server name (unique identifier)' },
+                command: { type: 'string', description: 'Command to run (e.g. "npx", "node", "python")' },
+                args: { type: 'array', items: { type: 'string' }, description: 'Command arguments' },
+                env: { type: 'object', description: 'Environment variables as key-value pairs' },
+            },
+            required: ['name', 'command'],
+        },
+    },
+    {
+        name: 'remove_mcp_server',
+        description: 'Remove an MCP server from ~/.claude.json config by name.',
+        input_schema: {
+            type: 'object',
+            properties: { name: { type: 'string', description: 'Server name to remove' } },
+            required: ['name'],
+        },
+    },
+    {
+        name: 'update_mcp_server',
+        description: 'Update an existing MCP server configuration in ~/.claude.json.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Server name to update' },
+                command: { type: 'string', description: 'New command' },
+                args: { type: 'array', items: { type: 'string' }, description: 'New args' },
+                env: { type: 'object', description: 'New environment variables' },
+            },
+            required: ['name'],
+        },
+    },
+    {
+        name: 'write_local_path',
+        description: 'Write text content to a local file. Supports ~ (home dir) expansion. The file must be within the home directory. Creates parent directories if needed.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                path: { type: 'string', description: 'Absolute path or ~ relative path to write to' },
+                content: { type: 'string', description: 'Text content to write' },
+            },
+            required: ['path', 'content'],
+        },
+    },
+    {
+        name: 'get_system_info',
+        description: 'Get system diagnostic information: OS, Node.js version, architecture, hostname, home directory, shell, and Claude CLI version.',
+        input_schema: { type: 'object', properties: {} },
+    },
 ];
 async function handleListEnvironments(_input) {
     const data = await readProfilesForAI();
@@ -1059,7 +1184,7 @@ async function handleInstallPlugin(input) {
         const resp = await fetch('http://localhost:3001/api/plugins/install', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ marketplaceName, pluginName }),
+            body: JSON.stringify({ marketplace: marketplaceName, plugin: pluginName }),
         });
         const data = await resp.json();
         if (!resp.ok)
@@ -1077,7 +1202,7 @@ async function handleUninstallPlugin(input) {
         const resp = await fetch('http://localhost:3001/api/plugins/uninstall', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ marketplaceName, pluginName }),
+            body: JSON.stringify({ marketplace: marketplaceName, plugin: pluginName }),
         });
         const data = await resp.json();
         if (!resp.ok)
@@ -1087,6 +1212,269 @@ async function handleUninstallPlugin(input) {
     catch (err) {
         return JSON.stringify({ error: err.message });
     }
+}
+async function handleReadLocalPath(input) {
+    // [Mi4] Type guard — reject non-string path early
+    if (typeof input.path !== 'string' || input.path.trim() === '') {
+        return JSON.stringify({ error: 'Invalid path: must be a non-empty string' });
+    }
+    const rawPath = input.path;
+    // [C2] Clamp max_bytes to [1, 1MB] to prevent huge Buffer allocations
+    const maxBytes = typeof input.max_bytes === 'number'
+        ? Math.min(Math.max(1, Math.floor(input.max_bytes)), 1_048_576)
+        : 32_768;
+    // [M1] Expand ~ correctly: slice(2) to remove '~/' prefix (not slice(1))
+    let targetPath;
+    if (rawPath === '~') {
+        targetPath = HOME_DIR;
+    }
+    else if (rawPath.startsWith('~/') || rawPath.startsWith('~\\')) {
+        targetPath = path.join(HOME_DIR, rawPath.slice(2));
+    }
+    else {
+        targetPath = rawPath;
+    }
+    // [C1] Resolve symlinks and verify the path stays within HOME_DIR
+    let resolvedPath;
+    try {
+        resolvedPath = await fs.realpath(targetPath);
+    }
+    catch {
+        // realpath fails when path does not exist
+        return JSON.stringify({ error: 'Path not found: path does not exist or is inaccessible' });
+    }
+    const normalizedHome = path.normalize(HOME_DIR);
+    const isUnderHome = resolvedPath === normalizedHome ||
+        resolvedPath.startsWith(normalizedHome + path.sep);
+    if (!isUnderHome) {
+        return JSON.stringify({ error: 'Access denied: path must be within the home directory' });
+    }
+    try {
+        const stats = await fs.stat(resolvedPath);
+        if (stats.isDirectory()) {
+            const entries = await fs.readdir(resolvedPath, { withFileTypes: true });
+            const items = entries
+                .map((e) => ({
+                name: e.name,
+                type: e.isDirectory() ? 'directory' : 'file',
+                path: path.join(resolvedPath, e.name),
+            }))
+                .sort((a, b) => {
+                if (a.type === 'directory' && b.type !== 'directory')
+                    return -1;
+                if (a.type !== 'directory' && b.type === 'directory')
+                    return 1;
+                return a.name.localeCompare(b.name);
+            });
+            return JSON.stringify({
+                type: 'directory',
+                path: resolvedPath,
+                entries: items,
+                count: items.length,
+            });
+        }
+        if (stats.isFile()) {
+            if (stats.size > maxBytes) {
+                // [M3] Use try/finally to guarantee file descriptor is closed
+                const fileHandle = await fs.open(resolvedPath, 'r');
+                try {
+                    const buffer = Buffer.alloc(maxBytes);
+                    await fileHandle.read(buffer, 0, maxBytes, 0);
+                    return JSON.stringify({
+                        type: 'file',
+                        path: resolvedPath,
+                        size: stats.size,
+                        truncated: true,
+                        content: buffer.toString('utf-8'),
+                        note: `File truncated: showing first ${maxBytes} of ${stats.size} bytes`,
+                    });
+                }
+                finally {
+                    await fileHandle.close();
+                }
+            }
+            const content = await fs.readFile(resolvedPath, 'utf-8');
+            return JSON.stringify({
+                type: 'file',
+                path: resolvedPath,
+                size: stats.size,
+                truncated: false,
+                content,
+            });
+        }
+        return JSON.stringify({ error: `Path is neither a file nor a directory: ${resolvedPath}` });
+    }
+    catch (err) {
+        const e = err;
+        if (e.code === 'ENOENT')
+            return JSON.stringify({ error: 'Path not found' });
+        if (e.code === 'EACCES')
+            return JSON.stringify({ error: 'Permission denied' });
+        if (e.code === 'EMFILE')
+            return JSON.stringify({ error: 'Too many open files, please retry' });
+        if (e.code === 'ENOTDIR')
+            return JSON.stringify({ error: 'Path component is not a directory' });
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleGetCurrentDatetime(_input) {
+    return JSON.stringify({
+        dateTime: new Date().toLocaleString(),
+        iso: new Date().toISOString(),
+        timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+        timestamp: Date.now(),
+    });
+}
+async function handleUpdateSkill(input) {
+    const name = input.name;
+    const content = input.content;
+    try {
+        const skillPath = path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md');
+        // Check skill exists
+        try {
+            await fs.access(skillPath);
+        }
+        catch {
+            return JSON.stringify({ error: `Skill not found: ${name}` });
+        }
+        await fs.writeFile(skillPath, content, 'utf-8');
+        return JSON.stringify({ success: true, message: `Updated skill: ${name}` });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleAddMcpServer(input) {
+    const name = input.name;
+    const command = input.command;
+    const args = input.args || [];
+    const env = input.env || undefined;
+    try {
+        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const config = JSON.parse(content);
+        if (!config.mcpServers)
+            config.mcpServers = {};
+        if (config.mcpServers[name]) {
+            return JSON.stringify({ error: `MCP server already exists: ${name}` });
+        }
+        const entry = { command, args };
+        if (env)
+            entry.env = env;
+        config.mcpServers[name] = entry;
+        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+        return JSON.stringify({ success: true, message: `Added MCP server: ${name}` });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleRemoveMcpServer(input) {
+    const name = input.name;
+    try {
+        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const config = JSON.parse(content);
+        if (!config.mcpServers || !config.mcpServers[name]) {
+            return JSON.stringify({ error: `MCP server not found: ${name}` });
+        }
+        delete config.mcpServers[name];
+        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+        return JSON.stringify({ success: true, message: `Removed MCP server: ${name}` });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleUpdateMcpServer(input) {
+    const name = input.name;
+    try {
+        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const config = JSON.parse(content);
+        if (!config.mcpServers || !config.mcpServers[name]) {
+            return JSON.stringify({ error: `MCP server not found: ${name}` });
+        }
+        const server = config.mcpServers[name];
+        if (input.command !== undefined)
+            server.command = input.command;
+        if (input.args !== undefined)
+            server.args = input.args;
+        if (input.env !== undefined)
+            server.env = input.env;
+        config.mcpServers[name] = server;
+        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+        return JSON.stringify({ success: true, message: `Updated MCP server: ${name}` });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleWriteLocalPath(input) {
+    if (typeof input.path !== 'string' || input.path.trim() === '') {
+        return JSON.stringify({ error: 'Invalid path: must be a non-empty string' });
+    }
+    if (typeof input.content !== 'string') {
+        return JSON.stringify({ error: 'Invalid content: must be a string' });
+    }
+    const rawPath = input.path;
+    const content = input.content;
+    // Reject content larger than 1MB
+    if (Buffer.byteLength(content, 'utf-8') > 1_048_576) {
+        return JSON.stringify({ error: 'Content too large: maximum size is 1MB' });
+    }
+    // Expand ~ paths
+    let targetPath;
+    if (rawPath === '~') {
+        return JSON.stringify({ error: 'Cannot write to home directory itself' });
+    }
+    else if (rawPath.startsWith('~/') || rawPath.startsWith('~\\')) {
+        targetPath = path.join(HOME_DIR, rawPath.slice(2));
+    }
+    else {
+        targetPath = rawPath;
+    }
+    // Security check: verify parent directory is under HOME_DIR
+    const parentDir = path.dirname(targetPath);
+    let resolvedParent;
+    try {
+        // Create parent dirs first so realpath can resolve
+        await fs.mkdir(parentDir, { recursive: true });
+        resolvedParent = await fs.realpath(parentDir);
+    }
+    catch {
+        return JSON.stringify({ error: 'Cannot create or resolve parent directory' });
+    }
+    const normalizedHome = path.normalize(HOME_DIR);
+    const isUnderHome = resolvedParent === normalizedHome ||
+        resolvedParent.startsWith(normalizedHome + path.sep);
+    if (!isUnderHome) {
+        return JSON.stringify({ error: 'Access denied: path must be within the home directory' });
+    }
+    try {
+        const resolvedTarget = path.join(resolvedParent, path.basename(targetPath));
+        await fs.writeFile(resolvedTarget, content, 'utf-8');
+        return JSON.stringify({ success: true, path: resolvedTarget, size: Buffer.byteLength(content, 'utf-8') });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleGetSystemInfo(_input) {
+    let claudeVersion = 'unknown';
+    try {
+        const { execSync } = await import('child_process');
+        claudeVersion = execSync('claude --version 2>/dev/null || echo "not installed"', { encoding: 'utf-8' }).trim();
+    }
+    catch {
+        claudeVersion = 'not installed';
+    }
+    return JSON.stringify({
+        os: { platform: os.platform(), release: os.release(), arch: os.arch(), hostname: os.hostname() },
+        node: process.version,
+        homeDir: HOME_DIR,
+        shell: process.env.SHELL || process.env.COMSPEC || 'unknown',
+        claudeVersion,
+        uptime: Math.round(os.uptime()),
+        memory: { total: os.totalmem(), free: os.freemem() },
+    });
 }
 export async function executeToolHandler(name, input) {
     switch (name) {
@@ -1120,6 +1508,14 @@ export async function executeToolHandler(name, input) {
         case 'uninstall_plugin': return handleUninstallPlugin(input);
         case 'add_marketplace': return handleAddMarketplace(input);
         case 'remove_marketplace': return handleRemoveMarketplace(input);
+        case 'read_local_path': return handleReadLocalPath(input);
+        case 'get_current_datetime': return handleGetCurrentDatetime(input);
+        case 'update_skill': return handleUpdateSkill(input);
+        case 'add_mcp_server': return handleAddMcpServer(input);
+        case 'remove_mcp_server': return handleRemoveMcpServer(input);
+        case 'update_mcp_server': return handleUpdateMcpServer(input);
+        case 'write_local_path': return handleWriteLocalPath(input);
+        case 'get_system_info': return handleGetSystemInfo(input);
         default: return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
 }

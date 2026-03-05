@@ -1,12 +1,47 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, ChevronDown, Check } from 'lucide-react';
-import type { AIModelOption } from '../types';
-import { getAvailableModels } from '../api';
+import { Sparkles, X, Send, User, Bot, Trash2, ChevronDown, Check, Wrench } from 'lucide-react';
+import type { AIModelOption, AIToolInfo } from '../types';
+import { getAvailableModels, getAITools } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
 import remarkGfm from 'remark-gfm';
+
+const TOOL_CATEGORIES: Record<string, string[]> = {
+  System: ['get_current_datetime', 'get_system_info', 'web_search'],
+  Environment: ['list_environments', 'get_environment', 'create_environment', 'update_environment', 'activate_environment', 'deactivate_environment', 'delete_environment', 'reorder_environments'],
+  'MCP Servers': ['get_mcp_server_statuses', 'get_mcp_runtime_status', 'start_mcp_server', 'stop_mcp_server', 'restart_mcp_server', 'get_mcp_server_logs', 'add_mcp_server', 'remove_mcp_server', 'update_mcp_server'],
+  Commands: ['list_commands', 'get_command', 'create_command', 'update_command', 'delete_command'],
+  Skills: ['list_skills', 'get_skill', 'create_skill', 'update_skill', 'delete_skill'],
+  Marketplace: ['list_marketplaces', 'add_marketplace', 'remove_marketplace', 'list_installed_plugins', 'install_plugin', 'uninstall_plugin'],
+  App: ['get_app_config'],
+  'File System': ['read_local_path', 'write_local_path'],
+};
+
+function getToolCategory(toolName: string): string {
+  for (const [category, toolNames] of Object.entries(TOOL_CATEGORIES)) {
+    if (toolNames.includes(toolName)) return category;
+  }
+  return 'Other';
+}
+
+function groupToolsByCategory(toolList: AIToolInfo[]): Record<string, AIToolInfo[]> {
+  const groups: Record<string, AIToolInfo[]> = {};
+  const categoryOrder = Object.keys(TOOL_CATEGORIES);
+  for (const tool of toolList) {
+    const cat = getToolCategory(tool.name);
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(tool);
+  }
+  // Sort groups by defined category order
+  const sorted: Record<string, AIToolInfo[]> = {};
+  for (const cat of categoryOrder) {
+    if (groups[cat]) sorted[cat] = groups[cat];
+  }
+  if (groups['Other']) sorted['Other'] = groups['Other'];
+  return sorted;
+}
 
 interface AIAssistantDrawerProps {
   isOpen: boolean;
@@ -29,6 +64,10 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [modelDropdownOpen, setModelDropdownOpen] = useState(false);
   const [inputFocused, setInputFocused] = useState(false);
   const modelDropdownRef = useRef<HTMLDivElement>(null);
+  const [tools, setTools] = useState<AIToolInfo[]>([]);
+  const [toolPaletteOpen, setToolPaletteOpen] = useState(false);
+  const [forceTool, setForceTool] = useState<string | null>(null);
+  const toolPaletteRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -49,6 +88,19 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [modelDropdownOpen]);
 
+  // Close tool palette on outside click
+  useEffect(() => {
+    function handleToolPaletteClick(e: MouseEvent) {
+      if (toolPaletteRef.current && !toolPaletteRef.current.contains(e.target as Node)) {
+        setToolPaletteOpen(false);
+      }
+    }
+    if (toolPaletteOpen) {
+      document.addEventListener('mousedown', handleToolPaletteClick);
+    }
+    return () => document.removeEventListener('mousedown', handleToolPaletteClick);
+  }, [toolPaletteOpen]);
+
   useEffect(() => {
     if (!isOpen) return;
     setModelsLoading(true);
@@ -65,6 +117,8 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         setModelOptions([]);
       })
       .finally(() => setModelsLoading(false));
+    // Load tools
+    getAITools().then(setTools).catch(() => setTools([]));
     // Load conversation history
     loadHistory();
   }, [isOpen, loadHistory]);
@@ -94,8 +148,9 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       textareaRef.current.style.height = 'auto';
     }
     setDismissedError(null);
-    sendMessage(msg, selectedModel);
-  }, [input, chatIsLoading, sendMessage, selectedModel]);
+    sendMessage(msg, selectedModel, forceTool || undefined);
+    setForceTool(null);
+  }, [input, chatIsLoading, sendMessage, selectedModel, forceTool]);
 
   const isDropdownDisabled = modelsLoading || noProfile || modelOptions.length === 0;
   const selectedLabel = modelOptions.find((opt) => opt.id === selectedModel)?.label ?? '';
@@ -267,7 +322,67 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           </div>
         )}
 
-        <div className="px-4 pt-3 pb-5">
+        <div className="px-4 pt-3 pb-5 relative" ref={toolPaletteRef}>
+          {/* Tool palette popup */}
+          {toolPaletteOpen && tools.length > 0 && (
+            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in" style={{ background: '#18181b' }}>
+              <div className="px-3 py-2 border-b border-white/[0.08] flex items-center gap-2">
+                <Wrench className="w-3.5 h-3.5 text-blue-400" />
+                <span className="text-xs font-medium text-white/70">Force a tool</span>
+                <button
+                  onClick={() => setToolPaletteOpen(false)}
+                  className="ml-auto text-white/30 hover:text-white/60 transition-colors"
+                  aria-label="Close tool palette"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+              <div className="max-h-[280px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                {Object.entries(groupToolsByCategory(tools)).map(([category, categoryTools]) => (
+                  <div key={category}>
+                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30 bg-white/[0.03] sticky top-0">
+                      {category}
+                    </div>
+                    {categoryTools.map((tool) => (
+                      <button
+                        key={tool.name}
+                        type="button"
+                        onClick={() => {
+                          setForceTool(tool.name);
+                          setToolPaletteOpen(false);
+                          textareaRef.current?.focus();
+                        }}
+                        className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-white/[0.06] transition-colors duration-100 group"
+                      >
+                        <span className="font-mono text-xs text-blue-400/80 group-hover:text-blue-300 shrink-0 pt-0.5">{tool.name}</span>
+                        {tool.description && (
+                          <span className="text-[11px] text-white/35 group-hover:text-white/50 leading-tight line-clamp-1">{tool.description}</span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Force tool chip */}
+          {forceTool && (
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/20">
+                <Wrench className="w-3 h-3" />
+                <span className="font-mono">{forceTool}</span>
+                <button
+                  onClick={() => setForceTool(null)}
+                  className="ml-0.5 text-blue-300/60 hover:text-blue-200 transition-colors"
+                  aria-label="Remove forced tool"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              </span>
+            </div>
+          )}
+
           <div className={`ai-chat-input-container overflow-hidden relative flex items-end rounded-2xl border transition-all duration-200 ${
             inputFocused
               ? 'border-white/30 shadow-[0_0_0_2px_rgba(59,130,246,0.15)]'
@@ -276,7 +391,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             <textarea
               ref={textareaRef}
               className="ai-chat-textarea flex-1 bg-transparent border-none px-4 py-3 text-white text-[14px] placeholder-white/30 resize-none focus:outline-none focus:ring-0"
-              placeholder={noProfile ? "Activate a profile to start chatting..." : "Type a message..."}
+              placeholder={noProfile ? 'Activate a profile to start chatting...' : 'Type a message...'}
               value={input}
               rows={1}
               onChange={(e) => {
@@ -288,6 +403,22 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               onBlur={() => setInputFocused(false)}
               disabled={chatIsLoading || noProfile}
             />
+            {/* Tool picker button */}
+            <button
+              type="button"
+              onClick={() => setToolPaletteOpen((v) => !v)}
+              disabled={noProfile || tools.length === 0}
+              className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 mb-1.5 ${
+                toolPaletteOpen
+                  ? 'bg-blue-600/30 text-blue-300'
+                  : 'bg-transparent text-white/30 hover:text-white/60 hover:bg-white/[0.06]'
+              } disabled:opacity-30 disabled:cursor-not-allowed`}
+              aria-label="Select tool"
+              title="Force a specific tool"
+            >
+              <Wrench className="w-3.5 h-3.5" />
+            </button>
+            {/* Send button */}
             <button
               onClick={handleSend}
               disabled={!input.trim() || chatIsLoading || noProfile}

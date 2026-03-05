@@ -217,6 +217,12 @@ export interface AIModelOption {
   source: 'profile' | 'default';
 }
 
+export interface AIToolInfo {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+  required: string[];
+}
 export interface AIChatHistory {
   messages: AIChatMessage[];
   updatedAt: string;

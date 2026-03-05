@@ -949,3 +949,27 @@ html[data-theme="light"] .ai-confirm-cancel:hover {
 html[data-theme="light"] .ai-confirm-dialog .bg-red-600 {
   color: #ffffff !important;
 }
+
+/* ======================================================
+   AI Tool Palette
+   ====================================================== */
+.ai-tool-palette {
+  backdrop-filter: blur(16px);
+}
+.ai-tool-palette::-webkit-scrollbar {
+  width: 4px;
+}
+.ai-tool-palette::-webkit-scrollbar-track {
+  background: transparent;
+}
+.ai-tool-palette::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 2px;
+}
+
+/* Light mode: tool palette */
+html[data-theme="light"] .ai-tool-palette {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}

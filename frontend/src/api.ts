@@ -11,8 +11,8 @@ import type {
   InstalledPluginDetails,
   AIChatHistory,
   AIModelOption,
+  AIToolInfo,
 } from './types';
-
 async function parseError(response: Response): Promise<string> {
   try {
     const data = await response.json();
@@ -218,12 +218,13 @@ export function getPluginCommandContent(installPath: string, filename: string): 
 export function streamAIChat(
   message: string,
   model: string,
-  signal?: AbortSignal
+  signal?: AbortSignal,
+  forceTool?: string
 ): Promise<Response> {
   return fetch('/api/ai/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, model }),
+    body: JSON.stringify({ message, model, ...(forceTool ? { forceTool } : {}) }),
     signal,
   });
 }
@@ -238,4 +239,8 @@ export async function clearAIChatHistory(): Promise<void> {
 
 export async function getAvailableModels(): Promise<AIModelOption[]> {
   return requestJson<AIModelOption[]>('/api/ai/models');
+}
+
+export async function getAITools(): Promise<AIToolInfo[]> {
+  return requestJson<AIToolInfo[]>('/api/ai/tools');
 }

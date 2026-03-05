@@ -6,7 +6,7 @@ interface UseAIChatReturn {
   messages: AIChatMessage[];
   isLoading: boolean;
   error: string | null;
-  sendMessage: (message: string, model: string) => Promise<void>;
+  sendMessage: (message: string, model: string, forceTool?: string) => Promise<void>;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
 }
@@ -17,7 +17,7 @@ export function useAIChat(options?: { onToolCall?: (toolName: string) => void })
   const [error, setError] = useState<string | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
-  const sendMessage = useCallback(async (message: string, model: string) => {
+  const sendMessage = useCallback(async (message: string, model: string, forceTool?: string) => {
     // Abort any in-flight request
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -48,7 +48,7 @@ export function useAIChat(options?: { onToolCall?: (toolName: string) => void })
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
-      const response = await streamAIChat(message, model, controller.signal);
+      const response = await streamAIChat(message, model, controller.signal, forceTool);
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Request failed' }));
         throw new Error((errData as { error?: string }).error || `HTTP ${response.status}`);

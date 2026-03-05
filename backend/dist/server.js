@@ -83,10 +83,15 @@ async function gitPull(repoDir) {
                     resolve();
                     return;
                 }
-                // On conflict, hard reset and retry
+                // On conflict, fetch first then hard reset to FETCH_HEAD and retry
                 try {
                     await new Promise((res2, rej2) => {
-                        const reset = spawn('git', ['-C', repoDir, 'reset', '--hard', 'origin/HEAD'], { stdio: 'pipe' });
+                        const fetch = spawn('git', ['-C', repoDir, 'fetch', 'origin'], { stdio: 'pipe' });
+                        fetch.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git fetch exited ${c}`))));
+                        fetch.on('error', rej2);
+                    });
+                    await new Promise((res2, rej2) => {
+                        const reset = spawn('git', ['-C', repoDir, 'reset', '--hard', 'FETCH_HEAD'], { stdio: 'pipe' });
                         reset.on('close', (c) => (c === 0 ? res2() : rej2(new Error(`git reset exited ${c}`))));
                         reset.on('error', rej2);
                     });
