@@ -99,6 +99,14 @@ export function setupAutoUpdater(): void {
     setImmediate(() => {
       autoUpdater.quitAndInstall(false, true);
     });
+
+    // Fallback: on macOS with unsigned builds, quitAndInstall may not
+    // terminate the process. Force quit after a short delay to ensure
+    // the app actually exits. autoInstallOnAppQuit=true guarantees the
+    // update is applied during the quit lifecycle.
+    setTimeout(() => {
+      app.quit();
+    }, 1500);
   });
 
   // IPC: get current status snapshot
