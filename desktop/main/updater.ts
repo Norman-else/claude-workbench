@@ -1,4 +1,7 @@
 import { ipcMain, BrowserWindow, app } from 'electron';
+import { spawn } from 'child_process';
+import * as path from 'path';
+import * as fs from 'fs';
 
 export type UpdateStatus =
   | { type: 'idle' }
@@ -20,6 +23,7 @@ interface DownloadProgressInfo {
 }
 
 let currentStatus: UpdateStatus = { type: 'idle' };
+let downloadedUpdateFile: string | null = null;
 
 function sendStatus(status: UpdateStatus): void {
   currentStatus = status;
@@ -66,7 +70,8 @@ export function setupAutoUpdater(): void {
     sendStatus({ type: 'downloading', percent: Math.round(progressObj.percent) });
   });
 
-  autoUpdater.on('update-downloaded', (info: UpdateInfo) => {
+  autoUpdater.on('update-downloaded', (info: UpdateInfo & { downloadedFile?: string }) => {
+    downloadedUpdateFile = info.downloadedFile || null;
     sendStatus({ type: 'downloaded', version: info.version });
   });
 
@@ -87,26 +92,17 @@ export function setupAutoUpdater(): void {
   // IPC: quit and install downloaded update
   ipcMain.removeHandler('install-update');
   ipcMain.handle('install-update', () => {
-    // Enable auto-install on quit for macOS native updater
-    autoUpdater.autoInstallOnAppQuit = true;
-
-    // Mark app as quitting so the window close handler (window.ts)
-    // doesn't intercept the close event and hide the window instead
     (app as any).isQuitting = true;
 
-    // Defer quitAndInstall to next tick so the IPC response reaches
-    // the renderer before the app starts quitting
-    setImmediate(() => {
+    if (process.platform === 'darwin') {
+      // On macOS, Squirrel.Mac doesn't work reliably with unsigned builds.
+      // Bypass it entirely: find the downloaded zip, extract it via a
+      // detached shell script, replace the current .app bundle, and relaunch.
+      applyMacUpdateManually(autoUpdater);
+    } else {
+      // Windows/Linux: standard quitAndInstall works fine
       autoUpdater.quitAndInstall(false, true);
-    });
-
-    // Fallback: on macOS with unsigned builds, quitAndInstall may not
-    // terminate the process. Force quit after a short delay to ensure
-    // the app actually exits. autoInstallOnAppQuit=true guarantees the
-    // update is applied during the quit lifecycle.
-    setTimeout(() => {
-      app.quit();
-    }, 1500);
+    }
   });
 
   // IPC: get current status snapshot
@@ -114,6 +110,91 @@ export function setupAutoUpdater(): void {
   ipcMain.handle('get-updater-status', () => {
     return currentStatus;
   });
+}
+
+function applyMacUpdateManually(autoUpdater: any): void {
+  // 1. Resolve the app bundle path (e.g. /Applications/Claude Workbench.app)
+  const exePath = app.getPath('exe');
+  const appBundlePath = exePath.replace(/\/Contents\/MacOS\/.+$/, '');
+
+  // 2. Find the downloaded update zip
+  let zipPath = downloadedUpdateFile;
+
+  if (!zipPath || !fs.existsSync(zipPath)) {
+    // Fallback: search the updater cache directories
+    const baseCachePath = path.join(app.getPath('home'), 'Library', 'Caches');
+    const appName = app.getName();
+    const possibleDirs = [
+      path.join(baseCachePath, `${appName}-updater`, 'pending'),
+      path.join(baseCachePath, appName, 'pending'),
+    ];
+    for (const dir of possibleDirs) {
+      const candidate = path.join(dir, 'update.zip');
+      if (fs.existsSync(candidate)) {
+        zipPath = candidate;
+        break;
+      }
+    }
+  }
+
+  if (!zipPath || !fs.existsSync(zipPath)) {
+    console.error('[Updater] Cannot find downloaded update file, falling back to quitAndInstall');
+    autoUpdater.quitAndInstall(false, true);
+    setTimeout(() => app.quit(), 1500);
+    return;
+  }
+
+  console.log(`[Updater] Applying macOS update manually from: ${zipPath}`);
+  console.log(`[Updater] Current app bundle: ${appBundlePath}`);
+
+  // 3. Create a detached shell script to replace the app and relaunch
+  const tempDir = path.join(app.getPath('temp'), 'claude-wb-update');
+  const scriptPath = path.join(app.getPath('temp'), 'claude-wb-update.sh');
+
+  // Use the current PID so the script waits for THIS process to exit
+  const pid = process.pid;
+
+  const script = `#!/bin/bash
+# Wait for the Electron app to exit
+while kill -0 ${pid} 2>/dev/null; do sleep 0.5; done
+
+# Extract the update
+rm -rf "${tempDir}"
+mkdir -p "${tempDir}"
+unzip -q -o "${zipPath}" -d "${tempDir}"
+
+# Find the .app bundle in the extracted content
+APP_NAME=$(find "${tempDir}" -maxdepth 1 -name "*.app" -type d | head -1)
+if [ -z "$APP_NAME" ]; then
+  echo "[Updater] No .app found in update zip"
+  rm -rf "${tempDir}"
+  rm -f "${scriptPath}"
+  exit 1
+fi
+
+# Replace the current app bundle
+rm -rf "${appBundlePath}"
+mv "$APP_NAME" "${appBundlePath}"
+
+# Relaunch
+open "${appBundlePath}"
+
+# Clean up
+rm -rf "${tempDir}"
+rm -f "${scriptPath}"
+`;
+
+  fs.writeFileSync(scriptPath, script, { mode: 0o755 });
+
+  // Spawn the script detached so it survives the app exit
+  const child = spawn('/bin/bash', [scriptPath], {
+    detached: true,
+    stdio: 'ignore',
+  });
+  child.unref();
+
+  // Exit immediately — the script will handle the rest
+  app.exit(0);
 }
 
 export function checkForUpdatesOnStartup(): void {
