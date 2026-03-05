@@ -29,12 +29,8 @@ export function VersionBadge({ appVersion, isElectron }: VersionBadgeProps) {
   const badgeRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
 
-  // Don't render anything outside Electron or without version
-  if (!isElectron || !appVersion) return null;
-
-  /* eslint-disable react-hooks/rules-of-hooks */
-
   // IPC wiring — mirrors old UpdateNotification exactly
+
   useEffect(() => {
     if (!window.electronAPI?.onUpdaterStatus) return;
 
@@ -75,7 +71,8 @@ export function VersionBadge({ appVersion, isElectron }: VersionBadgeProps) {
     window.electronAPI?.installUpdate?.();
   }, []);
 
-  /* eslint-enable react-hooks/rules-of-hooks */
+  // Don't render anything outside Electron or without version
+  if (!isElectron || !appVersion) return null;
 
   // Determine badge dot state
   const dotClass = (() => {
