@@ -954,6 +954,7 @@ html[data-theme="light"] .ai-confirm-dialog .bg-red-600 {
    AI Tool Palette
    ====================================================== */
 .ai-tool-palette {
+  background: #18181b;  /* zinc-900 — dark mode default */
   backdrop-filter: blur(16px);
 }
 .ai-tool-palette::-webkit-scrollbar {
@@ -972,4 +973,93 @@ html[data-theme="light"] .ai-tool-palette {
   background: rgba(255, 255, 255, 0.98) !important;
   border-color: rgba(0, 0, 0, 0.12) !important;
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+html[data-theme="light"] .ai-tool-palette .text-white\/70 {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+html[data-theme="light"] .ai-tool-palette .text-white\/30 {
+  color: rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="light"] .ai-tool-palette .text-white\/60 {
+  color: rgba(0, 0, 0, 0.55) !important;
+}
+html[data-theme="light"] .ai-tool-palette .text-white\/35 {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+html[data-theme="light"] .ai-tool-palette .text-white\/50 {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+html[data-theme="light"] .ai-tool-palette .text-blue-400 {
+  color: #2563eb !important;
+}
+html[data-theme="light"] .ai-tool-palette .text-blue-400\/80 {
+  color: rgba(37, 99, 235, 0.8) !important;
+}
+html[data-theme="light"] .ai-tool-palette .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .ai-tool-palette .bg-white\/\[0\.03\] {
+  background-color: rgba(0, 0, 0, 0.03) !important;
+}
+html[data-theme="light"] .ai-tool-palette button:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* ======================================================
+   AI Slash Command Menu
+   ====================================================== */
+.ai-slash-menu {
+  background: #18181b;  /* zinc-900 — dark mode default */
+  backdrop-filter: blur(16px);
+}
+
+/* Light mode: slash command menu */
+html[data-theme="light"] .ai-slash-menu {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+html[data-theme="light"] .ai-slash-menu .text-white\/40 {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-white\/20 {
+  color: rgba(0, 0, 0, 0.25) !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-white\/80 {
+  color: #27272a !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-white\/50 {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-white\/30 {
+  color: rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-white {
+  color: #18181b !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-blue-400 {
+  color: #2563eb !important;
+}
+html[data-theme="light"] .ai-slash-menu .text-blue-400\/60 {
+  color: rgba(37, 99, 235, 0.6) !important;
+}
+html[data-theme="light"] .ai-slash-menu .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .ai-slash-menu .border-white\/\[0\.12\] {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html[data-theme="light"] .ai-slash-menu button:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+html[data-theme="light"] .ai-slash-menu .bg-blue-600\/15 {
+  background-color: rgba(37, 99, 235, 0.08) !important;
+}
+
+/* Light mode: force tool chip */
+html[data-theme="light"] .glass-dark .border-blue-500\/20 {
+  border-color: rgba(37, 99, 235, 0.2) !important;
+}
+html[data-theme="light"] .glass-dark .text-blue-300\/60 {
+  color: rgba(37, 99, 235, 0.6) !important;
 }

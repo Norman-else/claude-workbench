@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Sparkles, X, Send, User, Bot, Trash2, ChevronDown, Check, Wrench } from 'lucide-react';
 import type { AIModelOption, AIToolInfo } from '../types';
 import { getAvailableModels, getAITools } from '../api';
@@ -68,6 +68,20 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [toolPaletteOpen, setToolPaletteOpen] = useState(false);
   const [forceTool, setForceTool] = useState<string | null>(null);
   const toolPaletteRef = useRef<HTMLDivElement>(null);
+  const [slashMenuOpen, setSlashMenuOpen] = useState(false);
+  const [slashFilterText, setSlashFilterText] = useState('');
+  const [slashSelectedIndex, setSlashSelectedIndex] = useState(0);
+
+  // Compute filtered tools for slash command menu
+  const slashFilteredTools = useMemo(() => {
+    if (!slashMenuOpen || tools.length === 0) return [];
+    if (!slashFilterText) return tools;
+    const lower = slashFilterText.toLowerCase();
+    return tools.filter(t =>
+      t.name.toLowerCase().includes(lower) ||
+      t.description.toLowerCase().includes(lower)
+    );
+  }, [slashMenuOpen, slashFilterText, tools]);
 
   useEffect(() => {
     if (messagesEndRef.current) {
@@ -133,11 +147,71 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    // Slash menu keyboard navigation
+    if (slashMenuOpen && slashFilteredTools.length > 0) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setSlashSelectedIndex(prev => (prev + 1) % slashFilteredTools.length);
+        return;
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setSlashSelectedIndex(prev => (prev - 1 + slashFilteredTools.length) % slashFilteredTools.length);
+        return;
+      }
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        const selected = slashFilteredTools[slashSelectedIndex];
+        if (selected) {
+          setForceTool(selected.name);
+          setInput('');
+          setSlashMenuOpen(false);
+          setSlashFilterText('');
+        }
+        return;
+      }
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setSlashMenuOpen(false);
+        setSlashFilterText('');
+        return;
+      }
+      // Tab also selects (common autocomplete pattern)
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        const selected = slashFilteredTools[slashSelectedIndex];
+        if (selected) {
+          setForceTool(selected.name);
+          setInput('');
+          setSlashMenuOpen(false);
+          setSlashFilterText('');
+        }
+        return;
+      }
+    }
+    // Normal Enter to send
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
   };
+
+  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
+    const val = e.target.value;
+    setInput(val);
+    autoResize();
+
+    // Slash command detection: input starts with "/"
+    if (val.startsWith('/') && !forceTool) {
+      const filterText = val.slice(1); // everything after "/"
+      setSlashFilterText(filterText);
+      setSlashMenuOpen(true);
+      setSlashSelectedIndex(0);
+    } else {
+      setSlashMenuOpen(false);
+      setSlashFilterText('');
+    }
+  }, [forceTool, autoResize]);
 
   const handleSend = useCallback(() => {
     if (!input.trim() || chatIsLoading) return;
@@ -323,9 +397,55 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         )}
 
         <div className="px-4 pt-3 pb-5 relative" ref={toolPaletteRef}>
+          {/* Slash command autocomplete */}
+          {slashMenuOpen && slashFilteredTools.length > 0 && (
+            <div className="ai-slash-menu absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in z-10">
+              <div className="px-3 py-1.5 border-b border-white/[0.08] flex items-center gap-2">
+                <span className="text-[10px] font-medium text-white/40">/ Select a tool</span>
+                <span className="ml-auto text-[10px] text-white/20">↑↓ navigate · Enter select · Esc close</span>
+              </div>
+              <div className="max-h-[240px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                {slashFilteredTools.map((tool, idx) => (
+                  <button
+                    key={tool.name}
+                    type="button"
+                    ref={idx === slashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
+                    onMouseDown={(e) => {
+                      e.preventDefault(); // prevent textarea blur
+                      setForceTool(tool.name);
+                      setInput('');
+                      setSlashMenuOpen(false);
+                      setSlashFilterText('');
+                      textareaRef.current?.focus();
+                    }}
+                    onMouseEnter={() => setSlashSelectedIndex(idx)}
+                    className={`w-full flex items-start gap-2.5 px-3 py-2 text-left transition-colors duration-75 ${
+                      idx === slashSelectedIndex
+                        ? 'bg-blue-600/15 text-white'
+                        : 'hover:bg-white/[0.04] text-white/80'
+                    }`}
+                  >
+                    <span className={`font-mono text-xs shrink-0 pt-0.5 ${
+                      idx === slashSelectedIndex ? 'text-blue-400' : 'text-blue-400/60'
+                    }`}>
+                      {tool.name}
+                    </span>
+                    {tool.description && (
+                      <span className={`text-[11px] leading-tight line-clamp-1 ${
+                        idx === slashSelectedIndex ? 'text-white/50' : 'text-white/30'
+                      }`}>
+                        {tool.description}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
           {/* Tool palette popup */}
-          {toolPaletteOpen && tools.length > 0 && (
-            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in" style={{ background: '#18181b' }}>
+          {toolPaletteOpen && tools.length > 0 && !slashMenuOpen && (
+            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in">
               <div className="px-3 py-2 border-b border-white/[0.08] flex items-center gap-2">
                 <Wrench className="w-3.5 h-3.5 text-blue-400" />
                 <span className="text-xs font-medium text-white/70">Force a tool</span>
@@ -394,10 +514,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               placeholder={noProfile ? 'Activate a profile to start chatting...' : 'Type a message...'}
               value={input}
               rows={1}
-              onChange={(e) => {
-                setInput(e.target.value);
-                autoResize();
-              }}
+              onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
@@ -406,7 +523,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             {/* Tool picker button */}
             <button
               type="button"
-              onClick={() => setToolPaletteOpen((v) => !v)}
+              onClick={() => { setToolPaletteOpen((v) => !v); setSlashMenuOpen(false); }}
               disabled={noProfile || tools.length === 0}
               className={`shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-150 mb-1.5 ${
                 toolPaletteOpen
@@ -432,7 +549,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               <Send className="w-3.5 h-3.5 text-white" />
             </button>
           </div>
-          <p className="text-[11px] text-white/20 mt-1.5 text-center select-none">Enter 发送 · Shift+Enter 换行</p>
+          <p className="text-[11px] text-white/20 mt-1.5 text-center select-none">Enter 发送 · Shift+Enter 换行 · / 选择工具</p>
         </div>
       </div>
 
