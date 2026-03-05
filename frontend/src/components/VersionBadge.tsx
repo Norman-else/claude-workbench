@@ -28,6 +28,7 @@ export function VersionBadge({ appVersion, isElectron }: VersionBadgeProps) {
   const [isOpen, setIsOpen] = useState(false);
   const badgeRef = useRef<HTMLButtonElement>(null);
   const popupRef = useRef<HTMLDivElement>(null);
+  const pendingVersionRef = useRef<string>('');
 
   // IPC wiring — mirrors old UpdateNotification exactly
 
@@ -37,6 +38,10 @@ export function VersionBadge({ appVersion, isElectron }: VersionBadgeProps) {
     window.electronAPI.getUpdaterStatus?.().then(setStatus);
 
     const unsubscribe = window.electronAPI.onUpdaterStatus((newStatus) => {
+      // Cache version from 'available' so it persists through 'downloading'
+      if (newStatus.type === 'available') {
+        pendingVersionRef.current = newStatus.version;
+      }
       setStatus(newStatus);
     });
 
@@ -96,7 +101,9 @@ export function VersionBadge({ appVersion, isElectron }: VersionBadgeProps) {
       ? status.version
       : status.type === 'downloaded'
         ? status.version
-        : null;
+        : status.type === 'downloading'
+          ? pendingVersionRef.current || null
+          : null;
 
   return (
     <div className="relative mt-2.5">
