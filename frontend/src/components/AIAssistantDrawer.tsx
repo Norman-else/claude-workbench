@@ -474,7 +474,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   return (
     <>
       {/* Floating panel */}
-      <div id="ai-assistant-panel" className={`fixed z-[150] glass-dark flex flex-col transition-all duration-300 ease-in-out ${
+      <div id="ai-assistant-panel" className={`fixed z-[150] glass-dark flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
         isFullscreen
           ? 'top-0 right-0 bottom-0 rounded-none' 
           : 'bottom-24 right-6 w-[520px] rounded-2xl'
@@ -784,7 +784,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
 
           {/* Tool palette popup */}
           {toolPaletteOpen && tools.length > 0 && !slashMenuOpen && (
-            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in">
+            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in z-50">
               <div className="px-3 py-2 border-b border-white/[0.08] flex items-center gap-2">
                 <Wrench className="w-3.5 h-3.5 text-blue-400" />
                 <span className="text-xs font-medium text-white/70">Force a tool</span>
@@ -796,7 +796,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="max-h-[280px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+              <div className="max-h-[240px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
                 {Object.entries(groupToolsByCategory(tools)).map(([category, categoryTools]) => (
                   <div key={category}>
                     <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30 bg-white/[0.03] sticky top-0">
