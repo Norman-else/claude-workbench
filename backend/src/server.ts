@@ -1426,13 +1426,23 @@ app.post('/api/plugins/install', async (req: Request, res: Response) => {
           console.error(`Failed to copy skill ${skillPath}:`, copyErr);
         }
       }
-    } else if (pluginEntry.source) {
-      const relativeSrc = pluginEntry.source.replace(/^\.\//, '');
+    } else if (pluginEntry.source && typeof pluginEntry.source === 'string') {
+      const relativeSrc = pluginEntry.source.replace(/^\.\//,  '');
       const srcDir = path.join(marketplaceDir, relativeSrc);
       try {
         await fs.cp(srcDir, cacheDir, { recursive: true });
       } catch (copyErr) {
         console.error(`Failed to copy plugin source ${pluginEntry.source}:`, copyErr);
+      }
+    } else if (pluginEntry.source && typeof pluginEntry.source === 'object') {
+      const srcObj = pluginEntry.source as { source?: string; url?: string };
+      if (srcObj.url) {
+        try {
+          const { execSync } = await import('child_process');
+          execSync(`git clone --depth 1 ${srcObj.url} "${cacheDir}"`, { timeout: 60000 });
+        } catch (cloneErr) {
+          return res.status(500).json({ error: `Failed to clone plugin from ${srcObj.url}` });
+        }
       }
     }
 

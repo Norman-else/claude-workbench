@@ -1265,7 +1265,7 @@ app.post('/api/plugins/install', async (req, res) => {
                 }
             }
         }
-        else if (pluginEntry.source) {
+        else if (pluginEntry.source && typeof pluginEntry.source === 'string') {
             const relativeSrc = pluginEntry.source.replace(/^\.\//, '');
             const srcDir = path.join(marketplaceDir, relativeSrc);
             try {
@@ -1273,6 +1273,18 @@ app.post('/api/plugins/install', async (req, res) => {
             }
             catch (copyErr) {
                 console.error(`Failed to copy plugin source ${pluginEntry.source}:`, copyErr);
+            }
+        }
+        else if (pluginEntry.source && typeof pluginEntry.source === 'object') {
+            const srcObj = pluginEntry.source;
+            if (srcObj.url) {
+                try {
+                    const { execSync } = await import('child_process');
+                    execSync(`git clone --depth 1 ${srcObj.url} "${cacheDir}"`, { timeout: 60000 });
+                }
+                catch (cloneErr) {
+                    return res.status(500).json({ error: `Failed to clone plugin from ${srcObj.url}` });
+                }
             }
         }
         const now = new Date().toISOString();
