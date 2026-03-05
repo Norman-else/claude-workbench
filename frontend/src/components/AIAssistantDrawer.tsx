@@ -200,48 +200,50 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                   : <Bot className="w-4 h-4 text-white/70" />
                 }
               </div>
-              <div className={`max-w-[85%] rounded-2xl px-4 py-2 text-sm ${
-                msg.role === 'user'
-                  ? 'bg-blue-600/20 text-blue-100 rounded-tr-sm'
-                  : 'bg-white/10 text-white/90 rounded-tl-sm'
-              }`}>
-                {msg.role === 'user' ? (
-                  <p className="whitespace-pre-wrap">{msg.content}</p>
-                ) : (
-                  <div className="prose prose-invert prose-sm max-w-none">
-                    {chatIsLoading && chatMessages[chatMessages.length - 1]?.id === msg.id && msg.content === '' ? (
-                      <div className="flex gap-1 py-1">
-                        <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
-                        <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
-                        <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
-                      </div>
-                    ) : (
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm]}
-                      components={{
-                        code({ className, children, ...props }) {
-                          const match = /language-(\w+)/.exec(className || '');
-                          const isInline = !match;
-                          return isInline ? (
-                            <code className="bg-white/10 px-1 rounded text-xs" {...props}>{children}</code>
-                          ) : (
-                            <SyntaxHighlighter
-                              style={oneDark}
-                              language={match[1]}
-                              PreTag="div"
-                              customStyle={{ borderRadius: '8px', fontSize: '12px' }}
-                            >
-                              {String(children).replace(/\n$/, '')}
-                            </SyntaxHighlighter>
-                          );
-                        },
-                      }}
-                    >
-                      {msg.content}
-                    </ReactMarkdown>
-                    )}
-                  </div>
-                )}
+              <div className="flex flex-col max-w-[85%]">
+                <div className={`rounded-2xl px-4 py-2 text-sm ${
+                  msg.role === 'user'
+                    ? 'bg-blue-600/20 text-blue-100 rounded-tr-sm'
+                    : 'bg-white/10 text-white/90 rounded-tl-sm'
+                }`}>
+                  {msg.role === 'user' ? (
+                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                  ) : (
+                    <div className="prose prose-invert prose-sm max-w-none">
+                      {chatIsLoading && chatMessages[chatMessages.length - 1]?.id === msg.id && msg.content === '' ? (
+                        <div className="flex gap-1 py-1">
+                          <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '0ms' }} />
+                          <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '150ms' }} />
+                          <span className="w-2 h-2 bg-white/40 rounded-full animate-bounce" style={{ animationDelay: '300ms' }} />
+                        </div>
+                      ) : (
+                      <ReactMarkdown
+                        remarkPlugins={[remarkGfm]}
+                        components={{
+                          code({ className, children, ...props }) {
+                            const match = /language-(\w+)/.exec(className || '');
+                            const isInline = !match;
+                            return isInline ? (
+                              <code className="bg-white/10 px-1 rounded text-xs" {...props}>{children}</code>
+                            ) : (
+                              <SyntaxHighlighter
+                                style={oneDark}
+                                language={match[1]}
+                                PreTag="div"
+                                customStyle={{ borderRadius: '8px', fontSize: '12px' }}
+                              >
+                                {String(children).replace(/\n$/, '')}
+                              </SyntaxHighlighter>
+                            );
+                          },
+                        }}
+                      >
+                        {msg.content}
+                      </ReactMarkdown>
+                      )}
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-white/30 mt-1">
                   {new Date(msg.timestamp).toLocaleTimeString()}
                 </p>
