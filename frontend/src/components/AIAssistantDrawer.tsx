@@ -75,13 +75,29 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const hasAutoNamed = useRef<Set<string>>(new Set());
 
   // ── Chat hook (MUST be before any conditional returns) ──
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage } = useAIChat(activeConversationId, { onToolCall });
+  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
+  const handleStreamComplete = useCallback(() => {
+    if (!activeConversationId) return;
+    const conv = conversations.find(c => c.id === activeConversationId);
+    if (!conv || conv.name !== 'New Chat') return;
+    if (hasAutoNamed.current.has(activeConversationId)) return;
+    hasAutoNamed.current.add(activeConversationId);
+    generateConversationName(activeConversationId, selectedModel)
+      .then((name) => {
+        setConversations(prev =>
+          prev.map(c => c.id === activeConversationId ? { ...c, name } : c)
+        );
+      })
+      .catch(() => {
+        // Naming failed — allow retry on next stream
+        hasAutoNamed.current.delete(activeConversationId);
+      });
+  }, [activeConversationId, conversations, selectedModel]);
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete });
 
-  // ── Other state ──
   const [input, setInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [isFullscreen, setIsFullscreen] = useState(false);
-  const [selectedModel, setSelectedModel] = useState('claude-sonnet-4-6');
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [modelOptions, setModelOptions] = useState<AIModelOption[]>([]);
@@ -241,30 +257,6 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       .finally(() => { if (!cancelled) setConversationsLoading(false); });
     return () => { cancelled = true; };
   }, [isOpen]);
-
-
-  // ── Auto-naming after first AI response ──
-  useEffect(() => {
-    if (!activeConversationId) return;
-    if (!activeConversation) return;
-    if (activeConversation.name !== 'New Chat') return;
-    if (hasAutoNamed.current.has(activeConversationId)) return;
-    // Need at least user message + non-empty assistant response
-    if (chatMessages.length < 2) return;
-    const lastMsg = chatMessages[chatMessages.length - 1];
-    if (lastMsg.role !== 'assistant' || !lastMsg.content || lastMsg.content === '' || chatIsLoading) return;
-
-    hasAutoNamed.current.add(activeConversationId);
-    generateConversationName(activeConversationId, selectedModel)
-      .then((name) => {
-        setConversations(prev =>
-          prev.map(c => c.id === activeConversationId ? { ...c, name } : c)
-        );
-      })
-      .catch(() => {
-        // Naming failed, not critical
-      });
-  }, [chatMessages, activeConversationId, activeConversation, chatIsLoading, selectedModel]);
 
   const autoResize = () => {
     const ta = textareaRef.current;

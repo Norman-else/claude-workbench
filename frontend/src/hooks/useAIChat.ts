@@ -13,7 +13,7 @@ interface UseAIChatReturn {
 
 export function useAIChat(
   conversationId: string | null,
-  options?: { onToolCall?: (toolName: string) => void }
+  options?: { onToolCall?: (toolName: string) => void; onStreamComplete?: () => void }
 ): UseAIChatReturn {
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -133,6 +133,11 @@ export function useAIChat(
           }
         }
       }
+      // Stream completed successfully — notify caller
+      if (options?.onStreamComplete) {
+        // Use setTimeout to ensure state updates from streaming are flushed before callback fires
+        setTimeout(() => options.onStreamComplete?.(), 0);
+      }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
         // Request was aborted (drawer closed) — mark as interrupted
@@ -160,7 +165,7 @@ export function useAIChat(
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [conversationId, options?.onToolCall]);
+  }, [conversationId, options?.onToolCall, options?.onStreamComplete]);
 
   const clearHistory = useCallback(async () => {
     if (!conversationId) return;
