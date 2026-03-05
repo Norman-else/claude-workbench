@@ -180,10 +180,27 @@ module.exports = async function afterPack(context) {
     console.log('[afterPack]   Electron Framework.framework not found');
   }
 
-  // --- Step 6/6: Sign the main .app bundle (outermost, must be last) ---
-  console.log('[afterPack] Step 6/6: Signing main app bundle...');
-  if (adHocSign(appPath, 'main app bundle', appPath)) signed++;
-  else failed++;
+  // --- Step 6/6: Sign the main .app bundle with a stable designated requirement ---
+  // By default, ad-hoc signing creates a cdhash-based designated requirement that
+  // changes every build. Squirrel.Mac validates updates against the CURRENT app's
+  // designated requirement, so cdhash-based requirements cause ALL updates to fail.
+  // Fix: set an explicit identifier-based requirement that's stable across versions.
+  console.log('[afterPack] Step 6/6: Signing main app bundle (with stable designated requirement)...');
+  const appId = context.packager.appInfo.id || 'com.claude.workbench';
+  const displayPath = path.basename(appPath);
+  try {
+    console.log(`[afterPack]   Signing main app bundle: ${displayPath}`);
+    console.log(`[afterPack]   Designated requirement: identifier "${appId}"`);
+    execSync(
+      `codesign --force --sign - --requirements '=designated => identifier "${appId}"' "${appPath}"`,
+      { stdio: 'pipe' },
+    );
+    signed++;
+  } catch (error) {
+    const stderr = error.stderr ? error.stderr.toString().trim() : error.message;
+    console.warn(`[afterPack]   ⚠️  Failed to sign ${displayPath}: ${stderr}`);
+    failed++;
+  }
 
   console.log(`[afterPack] Signing complete: ${signed} succeeded, ${failed} failed`);
 
