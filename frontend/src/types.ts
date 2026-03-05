@@ -227,3 +227,10 @@ export interface AIChatHistory {
   messages: AIChatMessage[];
   updatedAt: string;
 }
+
+export interface AIConversation {
+  id: string;
+  name: string;
+  createdAt: string;
+  updatedAt: string;
+}

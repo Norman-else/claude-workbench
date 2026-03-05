@@ -10,8 +10,10 @@ import type {
   MarketplaceInfo,
   InstalledPluginDetails,
   AIChatHistory,
+  AIChatMessage,
   AIModelOption,
   AIToolInfo,
+  AIConversation,
 } from './types';
 async function parseError(response: Response): Promise<string> {
   try {
@@ -243,4 +245,54 @@ export async function getAvailableModels(): Promise<AIModelOption[]> {
 
 export async function getAITools(): Promise<AIToolInfo[]> {
   return requestJson<AIToolInfo[]>('/api/ai/tools');
+}
+
+// Multi-conversation API
+export async function getConversations(): Promise<AIConversation[]> {
+  const data = await requestJson<{ conversations: AIConversation[] }>('/api/ai/conversations');
+  return data.conversations;
+}
+
+export async function createConversation(): Promise<AIConversation> {
+  return requestJson<AIConversation>('/api/ai/conversations', { method: 'POST' });
+}
+
+export async function getConversation(id: string): Promise<{ id: string; name: string; messages: AIChatMessage[]; createdAt: string; updatedAt: string }> {
+  return requestJson('/api/ai/conversations/' + id);
+}
+
+export async function deleteConversation(id: string): Promise<void> {
+  await requestVoid('/api/ai/conversations/' + id, { method: 'DELETE' });
+}
+
+export async function renameConversation(id: string, name: string): Promise<AIConversation> {
+  return requestJson<AIConversation>('/api/ai/conversations/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ name }),
+  });
+}
+
+export function streamConversationChat(
+  conversationId: string,
+  message: string,
+  model: string,
+  signal?: AbortSignal,
+  forceTool?: string
+): Promise<Response> {
+  return fetch('/api/ai/conversations/' + conversationId + '/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, model, ...(forceTool ? { forceTool } : {}) }),
+    signal,
+  });
+}
+
+export async function generateConversationName(conversationId: string, model: string): Promise<string> {
+  const data = await requestJson<{ name: string }>('/api/ai/conversations/' + conversationId + '/generate-name', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  });
+  return data.name;
 }
