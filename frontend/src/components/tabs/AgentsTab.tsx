@@ -391,12 +391,7 @@ List any limitations or rules the agent should follow."
                   </button>
                   <div>
                     <h2 className="text-3xl font-bold text-white">{selectedPluginAgent?.name}</h2>
-                    <div className="flex items-center space-x-2 mt-1">
-                      <span className="text-xs text-zinc-500">{selectedPluginAgent?.pluginName}</span>
-                      <span className="text-xs px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700">
-                        {selectedPluginAgent?.marketplaceName}
-                      </span>
-                    </div>
+                    <p className="text-sm text-zinc-400 mt-1">{selectedPluginAgent?.marketplaceName}/{selectedPluginAgent?.pluginName}</p>
                   </div>
                 </div>
 
