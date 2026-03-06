@@ -1721,6 +1721,21 @@ app.get('/api/plugins/agent-content', async (req: Request, res: Response) => {
   }
 });
 
+app.get('/api/plugins/skill-content', async (req: Request, res: Response) => {
+  try {
+    const { installPath, skillName } = req.query as { installPath: string; skillName: string };
+    if (!installPath || !skillName) {
+      res.status(400).json({ error: 'installPath and skillName are required' });
+      return;
+    }
+    const filePath = path.join(installPath, 'skills', skillName, 'SKILL.md');
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 // ============================================================
 // Start
 // ============================================================

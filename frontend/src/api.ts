@@ -149,6 +149,10 @@ export function getPluginAgentContent(installPath: string, filename: string): Pr
   return requestJson(`/api/plugins/agent-content?installPath=${encodeURIComponent(installPath)}&filename=${encodeURIComponent(filename)}`);
 }
 
+export function getPluginSkillContent(installPath: string, skillName: string): Promise<{ content: string }> {
+  return requestJson(`/api/plugins/skill-content?installPath=${encodeURIComponent(installPath)}&skillName=${encodeURIComponent(skillName)}`);
+}
+
 export async function startMcpServer(name: string): Promise<{ pid?: number; logs?: unknown[]; details?: string; error?: string }> {
   return requestJson<{ pid?: number; logs?: unknown[]; details?: string; error?: string }>(`/api/mcp/${name}/start`, { method: 'POST' });
 }

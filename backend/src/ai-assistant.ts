@@ -415,13 +415,17 @@ Agents:
 - get_plugin_agent: Get full content of a plugin agent
 - update_plugin_agent_model: Update the model setting of a plugin agent
 
-Marketplace:
+Plugins:
 - list_marketplaces: List registered marketplace sources
 - add_marketplace: Add a new marketplace source by GitHub URL
 - remove_marketplace: Remove a marketplace source by name
-- list_installed_plugins: List all installed plugins
+- list_installed_plugins: List all installed plugins with details (commands, skills, agents)
 - install_plugin: Install a plugin from a marketplace
 - uninstall_plugin: Uninstall a plugin
+- list_plugin_commands: List commands from installed plugins
+- list_plugin_skills: List skills from installed plugins
+- get_plugin_command: Get the full content of a plugin command
+- get_plugin_skill: Get the full content of a plugin skill (SKILL.md)
 
 App Overview:
 - get_app_config: Get high-level app config overview
@@ -650,13 +654,16 @@ Agents:
 - get_plugin_agent: Get full content of a plugin agent
 - update_plugin_agent_model: Update the model setting of a plugin agent
 
-Marketplace:
+Plugins:
 - list_marketplaces: List registered marketplace sources
 - add_marketplace: Add a new marketplace source by GitHub URL
 - remove_marketplace: Remove a marketplace source by name
-- list_installed_plugins: List all installed plugins
+- list_installed_plugins: List all installed plugins with details (commands, skills, agents)
 - install_plugin: Install a plugin from a marketplace
 - uninstall_plugin: Uninstall a plugin
+- list_plugin_commands: List commands from installed plugins
+- list_plugin_skills: List skills from installed plugins
+- get_plugin_command: Get the full content of a plugin command
 
 App Overview:
 - get_app_config: Get high-level app config overview
@@ -1427,6 +1434,40 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     },
   },
   {
+    name: 'list_plugin_commands',
+    description: 'List commands from installed plugins. Returns command names, filenames, plugin names, and marketplace names.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'list_plugin_skills',
+    description: 'List skills from installed plugins. Returns skill names, plugin names, and marketplace names.',
+    input_schema: { type: 'object', properties: {} },
+  },
+  {
+    name: 'get_plugin_command',
+    description: 'Get the full content of a plugin command.',
+    input_schema: {
+      type: 'object',
+      properties: {
+        installPath: { type: 'string', description: 'Plugin install path' },
+        filename: { type: 'string', description: 'Command filename (e.g. "code-review.md")' },
+      },
+      required: ['installPath', 'filename'],
+    },
+  },
+  {
+    name: 'get_plugin_skill',
+    description: 'Get the full content of a plugin skill (SKILL.md).',
+    input_schema: {
+      type: 'object',
+      properties: {
+        installPath: { type: 'string', description: 'Plugin install path' },
+        skillName: { type: 'string', description: 'Skill directory name (e.g. "implement-design")' },
+      },
+      required: ['installPath', 'skillName'],
+    },
+  },
+  {
     name: 'read_local_path',
     description: 'Read a local file\'s text content or list a directory\'s entries. Supports ~ (home dir) expansion. Use this to inspect any config file, log file, or directory on the user\'s machine.',
     input_schema: {
@@ -2129,6 +2170,126 @@ async function handleUninstallPlugin(input: ToolInput): Promise<string> {
   }
 }
 
+async function handleListPluginCommands(_input: ToolInput): Promise<string> {
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
+    const data: unknown = await resp.json();
+    if (!resp.ok) {
+      const errorObj = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+      const errMsg = typeof errorObj.error === 'string' ? errorObj.error : `HTTP ${resp.status}`;
+      throw new Error(errMsg);
+    }
+
+    const root = typeof data === 'object' && data !== null ? data as Record<string, unknown> : null;
+    const plugins: unknown[] = Array.isArray(root?.plugins)
+      ? root.plugins as unknown[]
+      : (Array.isArray(data) ? data as unknown[] : []);
+
+    const commands: Array<{
+      name: string;
+      filename: string;
+      pluginName: string;
+      marketplaceName: string;
+      installPath: string;
+    }> = [];
+
+    for (const plugin of plugins) {
+      if (typeof plugin !== 'object' || plugin === null) continue;
+      const pluginObj = plugin as Record<string, unknown>;
+      const installPath = typeof pluginObj.installPath === 'string' ? pluginObj.installPath : '';
+      const pluginName = typeof pluginObj.pluginName === 'string'
+        ? pluginObj.pluginName
+        : (typeof pluginObj.name === 'string' ? pluginObj.name : '');
+      const marketplaceName = typeof pluginObj.marketplaceName === 'string' ? pluginObj.marketplaceName : '';
+      const pluginCommands = Array.isArray(pluginObj.commands) ? pluginObj.commands : [];
+
+      for (const cmd of pluginCommands) {
+        if (typeof cmd !== 'object' || cmd === null) continue;
+        const cmdObj = cmd as Record<string, unknown>;
+        const filename = typeof cmdObj.filename === 'string' ? cmdObj.filename : '';
+        if (!filename || !installPath) continue;
+        const name = typeof cmdObj.name === 'string' ? cmdObj.name : filename.replace(/\.md$/, '');
+        commands.push({ name, filename, pluginName, marketplaceName, installPath });
+      }
+    }
+
+    return JSON.stringify({ commands, count: commands.length });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleListPluginSkills(_input: ToolInput): Promise<string> {
+  try {
+    const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
+    const data: unknown = await resp.json();
+    if (!resp.ok) {
+      const errorObj = typeof data === 'object' && data !== null ? data as Record<string, unknown> : {};
+      const errMsg = typeof errorObj.error === 'string' ? errorObj.error : `HTTP ${resp.status}`;
+      throw new Error(errMsg);
+    }
+
+    const root = typeof data === 'object' && data !== null ? data as Record<string, unknown> : null;
+    const plugins: unknown[] = Array.isArray(root?.plugins)
+      ? root.plugins as unknown[]
+      : (Array.isArray(data) ? data as unknown[] : []);
+
+    const skills: Array<{
+      name: string;
+      pluginName: string;
+      marketplaceName: string;
+      installPath: string;
+    }> = [];
+
+    for (const plugin of plugins) {
+      if (typeof plugin !== 'object' || plugin === null) continue;
+      const pluginObj = plugin as Record<string, unknown>;
+      const installPath = typeof pluginObj.installPath === 'string' ? pluginObj.installPath : '';
+      const pluginName = typeof pluginObj.pluginName === 'string'
+        ? pluginObj.pluginName
+        : (typeof pluginObj.name === 'string' ? pluginObj.name : '');
+      const marketplaceName = typeof pluginObj.marketplaceName === 'string' ? pluginObj.marketplaceName : '';
+      const pluginSkills = Array.isArray(pluginObj.skills) ? pluginObj.skills : [];
+
+      for (const skill of pluginSkills) {
+        if (typeof skill !== 'object' || skill === null) continue;
+        const skillObj = skill as Record<string, unknown>;
+        const name = typeof skillObj.name === 'string' ? skillObj.name : '';
+        if (!name) continue;
+        skills.push({ name, pluginName, marketplaceName, installPath });
+      }
+    }
+
+    return JSON.stringify({ skills, count: skills.length });
+  } catch (err) {
+    return JSON.stringify({ error: (err as Error).message });
+  }
+}
+
+async function handleGetPluginCommand(input: ToolInput): Promise<string> {
+  const installPath = input.installPath as string;
+  const filename = input.filename as string;
+  try {
+    const filePath = path.join(installPath, 'commands', filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+    return JSON.stringify({ name: filename.replace(/\.md$/, ''), content });
+  } catch {
+    return JSON.stringify({ error: `Plugin command not found: ${filename}` });
+  }
+}
+
+async function handleGetPluginSkill(input: ToolInput): Promise<string> {
+  const installPath = input.installPath as string;
+  const skillName = input.skillName as string;
+  try {
+    const filePath = path.join(installPath, 'skills', skillName, 'SKILL.md');
+    const content = await fs.readFile(filePath, 'utf-8');
+    return JSON.stringify({ name: skillName, content });
+  } catch {
+    return JSON.stringify({ error: `Plugin skill not found: ${skillName}` });
+  }
+}
+
 async function handleReadLocalPath(input: ToolInput): Promise<string> {
   // [Mi4] Type guard — reject non-string path early
   if (typeof input.path !== 'string' || input.path.trim() === '') {
@@ -2430,6 +2591,10 @@ export async function executeToolHandler(name: string, input: ToolInput): Promis
     case 'uninstall_plugin': return handleUninstallPlugin(input);
     case 'add_marketplace': return handleAddMarketplace(input);
     case 'remove_marketplace': return handleRemoveMarketplace(input);
+    case 'list_plugin_commands': return handleListPluginCommands(input);
+    case 'list_plugin_skills': return handleListPluginSkills(input);
+    case 'get_plugin_command': return handleGetPluginCommand(input);
+    case 'get_plugin_skill': return handleGetPluginSkill(input);
     case 'read_local_path': return handleReadLocalPath(input);
     case 'get_current_datetime': return handleGetCurrentDatetime(input);
     case 'update_skill': return handleUpdateSkill(input);
