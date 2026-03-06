@@ -109,7 +109,6 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const modelDropdownRef = useRef<HTMLDivElement>(null);
   const [tools, setTools] = useState<AIToolInfo[]>([]);
   const [toolPaletteOpen, setToolPaletteOpen] = useState(false);
-  const [forceTool, setForceTool] = useState<string | null>(null);
   const toolPaletteRef = useRef<HTMLDivElement>(null);
   const [slashMenuOpen, setSlashMenuOpen] = useState(false);
   const [slashFilterText, setSlashFilterText] = useState('');
@@ -376,8 +375,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         e.preventDefault();
         const selected = slashFilteredTools[slashSelectedIndex];
         if (selected) {
-          setForceTool(selected.name);
-          setInput('');
+          setInput('/' + selected.name + ' ');
           setSlashMenuOpen(false);
           setSlashFilterText('');
         }
@@ -394,8 +392,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         e.preventDefault();
         const selected = slashFilteredTools[slashSelectedIndex];
         if (selected) {
-          setForceTool(selected.name);
-          setInput('');
+          setInput('/' + selected.name + ' ');
           setSlashMenuOpen(false);
           setSlashFilterText('');
         }
@@ -415,7 +412,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     autoResize();
 
     // Slash command detection
-    if (val.startsWith('/model') && !forceTool) {
+    if (val.startsWith('/model')) {
       // /model slash menu
       const afterModel = val.slice(6); // everything after '/model'
       const filterText = afterModel.startsWith(' ') ? afterModel.slice(1) : (afterModel === '' ? '' : null);
@@ -434,8 +431,21 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         setSlashMenuOpen(true);
         setSlashSelectedIndex(0);
       }
-    } else if (val.startsWith('/') && !forceTool) {
-      // Tool slash menu
+    } else if (val.startsWith('/')) {
+      // Check if a tool is already confirmed (e.g., "/list_environments some text")
+      const spaceIdx = val.indexOf(' ');
+      if (spaceIdx > 0) {
+        const candidate = val.slice(1, spaceIdx);
+        if (tools.some(t => t.name === candidate)) {
+          // Tool already confirmed in input, suppress slash menu
+          setSlashMenuOpen(false);
+          setSlashFilterText('');
+          setModelSlashMenuOpen(false);
+          setModelSlashFilterText('');
+          return;
+        }
+      }
+      // Otherwise show tool slash menu with filter
       const filterText = val.slice(1);
       setSlashFilterText(filterText);
       setSlashMenuOpen(true);
@@ -448,20 +458,32 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       setModelSlashMenuOpen(false);
       setModelSlashFilterText('');
     }
-  }, [forceTool]);
+  }, [tools]);
 
   const handleSend = useCallback(() => {
     if (!input.trim() || chatIsLoading) return;
-    const msg = input.trim();
+    const raw = input.trim();
+    let msg = raw;
+    let tool: string | undefined;
+
+    // Parse /toolname prefix from input
+    if (raw.startsWith('/')) {
+      const spaceIdx = raw.indexOf(' ');
+      const candidate = spaceIdx > 0 ? raw.slice(1, spaceIdx) : raw.slice(1);
+      if (tools.some(t => t.name === candidate)) {
+        tool = candidate;
+        msg = spaceIdx > 0 ? raw.slice(spaceIdx + 1).trim() : '';
+      }
+    }
+
     setInput('');
     // Reset textarea height
     if (textareaRef.current) {
       textareaRef.current.style.height = 'auto';
     }
     setDismissedError(null);
-    sendMessage(msg, selectedModel, forceTool || undefined);
-    setForceTool(null);
-  }, [input, chatIsLoading, sendMessage, selectedModel, forceTool]);
+    sendMessage(msg || (tool ? `Use tool: ${tool}` : ''), selectedModel, tool);
+  }, [input, chatIsLoading, sendMessage, selectedModel, tools]);
 
   const isDropdownDisabled = modelsLoading || noProfile || modelOptions.length === 0;
   const selectedLabel = modelOptions.find((opt) => opt.id === selectedModel)?.label ?? '';
@@ -479,7 +501,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           ? 'top-0 right-0 bottom-0 rounded-none' 
           : 'bottom-24 right-6 w-[520px] rounded-2xl'
       }`}
-        style={isFullscreen ? { left: 'calc(18rem)' } : { maxHeight: 'calc(100vh - 120px)' }}
+        style={isFullscreen ? { left: 'calc(18rem)' } : { height: 'calc(100vh - 120px)', maxHeight: 'calc(100vh - 120px)' }}
       >
         {/* Header */}
         <div className="flex items-center gap-2 px-4 py-3 border-b border-white/10 relative z-10">
@@ -706,8 +728,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                     ref={idx === slashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     onMouseDown={(e) => {
                       e.preventDefault(); // prevent textarea blur
-                      setForceTool(tool.name);
-                      setInput('');
+                      setInput('/' + tool.name + ' ');
                       setSlashMenuOpen(false);
                       setSlashFilterText('');
                       textareaRef.current?.focus();
@@ -807,7 +828,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                         key={tool.name}
                         type="button"
                         onClick={() => {
-                          setForceTool(tool.name);
+                          setInput('/' + tool.name + ' ');
                           setToolPaletteOpen(false);
                           textareaRef.current?.focus();
                         }}
@@ -825,22 +846,6 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             </div>
           )}
 
-          {/* Force tool chip */}
-          {forceTool && (
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-blue-600/20 text-blue-300 border border-blue-500/20">
-                <Wrench className="w-3 h-3" />
-                <span className="font-mono">{forceTool}</span>
-                <button
-                  onClick={() => setForceTool(null)}
-                  className="ml-0.5 text-blue-300/60 hover:text-blue-200 transition-colors"
-                  aria-label="Remove forced tool"
-                >
-                  <X className="w-3 h-3" />
-                </button>
-              </span>
-            </div>
-          )}
 
           {/* Input container — textarea on top, toolbar on bottom */}
           <div className={`ai-chat-input-container relative rounded-2xl border transition-all duration-200 ${
