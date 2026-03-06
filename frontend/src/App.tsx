@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Command, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, Users, X, Zap } from 'lucide-react';
+import { Check, Command, Package, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, Users, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
 import {
@@ -22,6 +22,7 @@ import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
 import { SkillsTab } from './components/tabs/SkillsTab';
 import { AgentsTab } from './components/tabs/AgentsTab';
+import { PluginsTab } from './components/tabs/PluginsTab';
 import { AIAssistantDrawer } from './components/AIAssistantDrawer';
 import { VersionBadge } from './components/VersionBadge';
 
@@ -62,6 +63,7 @@ function App() {
     commands: 'pending',
     skills: 'pending',
     agents: 'pending',
+    plugins: 'pending',
   });
 
   const [notification, setNotification] = useState<{
@@ -94,7 +96,7 @@ function App() {
 
     if (showProgress) {
       setShowRefreshModal(true);
-      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending', agents: 'pending' });
+      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending', agents: 'pending', plugins: 'pending' });
     }
 
     try {
@@ -144,6 +146,7 @@ function App() {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, agents: 'error' }));
       }
 
+      if (showProgress) setRefreshProgress((prev) => ({ ...prev, plugins: 'loading' }));
       try {
         const mpData = await getMarketplaces();
         setMarketplaces(mpData);
@@ -155,8 +158,9 @@ function App() {
           }
         }
         setInstalledPlugins(allInstalledPlugins);
+        if (showProgress) setRefreshProgress((prev) => ({ ...prev, plugins: 'done' }));
       } catch {
-        // marketplace loading is non-critical, ignore errors
+        if (showProgress) setRefreshProgress((prev) => ({ ...prev, plugins: 'error' }));
       }
 
       if (showProgress) {
@@ -394,6 +398,25 @@ function App() {
               {activeTab === 'agents' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
             </button>
 
+            <button
+              onClick={() => setActiveTab('plugins')}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
+                activeTab === 'plugins'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
+              }`}
+            >
+              <div
+                className={`p-2 rounded-lg transition-all ${
+                  activeTab === 'plugins' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                }`}
+              >
+                <Package className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-white">Plugins</span>
+              {activeTab === 'plugins' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
+            </button>
+
           </div>
 
           <button
@@ -479,9 +502,7 @@ function App() {
               showNotification={showNotification}
               loadConfig={loadConfig}
               requestDelete={requestDelete}
-              marketplaces={marketplaces}
               installedPlugins={installedPlugins}
-              onRefreshMarketplaces={async () => { await loadConfig(); }}
             />
           )}
 
@@ -494,6 +515,16 @@ function App() {
               installedPlugins={installedPlugins}
             />
           )}
+
+          {activeTab === 'plugins' && (
+            <PluginsTab
+              marketplaces={marketplaces}
+              installedPlugins={installedPlugins}
+              showNotification={showNotification}
+              loadConfig={loadConfig}
+              onRefreshMarketplaces={async () => { await loadConfig(); }}
+            />
+          )}
         </div>
 
         {showDeleteConfirm && (
@@ -504,7 +535,7 @@ function App() {
                   <Trash2 className="w-8 h-8 text-red-400" />
                 </div>
                 <h3 className="text-2xl font-bold  text-white mb-2">
-                  Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : activeTab === 'agents' ? 'Agent' : 'Skill'}?
+                  Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : activeTab === 'agents' ? 'Agent' : activeTab === 'plugins' ? 'Plugin' : 'Skill'}?
                 </h3>
                 <p className="text-gray-400 mb-6">
                   Are you sure you want to delete <span className="text-white font-medium">{getDeleteItemDisplayName()}</span>? This action cannot be undone.
@@ -553,6 +584,7 @@ function App() {
                     ['commands', 'Commands'],
                     ['skills', 'Skills'],
                     ['agents', 'Agents'],
+                    ['plugins', 'Plugins'],
                   ] as const
                 ).map(([key, label]) => (
                   <div key={key} className="flex items-center space-x-3">
@@ -601,8 +633,9 @@ function App() {
                           (refreshProgress.envProfiles === 'done' || refreshProgress.envProfiles === 'error' ? 1 : 0) +
                           (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0) +
                           (refreshProgress.skills === 'done' || refreshProgress.skills === 'error' ? 1 : 0) +
-                          (refreshProgress.agents === 'done' || refreshProgress.agents === 'error' ? 1 : 0)) /
-                        5 *
+                          (refreshProgress.agents === 'done' || refreshProgress.agents === 'error' ? 1 : 0) +
+                          (refreshProgress.plugins === 'done' || refreshProgress.plugins === 'error' ? 1 : 0)) /
+                        6 *
                         100
                       }%`,
                     }}

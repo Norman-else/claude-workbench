@@ -51,7 +51,7 @@ export interface EnvProfile {
 
 export type ViewMode = 'list' | 'detail';
 
-export type TabType = 'mcp' | 'env' | 'commands' | 'skills' | 'agents';
+export type TabType = 'mcp' | 'env' | 'commands' | 'skills' | 'agents' | 'plugins';
 
 export type RefreshStepStatus = 'pending' | 'loading' | 'done' | 'error';
 
@@ -61,6 +61,7 @@ export interface RefreshProgress {
   commands: RefreshStepStatus;
   skills: RefreshStepStatus;
   agents: RefreshStepStatus;
+  plugins: RefreshStepStatus;
 }
 
 export interface EnvProfileForm {
