@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { X, Store, Package, ChevronDown, ChevronUp, RefreshCw, Trash2, Download, Plus, Check } from 'lucide-react';
+import { X, Store, Package, ChevronDown, ChevronUp, RefreshCw, Trash2, Download, Plus, Check, Search } from 'lucide-react';
 import type { MarketplaceInfo, InstalledPluginsFile } from '../types';
 
 interface SkillsMarketplaceProps {
@@ -33,6 +33,7 @@ export function SkillsMarketplace({
   const [updating, setUpdating] = useState(false);
   const [removing, setRemoving] = useState(false);
   const [dropdownOpen, setDropdownOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -42,6 +43,7 @@ export function SkillsMarketplace({
     if (!open) {
       setSelectedName(null);
       setExpanded({});
+      setSearchQuery('');
     }
   }, [open, marketplaces]);
 
@@ -134,7 +136,7 @@ export function SkillsMarketplace({
         <div className="flex items-center justify-between px-6 py-5 border-b border-zinc-800 flex-shrink-0">
           <div className="flex items-center space-x-3">
             <Store className="w-5 h-5 text-zinc-300" />
-            <h2 className="text-lg font-bold text-white">Skills Marketplace</h2>
+            <h2 className="text-lg font-bold text-white">Plugin Marketplace</h2>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-zinc-800 transition-colors">
             <X className="w-5 h-5 text-gray-400" />
@@ -162,7 +164,7 @@ export function SkillsMarketplace({
                       <button
                         key={m.name}
                         type="button"
-                        onClick={() => { setSelectedName(m.name); setDropdownOpen(false); }}
+                        onClick={() => { setSelectedName(m.name); setDropdownOpen(false); setSearchQuery(''); }}
                         className={`w-full flex items-center justify-between px-3 py-2 text-sm text-white text-left hover:bg-zinc-800 transition-colors ${m.name === selectedName ? 'bg-zinc-800' : ''}`}
                       >
                         <span className="truncate">{m.name}</span>
@@ -194,6 +196,30 @@ export function SkillsMarketplace({
           )}
         </div>
 
+        {/* Search */}
+        {selected && selected.manifest.plugins.length > 0 && (
+          <div className="px-6 py-3 border-b border-zinc-800 flex-shrink-0">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 z-10 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Search plugins..."
+                className="w-full glass border border-zinc-800 rounded-xl pl-9 pr-9 py-2.5 text-white text-sm focus:border-zinc-600 focus:outline-none transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-zinc-500 hover:text-zinc-300"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4 space-y-3">
           {/* No marketplaces empty state */}
@@ -219,8 +245,23 @@ export function SkillsMarketplace({
             </div>
           )}
 
+          {/* Filtered no results */}
+          {selected && selected.manifest.plugins.length > 0 && searchQuery && selected.manifest.plugins.filter((p) => {
+            const q = searchQuery.toLowerCase();
+            return p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q);
+          }).length === 0 && (
+            <div className="flex flex-col items-center justify-center h-48 space-y-2">
+              <Search className="w-10 h-10 text-zinc-600" />
+              <p className="text-gray-400 text-sm">No plugins found for "{searchQuery}"</p>
+            </div>
+          )}
+
           {/* Plugin cards */}
-          {selected && selected.manifest.plugins.map((plugin) => {
+          {selected && selected.manifest.plugins.filter((p) => {
+            if (!searchQuery) return true;
+            const q = searchQuery.toLowerCase();
+            return p.name.toLowerCase().includes(q) || (p.description ?? '').toLowerCase().includes(q);
+          }).map((plugin) => {
             const installed = isInstalled(selected.name, plugin.name);
             const operating = operatingPlugin === plugin.name;
             const isExpanded = expanded[plugin.name] ?? false;

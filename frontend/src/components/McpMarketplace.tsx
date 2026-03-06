@@ -280,7 +280,7 @@ export function McpMarketplace({ open, onClose, claudeConfig, setClaudeConfig, s
         {/* Search */}
         <div className="px-6 py-4 border-b border-zinc-800 flex-shrink-0">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 z-10 pointer-events-none" />
             <input
               type="text"
               value={searchQuery}
