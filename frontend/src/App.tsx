@@ -1,24 +1,27 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Command, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, X, Zap } from 'lucide-react';
+import { Check, Command, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, Users, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
 import {
   deleteCommand,
   deleteEnvProfile,
   deleteSkill,
+  deleteAgent,
   getAllMcpStatuses,
   getClaudeConfig,
   getCommands,
   getEnvProfiles,
   getMarketplaces,
   getSkills,
+  getAgents,
   saveClaudeConfig,
 } from './api';
-import type { ClaudeConfig, CommandFile, EnvProfile, InstalledPluginsFile, MarketplaceInfo, McpStatus, RefreshProgress, Skill, TabType } from './types';
+import type { ClaudeConfig, CommandFile, EnvProfile, InstalledPluginsFile, MarketplaceInfo, McpStatus, RefreshProgress, Skill, Agent, TabType } from './types';
 import { McpTab } from './components/tabs/McpTab';
 import { EnvTab } from './components/tabs/EnvTab';
 import { CommandsTab } from './components/tabs/CommandsTab';
 import { SkillsTab } from './components/tabs/SkillsTab';
+import { AgentsTab } from './components/tabs/AgentsTab';
 import { AIAssistantDrawer } from './components/AIAssistantDrawer';
 import { VersionBadge } from './components/VersionBadge';
 
@@ -40,6 +43,7 @@ function App() {
   const [claudeConfig, setClaudeConfig] = useState<ClaudeConfig>({});
   const [commands, setCommands] = useState<CommandFile[]>([]);
   const [skills, setSkills] = useState<Skill[]>([]);
+  const [agents, setAgents] = useState<Agent[]>([]);
   const [marketplaces, setMarketplaces] = useState<MarketplaceInfo[]>([]);
   const [installedPlugins, setInstalledPlugins] = useState<InstalledPluginsFile>({ version: 2, plugins: {} });
   const [envProfiles, setEnvProfiles] = useState<EnvProfile[]>([]);
@@ -57,6 +61,7 @@ function App() {
     envProfiles: 'pending',
     commands: 'pending',
     skills: 'pending',
+    agents: 'pending',
   });
 
   const [notification, setNotification] = useState<{
@@ -89,19 +94,10 @@ function App() {
 
     if (showProgress) {
       setShowRefreshModal(true);
-      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending' });
+      setRefreshProgress({ mcpConfig: 'pending', envProfiles: 'pending', commands: 'pending', skills: 'pending', agents: 'pending' });
     }
 
     try {
-      if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'loading' }));
-      try {
-        const config = await getClaudeConfig();
-        setClaudeConfig(config);
-        if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'done' }));
-      } catch {
-        if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'error' }));
-      }
-
       if (showProgress) setRefreshProgress((prev) => ({ ...prev, envProfiles: 'loading' }));
       try {
         const data = await getEnvProfiles();
@@ -110,6 +106,15 @@ function App() {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, envProfiles: 'done' }));
       } catch {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, envProfiles: 'error' }));
+      }
+
+      if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'loading' }));
+      try {
+        const config = await getClaudeConfig();
+        setClaudeConfig(config);
+        if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'done' }));
+      } catch {
+        if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'error' }));
       }
 
       if (showProgress) setRefreshProgress((prev) => ({ ...prev, commands: 'loading' }));
@@ -128,6 +133,15 @@ function App() {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, skills: 'done' }));
       } catch {
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, skills: 'error' }));
+      }
+
+      if (showProgress) setRefreshProgress((prev) => ({ ...prev, agents: 'loading' }));
+      try {
+        const agentData = await getAgents();
+        setAgents(agentData);
+        if (showProgress) setRefreshProgress((prev) => ({ ...prev, agents: 'done' }));
+      } catch {
+        if (showProgress) setRefreshProgress((prev) => ({ ...prev, agents: 'error' }));
       }
 
       try {
@@ -210,6 +224,10 @@ function App() {
         await deleteSkill(itemToDelete);
         showNotification('Skill deleted successfully!');
         await loadConfig();
+      } else if (activeTab === 'agents') {
+        await deleteAgent(itemToDelete);
+        showNotification('Agent deleted successfully!');
+        await loadConfig();
       }
     } catch (error) {
       const fallback =
@@ -219,7 +237,9 @@ function App() {
             ? 'Failed to delete profile'
             : activeTab === 'commands'
               ? 'Failed to delete command'
-              : 'Failed to delete skill';
+              : activeTab === 'agents'
+                ? 'Failed to delete agent'
+                : 'Failed to delete skill';
       showNotification(error instanceof Error ? error.message : fallback, 'error');
     } finally {
       setShowDeleteConfirm(false);
@@ -355,6 +375,25 @@ function App() {
               {activeTab === 'skills' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
             </button>
 
+            <button
+              onClick={() => setActiveTab('agents')}
+              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
+                activeTab === 'agents'
+                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                  : 'hover:glass border border-transparent hover:border-zinc-700'
+              }`}
+            >
+              <div
+                className={`p-2 rounded-lg transition-all ${
+                  activeTab === 'agents' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                }`}
+              >
+                <Users className="w-5 h-5 text-white" />
+              </div>
+              <span className="font-medium text-white">Agents</span>
+              {activeTab === 'agents' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
+            </button>
+
           </div>
 
           <button
@@ -445,6 +484,16 @@ function App() {
               onRefreshMarketplaces={async () => { await loadConfig(); }}
             />
           )}
+
+          {activeTab === 'agents' && (
+            <AgentsTab
+              agents={agents}
+              showNotification={showNotification}
+              loadConfig={loadConfig}
+              requestDelete={requestDelete}
+              installedPlugins={installedPlugins}
+            />
+          )}
         </div>
 
         {showDeleteConfirm && (
@@ -455,7 +504,7 @@ function App() {
                   <Trash2 className="w-8 h-8 text-red-400" />
                 </div>
                 <h3 className="text-2xl font-bold  text-white mb-2">
-                  Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : 'Skill'}?
+                  Delete {activeTab === 'mcp' ? 'Server' : activeTab === 'env' ? 'Profile' : activeTab === 'commands' ? 'Command' : activeTab === 'agents' ? 'Agent' : 'Skill'}?
                 </h3>
                 <p className="text-gray-400 mb-6">
                   Are you sure you want to delete <span className="text-white font-medium">{getDeleteItemDisplayName()}</span>? This action cannot be undone.
@@ -499,10 +548,11 @@ function App() {
               <div className="space-y-4">
                 {(
                   [
-                    ['mcpConfig', 'MCP Servers Configuration'],
-                    ['envProfiles', 'Environment Profiles'],
-                    ['commands', 'Custom Commands'],
-                    ['skills', 'Personal Skills'],
+                    ['envProfiles', 'Environment'],
+                    ['mcpConfig', 'MCP Servers'],
+                    ['commands', 'Commands'],
+                    ['skills', 'Skills'],
+                    ['agents', 'Agents'],
                   ] as const
                 ).map(([key, label]) => (
                   <div key={key} className="flex items-center space-x-3">
@@ -550,8 +600,9 @@ function App() {
                         ((refreshProgress.mcpConfig === 'done' || refreshProgress.mcpConfig === 'error' ? 1 : 0) +
                           (refreshProgress.envProfiles === 'done' || refreshProgress.envProfiles === 'error' ? 1 : 0) +
                           (refreshProgress.commands === 'done' || refreshProgress.commands === 'error' ? 1 : 0) +
-                          (refreshProgress.skills === 'done' || refreshProgress.skills === 'error' ? 1 : 0)) /
-                        4 *
+                          (refreshProgress.skills === 'done' || refreshProgress.skills === 'error' ? 1 : 0) +
+                          (refreshProgress.agents === 'done' || refreshProgress.agents === 'error' ? 1 : 0)) /
+                        5 *
                         100
                       }%`,
                     }}
@@ -593,6 +644,8 @@ function App() {
             'create_command', 'update_command', 'delete_command',
             // Skills
             'create_skill', 'delete_skill',
+            // Agents
+            'create_agent', 'update_agent', 'delete_agent', 'update_plugin_agent_model',
             // Marketplaces & plugins
             'add_marketplace', 'remove_marketplace', 'install_plugin', 'uninstall_plugin',
           ];

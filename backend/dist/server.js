@@ -17,6 +17,7 @@ const __dirname = path.dirname(__filename);
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
+const CLAUDE_AGENTS_DIR = path.join(HOME_DIR, '.claude', 'agents');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
 const PLUGINS_DIR = path.join(HOME_DIR, '.claude', 'plugins');
@@ -348,6 +349,9 @@ function parseFrontmatter(content) {
 function validateSkillName(name) {
     return /^[a-z0-9-]{1,64}$/.test(name);
 }
+function validateAgentName(name) {
+    return /^[a-z0-9-]{1,64}$/.test(name);
+}
 // ============================================================
 // Routes: Claude config
 // ============================================================
@@ -659,6 +663,63 @@ app.delete('/api/skills/:name', async (req, res) => {
             force: true,
         });
         res.json({ success: true, message: 'Skill deleted successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
+// Routes: Agents
+// ============================================================
+app.get('/api/agents', async (_req, res) => {
+    try {
+        await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
+        const files = await fs.readdir(CLAUDE_AGENTS_DIR);
+        const agents = (await Promise.all(files
+            .filter((f) => f.endsWith('.md'))
+            .map(async (file) => {
+            try {
+                const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, file), 'utf-8');
+                const { frontmatter } = parseFrontmatter(content);
+                return {
+                    name: file.replace(/\.md$/, ''),
+                    content,
+                    description: frontmatter.description ?? '',
+                    model: frontmatter.model ?? '',
+                };
+            }
+            catch {
+                return null;
+            }
+        }))).filter(Boolean);
+        res.json(agents);
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/agents', async (req, res) => {
+    try {
+        const { name, content } = req.body;
+        if (!name || !content)
+            return res.status(400).json({ error: 'Name and content are required' });
+        if (!validateAgentName(name))
+            return res.status(400).json({
+                error: 'Invalid agent name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
+            });
+        await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
+        await fs.writeFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), content, 'utf-8');
+        res.json({ success: true, message: 'Agent saved successfully' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.delete('/api/agents/:name', async (req, res) => {
+    try {
+        const { name } = req.params;
+        await fs.unlink(path.join(CLAUDE_AGENTS_DIR, `${name}.md`));
+        res.json({ success: true, message: 'Agent deleted successfully' });
     }
     catch (err) {
         res.status(500).json({ error: err.message });
@@ -1431,7 +1492,14 @@ app.get('/api/plugins/installed-details', async (_req, res) => {
                 const agentEntries = await fs.readdir(agentsDir);
                 for (const entry of agentEntries) {
                     if (entry.endsWith('.md')) {
-                        agents.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+                        let model = '';
+                        try {
+                            const agentContent = await fs.readFile(path.join(agentsDir, entry), 'utf-8');
+                            const { frontmatter } = parseFrontmatter(agentContent);
+                            model = frontmatter.model ?? '';
+                        }
+                        catch { /* ignore read errors */ }
+                        agents.push({ name: entry.replace(/\.md$/, ''), filename: entry, model });
                     }
                 }
             }
@@ -1452,6 +1520,21 @@ app.get('/api/plugins/command-content', async (req, res) => {
             return;
         }
         const filePath = path.join(installPath, 'commands', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        res.json({ content });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/plugins/agent-content', async (req, res) => {
+    try {
+        const { installPath, filename } = req.query;
+        if (!installPath || !filename) {
+            res.status(400).json({ error: 'installPath and filename are required' });
+            return;
+        }
+        const filePath = path.join(installPath, 'agents', filename);
         const content = await fs.readFile(filePath, 'utf-8');
         res.json({ content });
     }

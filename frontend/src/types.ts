@@ -20,6 +20,13 @@ export interface Skill {
   allowedTools?: string;
 }
 
+export interface Agent {
+  name: string;
+  content: string;
+  description?: string;
+  model?: string;
+}
+
 export interface McpStatus {
   status: 'running' | 'stopped' | 'stopping' | 'error';
   running: boolean;
@@ -44,7 +51,7 @@ export interface EnvProfile {
 
 export type ViewMode = 'list' | 'detail';
 
-export type TabType = 'mcp' | 'env' | 'commands' | 'skills';
+export type TabType = 'mcp' | 'env' | 'commands' | 'skills' | 'agents';
 
 export type RefreshStepStatus = 'pending' | 'loading' | 'done' | 'error';
 
@@ -53,6 +60,7 @@ export interface RefreshProgress {
   envProfiles: RefreshStepStatus;
   commands: RefreshStepStatus;
   skills: RefreshStepStatus;
+  agents: RefreshStepStatus;
 }
 
 export interface EnvProfileForm {
@@ -176,6 +184,7 @@ export interface MarketplaceInfo {
  export interface PluginContentFile {
   name: string;      // 文件名不含扩展名，如 "code-review"
   filename: string;  // 完整文件名，如 "code-review.md"
+  model?: string;    // frontmatter 中的 model 配置
 }
 
 export interface InstalledPluginDetails {

@@ -88,6 +88,7 @@ const __dirname = path.dirname(__filename);
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
+const CLAUDE_AGENTS_DIR = path.join(HOME_DIR, '.claude', 'agents');
 const CLAUDE_PROFILES_PATH = path.join(HOME_DIR, '.claude', 'env-profiles.json');
 const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
 const PLUGINS_DIR = path.join(HOME_DIR, '.claude', 'plugins');
@@ -442,6 +443,10 @@ function validateSkillName(name: string): boolean {
   return /^[a-z0-9-]{1,64}$/.test(name);
 }
 
+function validateAgentName(name: string): boolean {
+  return /^[a-z0-9-]{1,64}$/.test(name);
+}
+
 // ============================================================
 // Routes: Claude config
 // ============================================================
@@ -765,6 +770,68 @@ app.delete('/api/skills/:name', async (req: Request, res: Response) => {
       force: true,
     });
     res.json({ success: true, message: 'Skill deleted successfully' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ============================================================
+// Routes: Agents
+// ============================================================
+
+app.get('/api/agents', async (_req: Request, res: Response) => {
+  try {
+    await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
+    const files = await fs.readdir(CLAUDE_AGENTS_DIR);
+    const agents = (
+      await Promise.all(
+        files
+          .filter((f) => f.endsWith('.md'))
+          .map(async (file) => {
+            try {
+              const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, file), 'utf-8');
+              const { frontmatter } = parseFrontmatter(content);
+              return {
+                name: file.replace(/\.md$/, ''),
+                content,
+                description: frontmatter.description ?? '',
+                model: frontmatter.model ?? '',
+              };
+            } catch {
+              return null;
+            }
+          })
+      )
+    ).filter(Boolean);
+    res.json(agents);
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/agents', async (req: Request, res: Response) => {
+  try {
+    const { name, content } = req.body as { name: string; content: string };
+    if (!name || !content)
+      return res.status(400).json({ error: 'Name and content are required' });
+    if (!validateAgentName(name))
+      return res.status(400).json({
+        error: 'Invalid agent name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
+      });
+
+    await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
+    await fs.writeFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), content, 'utf-8');
+    res.json({ success: true, message: 'Agent saved successfully' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.delete('/api/agents/:name', async (req: Request, res: Response) => {
+  try {
+    const { name } = req.params;
+    await fs.unlink(path.join(CLAUDE_AGENTS_DIR, `${name}.md`));
+    res.json({ success: true, message: 'Agent deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }
@@ -1546,7 +1613,7 @@ app.get('/api/plugins/installed-details', async (_req: Request, res: Response) =
       version: string;
       commands: Array<{ name: string; filename: string }>;
       skills: Array<{ name: string; filename: string }>;
-      agents: Array<{ name: string; filename: string }>;
+      agents: Array<{ name: string; filename: string; model?: string }>;
     }> = [];
 
     for (const [key, records] of Object.entries(installedData.plugins)) {
@@ -1569,7 +1636,7 @@ app.get('/api/plugins/installed-details', async (_req: Request, res: Response) =
 
       const commands: Array<{ name: string; filename: string }> = [];
       const skills: Array<{ name: string; filename: string }> = [];
-      const agents: Array<{ name: string; filename: string }> = [];
+      const agents: Array<{ name: string; filename: string; model?: string }> = [];
 
       // Scan commands/
       try {
@@ -1604,7 +1671,13 @@ app.get('/api/plugins/installed-details', async (_req: Request, res: Response) =
         const agentEntries = await fs.readdir(agentsDir);
         for (const entry of agentEntries) {
           if (entry.endsWith('.md')) {
-            agents.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+            let model = '';
+            try {
+              const agentContent = await fs.readFile(path.join(agentsDir, entry), 'utf-8');
+              const { frontmatter } = parseFrontmatter(agentContent);
+              model = frontmatter.model ?? '';
+            } catch { /* ignore read errors */ }
+            agents.push({ name: entry.replace(/\.md$/, ''), filename: entry, model });
           }
         }
       } catch { /* directory doesn't exist */ }
@@ -1626,6 +1699,21 @@ app.get('/api/plugins/command-content', async (req: Request, res: Response) => {
       return;
     }
     const filePath = path.join(installPath, 'commands', filename);
+    const content = await fs.readFile(filePath, 'utf-8');
+    res.json({ content });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/plugins/agent-content', async (req: Request, res: Response) => {
+  try {
+    const { installPath, filename } = req.query as { installPath: string; filename: string };
+    if (!installPath || !filename) {
+      res.status(400).json({ error: 'installPath and filename are required' });
+      return;
+    }
+    const filePath = path.join(installPath, 'agents', filename);
     const content = await fs.readFile(filePath, 'utf-8');
     res.json({ content });
   } catch (err) {

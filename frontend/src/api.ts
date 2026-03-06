@@ -7,6 +7,7 @@ import type {
   McpStatus,
   ShellConfigContentResponse,
   Skill,
+  Agent,
   MarketplaceInfo,
   InstalledPluginDetails,
   AIChatHistory,
@@ -126,6 +127,26 @@ export async function saveSkill(skill: Pick<Skill, 'name' | 'content'>): Promise
 
 export async function deleteSkill(name: string): Promise<void> {
   await requestVoid(`/api/skills/${name}`, { method: 'DELETE' });
+}
+
+export async function getAgents(): Promise<Agent[]> {
+  return requestJson<Agent[]>('/api/agents');
+}
+
+export async function saveAgent(agent: Pick<Agent, 'name' | 'content'>): Promise<void> {
+  await requestVoid('/api/agents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(agent),
+  });
+}
+
+export async function deleteAgent(name: string): Promise<void> {
+  await requestVoid(`/api/agents/${name}`, { method: 'DELETE' });
+}
+
+export function getPluginAgentContent(installPath: string, filename: string): Promise<{ content: string }> {
+  return requestJson(`/api/plugins/agent-content?installPath=${encodeURIComponent(installPath)}&filename=${encodeURIComponent(filename)}`);
 }
 
 export async function startMcpServer(name: string): Promise<{ pid?: number; logs?: unknown[]; details?: string; error?: string }> {

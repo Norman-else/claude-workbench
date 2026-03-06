@@ -10,10 +10,24 @@ const CLAUDE_SETTINGS_PATH = path.join(HOME_DIR, '.claude', 'settings.json');
 const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
+const CLAUDE_AGENTS_DIR = path.join(HOME_DIR, '.claude', 'agents');
 const AI_HISTORY_PATH = path.join(HOME_DIR, '.claude', 'ai-assistant-history.json');
 const CONVERSATIONS_DIR = path.join(HOME_DIR, '.claude', 'ai-assistant-conversations');
 const CONVERSATIONS_INDEX_PATH = path.join(CONVERSATIONS_DIR, 'index.json');
 const DEFAULT_CONVERSATION_ID = '__default__';
+function parseFrontmatter(content) {
+    const match = content.match(/^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/);
+    if (!match)
+        return { frontmatter: {}, body: content };
+    const frontmatter = {};
+    for (const line of match[1].split('\n')) {
+        const colonIdx = line.indexOf(':');
+        if (colonIdx > 0) {
+            frontmatter[line.substring(0, colonIdx).trim()] = line.substring(colonIdx + 1).trim();
+        }
+    }
+    return { frontmatter, body: match[2] };
+}
 export async function getActiveProfileCredentials() {
     // Read settings.json for ANTHROPIC_PROFILE_ID, then read env-profiles.json
     // Return null if no active profile found
@@ -363,6 +377,16 @@ Skills:
 - update_skill: Update an existing skill's SKILL.md content
 - delete_skill: Delete a skill
 
+Agents:
+- list_agents: List user agents with names, descriptions, and model settings
+- get_agent: Get full content of a user agent
+- create_agent: Create a new user agent
+- update_agent: Update a user agent's content
+- delete_agent: Delete a user agent
+- list_plugin_agents: List agents from installed plugins
+- get_plugin_agent: Get full content of a plugin agent
+- update_plugin_agent_model: Update the model setting of a plugin agent
+
 Marketplace:
 - list_marketplaces: List registered marketplace sources
 - add_marketplace: Add a new marketplace source by GitHub URL
@@ -566,6 +590,16 @@ Skills:
 - create_skill: Create a new skill
 - update_skill: Update an existing skill's SKILL.md content
 - delete_skill: Delete a skill
+
+Agents:
+- list_agents: List user agents with names, descriptions, and model settings
+- get_agent: Get full content of a user agent
+- create_agent: Create a new user agent
+- update_agent: Update a user agent's content
+- delete_agent: Delete a user agent
+- list_plugin_agents: List agents from installed plugins
+- get_plugin_agent: Get full content of a plugin agent
+- update_plugin_agent_model: Update the model setting of a plugin agent
 
 Marketplace:
 - list_marketplaces: List registered marketplace sources
@@ -961,7 +995,7 @@ export const toolDefinitions = [
     },
     {
         name: 'get_app_config',
-        description: 'Get a high-level overview of the app config: active profile name, MCP server count, command count, skill count. No credentials returned.',
+        description: 'Get a high-level overview of the app config: active profile name, MCP server count, command count, skill count, and agent count. No credentials returned.',
         input_schema: { type: 'object', properties: {} },
     },
     {
@@ -1083,6 +1117,83 @@ export const toolDefinitions = [
             type: 'object',
             properties: { name: { type: 'string', description: 'Skill name to delete' } },
             required: ['name'],
+        },
+    },
+    {
+        name: 'list_agents',
+        description: 'List user agents stored in ~/.claude/agents/. Returns agent names, descriptions, and model settings.',
+        input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'get_agent',
+        description: 'Get the full content of a specific user agent by name.',
+        input_schema: {
+            type: 'object',
+            properties: { name: { type: 'string', description: 'Agent name (without .md extension)' } },
+            required: ['name'],
+        },
+    },
+    {
+        name: 'create_agent',
+        description: 'Create a new user agent.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Agent name (lowercase, numbers, hyphens, max 64 chars)' },
+                content: { type: 'string', description: 'Agent content (markdown with frontmatter)' },
+            },
+            required: ['name', 'content'],
+        },
+    },
+    {
+        name: 'update_agent',
+        description: 'Update an existing user agent by name. Overwrites the .md file content.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                name: { type: 'string', description: 'Agent name to update' },
+                content: { type: 'string', description: 'New agent content (markdown with frontmatter)' },
+            },
+            required: ['name', 'content'],
+        },
+    },
+    {
+        name: 'delete_agent',
+        description: 'Delete a user agent by name.',
+        input_schema: {
+            type: 'object',
+            properties: { name: { type: 'string', description: 'Agent name to delete' } },
+            required: ['name'],
+        },
+    },
+    {
+        name: 'list_plugin_agents',
+        description: 'List all agents from installed plugins. Returns agent names, plugin names, marketplace names, and model settings.',
+        input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'get_plugin_agent',
+        description: 'Get the full content of a plugin agent.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                installPath: { type: 'string', description: 'Plugin install path' },
+                filename: { type: 'string', description: 'Agent filename (e.g. "code-reviewer.md")' },
+            },
+            required: ['installPath', 'filename'],
+        },
+    },
+    {
+        name: 'update_plugin_agent_model',
+        description: 'Update the model setting in a plugin agent file frontmatter.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                installPath: { type: 'string', description: 'Plugin install path' },
+                filename: { type: 'string', description: 'Agent filename (e.g. "code-reviewer.md")' },
+                model: { type: 'string', description: 'New model value (e.g. "opus", "sonnet", "inherit")' },
+            },
+            required: ['installPath', 'filename', 'model'],
         },
     },
     {
@@ -1436,11 +1547,18 @@ async function handleGetAppConfig(_input) {
         skillCount = entries.filter((e) => e.isDirectory()).length;
     }
     catch { /* ignore */ }
+    let agentCount = 0;
+    try {
+        const entries = await fs.readdir(CLAUDE_AGENTS_DIR).catch(() => []);
+        agentCount = entries.filter((e) => e.endsWith('.md')).length;
+    }
+    catch { /* ignore */ }
     return JSON.stringify({
         activeProfile: activeProfileName,
         mcpServers: mcpCount,
         commandCount,
         skillCount,
+        agentCount,
     });
 }
 async function handleStartMcpServer(input) {
@@ -1581,6 +1699,165 @@ async function handleDeleteSkill(input) {
         const resp = await fetch(`http://localhost:3001/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
         const data = await resp.json();
         return JSON.stringify(data);
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleListAgents(_input) {
+    try {
+        const entries = await fs.readdir(CLAUDE_AGENTS_DIR).catch(() => []);
+        const agents = [];
+        for (const entry of entries.filter((e) => e.endsWith('.md'))) {
+            try {
+                const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, entry), 'utf-8');
+                const parsed = parseFrontmatter(content);
+                agents.push({
+                    name: entry.replace(/\.md$/, ''),
+                    description: parsed.frontmatter.description || '',
+                    model: parsed.frontmatter.model || '',
+                });
+            }
+            catch {
+                agents.push({ name: entry.replace(/\.md$/, ''), description: '', model: '' });
+            }
+        }
+        return JSON.stringify({ agents, count: agents.length });
+    }
+    catch {
+        return JSON.stringify({ agents: [], count: 0 });
+    }
+}
+async function handleGetAgent(input) {
+    const name = input.name;
+    try {
+        const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), 'utf-8');
+        return JSON.stringify({ name, content });
+    }
+    catch {
+        return JSON.stringify({ error: `Agent not found: ${name}` });
+    }
+}
+async function handleCreateAgent(input) {
+    const name = input.name;
+    const content = input.content;
+    try {
+        const resp = await fetch('http://localhost:3001/api/agents', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ name, content }),
+        });
+        const data = await resp.json();
+        return JSON.stringify(data);
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleUpdateAgent(input) {
+    const name = input.name;
+    const content = input.content;
+    try {
+        const filePath = path.join(CLAUDE_AGENTS_DIR, `${name}.md`);
+        await fs.access(filePath);
+        await fs.writeFile(filePath, content, 'utf-8');
+        return JSON.stringify({ success: true });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleDeleteAgent(input) {
+    const name = input.name;
+    try {
+        const resp = await fetch(`http://localhost:3001/api/agents/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const data = await resp.json();
+        return JSON.stringify(data);
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleListPluginAgents(_input) {
+    try {
+        const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
+        const data = await resp.json();
+        if (!resp.ok) {
+            const errorObj = typeof data === 'object' && data !== null ? data : {};
+            const errMsg = typeof errorObj.error === 'string' ? errorObj.error : `HTTP ${resp.status}`;
+            throw new Error(errMsg);
+        }
+        const root = typeof data === 'object' && data !== null ? data : null;
+        const plugins = Array.isArray(root?.plugins)
+            ? root.plugins
+            : (Array.isArray(data) ? data : []);
+        const agents = [];
+        for (const plugin of plugins) {
+            if (typeof plugin !== 'object' || plugin === null)
+                continue;
+            const pluginObj = plugin;
+            const installPath = typeof pluginObj.installPath === 'string' ? pluginObj.installPath : '';
+            const pluginName = typeof pluginObj.pluginName === 'string'
+                ? pluginObj.pluginName
+                : (typeof pluginObj.name === 'string' ? pluginObj.name : '');
+            const marketplaceName = typeof pluginObj.marketplaceName === 'string' ? pluginObj.marketplaceName : '';
+            const pluginAgents = Array.isArray(pluginObj.agents) ? pluginObj.agents : [];
+            for (const pluginAgent of pluginAgents) {
+                if (typeof pluginAgent !== 'object' || pluginAgent === null)
+                    continue;
+                const agentObj = pluginAgent;
+                const filename = typeof agentObj.filename === 'string'
+                    ? agentObj.filename
+                    : (typeof agentObj.fileName === 'string' ? agentObj.fileName : '');
+                if (!filename || !installPath)
+                    continue;
+                const name = typeof agentObj.name === 'string' ? agentObj.name : filename.replace(/\.md$/, '');
+                const model = typeof agentObj.model === 'string' ? agentObj.model : '';
+                agents.push({ name, filename, model, pluginName, marketplaceName, installPath });
+            }
+        }
+        return JSON.stringify({ agents, count: agents.length });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleGetPluginAgent(input) {
+    const installPath = input.installPath;
+    const filename = input.filename;
+    try {
+        const filePath = path.join(installPath, 'agents', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        return JSON.stringify({ name: filename.replace(/\.md$/, ''), content });
+    }
+    catch {
+        return JSON.stringify({ error: `Plugin agent not found: ${filename}` });
+    }
+}
+async function handleUpdatePluginAgentModel(input) {
+    const installPath = input.installPath;
+    const filename = input.filename;
+    const model = input.model;
+    try {
+        const filePath = path.join(installPath, 'agents', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        let updated;
+        const fmMatch = content.match(/^(---\s*\n)([\s\S]*?)(\n---\s*\n)([\s\S]*)$/);
+        if (fmMatch) {
+            const fmContent = fmMatch[2];
+            if (/^model\s*:/m.test(fmContent)) {
+                const newFm = fmContent.replace(/^model\s*:.*$/m, `model: ${model}`);
+                updated = fmMatch[1] + newFm + fmMatch[3] + fmMatch[4];
+            }
+            else {
+                updated = fmMatch[1] + fmContent + `\nmodel: ${model}` + fmMatch[3] + fmMatch[4];
+            }
+        }
+        else {
+            updated = `---\nmodel: ${model}\n---\n\n${content}`;
+        }
+        await fs.writeFile(filePath, updated, 'utf-8');
+        return JSON.stringify({ success: true, message: `Updated model to '${model}' for ${filename}` });
     }
     catch (err) {
         return JSON.stringify({ error: err.message });
@@ -1987,6 +2264,14 @@ export async function executeToolHandler(name, input) {
         case 'get_skill': return handleGetSkill(input);
         case 'create_skill': return handleCreateSkill(input);
         case 'delete_skill': return handleDeleteSkill(input);
+        case 'list_agents': return handleListAgents(input);
+        case 'get_agent': return handleGetAgent(input);
+        case 'create_agent': return handleCreateAgent(input);
+        case 'update_agent': return handleUpdateAgent(input);
+        case 'delete_agent': return handleDeleteAgent(input);
+        case 'list_plugin_agents': return handleListPluginAgents(input);
+        case 'get_plugin_agent': return handleGetPluginAgent(input);
+        case 'update_plugin_agent_model': return handleUpdatePluginAgentModel(input);
         case 'delete_environment': return handleDeleteEnvironment(input);
         case 'reorder_environments': return handleReorderEnvironments(input);
         case 'list_marketplaces': return handleListMarketplaces(input);
