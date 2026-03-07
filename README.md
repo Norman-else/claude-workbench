@@ -1,12 +1,24 @@
 # Claude Workbench
 
-A modern GUI management tool for the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code). It provides a visual interface to manage MCP servers, API credential profiles, custom slash-commands, agent skills, and community plugins — all without manually editing JSON or shell config files.
+A modern GUI management tool for the [Claude Code CLI](https://docs.anthropic.com/en/docs/claude-code) with a built-in **AI Assistant**. It provides a visual interface to manage MCP servers, API credential profiles, custom slash-commands, agent skills, and community plugins — all without manually editing JSON or shell config files. The integrated AI Assistant lets you interact with Claude directly inside the app, with support for tool use, file/image uploads, web search, and streaming responses.
 
 Available as a **web app** (runs in your browser) or a **desktop app** (native Electron wrapper for Windows and macOS).
 
 ---
 
 ## Features
+
+### AI Assistant
+- Built-in conversational AI assistant powered by Claude, accessible from any tab via floating panel
+- Real-time streaming responses with smooth token-by-token rendering
+- **Tool use**: Slash commands (`/tool-name`) to invoke Claude Workbench management tools directly from chat — browse MCP servers, manage environment profiles, explore skills and plugins
+- **File & image uploads**: Attach images (PNG, JPEG, GIF, WebP), PDFs, and text-based files (Markdown, JSON, YAML, code files) via paperclip button or paste from clipboard
+- **Web search**: Claude can search the web in real time when answering questions about current events or external topics
+- **Multi-conversation management**: Create, switch, rename, and delete conversations with auto-generated titles
+- **Model selection**: Switch between available Claude models on the fly, including via `/model-name` slash command
+- **Stop generation**: Abort in-progress responses at any time with the stop button; partial output is preserved
+- **Auto-continue**: Long responses that exceed token limits are automatically continued without user intervention
+- **Light & dark theme**: Full theme support matching the rest of the application
 
 ### Environment Profiles
 - Create and manage multiple named API credential profiles (e.g., Production, Development)
@@ -96,6 +108,16 @@ npm run dev:desktop
 ```
 
 Starts the frontend and backend dev servers, then launches an Electron window once both are ready.
+
+### macOS Post-Install
+
+After installing the `.dmg` on macOS, you may need to clear the quarantine attribute before launching:
+
+```bash
+xattr -cr /Applications/Claude\ Workbench.app/
+```
+
+This is required because the app is not code-signed with an Apple Developer certificate. Without this step, macOS Gatekeeper may block the app from opening.
 
 ---
 
