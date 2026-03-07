@@ -157,6 +157,17 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     prevMessageCountRef.current = chatMessages.length;
   }, [chatMessages]);
 
+  // Reset scroll ref when drawer opens so it scrolls to bottom on reopen
+  useEffect(() => {
+    if (isOpen) {
+      prevMessageCountRef.current = 0;
+      // Scroll to bottom after drawer renders
+      requestAnimationFrame(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'instant' });
+      });
+    }
+  }, [isOpen]);
+
   // Close model dropdown on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {

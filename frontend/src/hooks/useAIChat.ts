@@ -75,6 +75,9 @@ export function useAIChat(
     };
     setMessages((prev) => [...prev, assistantMsg]);
 
+    let assistantContent = '';
+    const toolCalls: AIToolCall[] = [];
+
     try {
       const apiAttachments = attachments?.map(a => ({ name: a.name, mediaType: a.mediaType, data: a.data }));
       const response = await streamConversationChat(conversationId, message, model, controller.signal, forceTool, apiAttachments);
@@ -85,8 +88,6 @@ export function useAIChat(
 
       const reader = response.body!.getReader();
       const decoder = new TextDecoder();
-      let assistantContent = '';
-      const toolCalls: AIToolCall[] = [];
       let rafScheduled = false;
       let pendingToolUpdate = false;
 
@@ -164,13 +165,12 @@ export function useAIChat(
       }
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
-        // Request was aborted (drawer closed) — mark as interrupted
+        // Request was aborted — keep whatever content was already streamed
+        // Final flush of buffered content
         setMessages((prev) =>
           prev.map((m) =>
-            m.id === assistantId && m.content === ''
-              ? { ...m, content: '(interrupted)' }
-              : m.id === assistantId && m.content !== ''
-              ? { ...m, content: m.content + ' (interrupted)' }
+            m.id === assistantId
+              ? { ...m, content: assistantContent || m.content, toolCalls: toolCalls.length > 0 ? [...toolCalls] : m.toolCalls }
               : m
           )
         );

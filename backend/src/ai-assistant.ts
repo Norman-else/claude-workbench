@@ -335,13 +335,22 @@ export function registerAIAssistantRoutes(app: Express): void {
     res.flushHeaders();
 
     const abortController = new AbortController();
-    req.on('close', () => abortController.abort());
+    req.on('close', () => { connectionClosed = true; abortController.abort(); });
 
     const client = getAnthropicClient(creds);
 
+    let connectionClosed = false;
     function sendSSE(event: object): void {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (connectionClosed) return;
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        connectionClosed = true;
+      }
     }
+
+    let currentAssistantContent = '';
+    const toolCallsForHistory: Array<{ name: string; input: Record<string, unknown>; result: string }> = [];
 
     try {
       // Append user message
@@ -482,8 +491,6 @@ If the user asks about current events, real-time information, or anything requir
 
       let iteration = 0;
       const MAX_ITERATIONS = 10;
-      let currentAssistantContent = '';
-      const toolCallsForHistory: Array<{ name: string; input: Record<string, unknown>; result: string }> = [];
       let isFirstIteration = true;
 
       while (iteration < MAX_ITERATIONS) {
@@ -598,6 +605,19 @@ If the user asks about current events, real-time information, or anything requir
       res.end();
     } catch (err) {
       if ((err as Error).name === 'AbortError') {
+        // Save partial response on abort so user keeps what was already generated
+        if (currentAssistantContent) {
+          const partialMsg: AIChatMessageForHistory = {
+            id: crypto.randomUUID(),
+            role: 'assistant',
+            content: currentAssistantContent,
+            timestamp: new Date().toISOString(),
+            toolCalls: toolCallsForHistory.length > 0 ? toolCallsForHistory : undefined,
+          };
+          conv.messages.push(partialMsg);
+          conv.updatedAt = new Date().toISOString();
+          await saveConversation(conv).catch(() => {});
+        }
         res.end();
         return;
       }
@@ -625,12 +645,18 @@ If the user asks about current events, real-time information, or anything requir
 
     // AbortController for client disconnect
     const abortController = new AbortController();
-    req.on('close', () => abortController.abort());
+    req.on('close', () => { connectionClosed = true; abortController.abort(); });
 
     const client = getAnthropicClient(creds);
 
+    let connectionClosed = false;
     function sendSSE(event: object): void {
-      res.write(`data: ${JSON.stringify(event)}\n\n`);
+      if (connectionClosed) return;
+      try {
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      } catch {
+        connectionClosed = true;
+      }
     }
 
     try {
