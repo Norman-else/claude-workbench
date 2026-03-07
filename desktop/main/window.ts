@@ -1,4 +1,4 @@
-import { BrowserWindow, app } from 'electron';
+import { BrowserWindow, app, shell } from 'electron';
 import * as path from 'path';
 
 let mainWindow: BrowserWindow | null = null;
@@ -48,6 +48,20 @@ export function createWindow(): BrowserWindow {
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
     mainWindow?.focus();
+  });
+
+  // Open external links in system browser instead of navigating the app window
+  mainWindow.webContents.setWindowOpenHandler(({ url }) => {
+    if (url.startsWith('http://localhost')) return { action: 'allow' };
+    shell.openExternal(url);
+    return { action: 'deny' };
+  });
+
+  mainWindow.webContents.on('will-navigate', (event, url) => {
+    // Allow navigation to our own dev/prod server
+    if (url.startsWith('http://localhost:3000') || url.startsWith('http://localhost:3001')) return;
+    event.preventDefault();
+    shell.openExternal(url);
   });
 
   // Handle window close (minimize to tray instead)
