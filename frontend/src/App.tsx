@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
-import { Check, Command, Package, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, Users, X, Zap } from 'lucide-react';
+import { useEffect, useCallback, useRef, useState } from 'react';
+import { Check, ChevronDown, Command, Package, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, Users, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
 import {
@@ -73,7 +73,47 @@ function App() {
   }>({ show: false, message: '', type: 'success' });
 
   const [isAIDrawerOpen, setIsAIDrawerOpen] = useState(false);
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [fabDocked, setFabDocked] = useState(false);
   const notificationTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Detect right-side panels that overlap the FAB area
+  const checkFabOverlap = useCallback(() => {
+    if (isAIDrawerOpen) {
+      setFabDocked(false);
+      return;
+    }
+    // Look for fixed/absolute glass panels covering bottom-right corner
+    const candidates = document.querySelectorAll('.glass-dark, .glass');
+    let covered = false;
+    for (const el of candidates) {
+      if (el.id === 'ai-assistant-panel' || el.id === 'ai-assistant-fab-wrap') continue;
+      const rect = el.getBoundingClientRect();
+      const style = window.getComputedStyle(el);
+      if (
+        (style.position === 'fixed' || style.position === 'absolute') &&
+        rect.right >= window.innerWidth - 20 &&
+        rect.width > 200 &&
+        rect.height > window.innerHeight * 0.4 &&
+        rect.bottom >= window.innerHeight - 100
+      ) {
+        covered = true;
+        break;
+      }
+    }
+    setFabDocked(covered);
+  }, [isAIDrawerOpen]);
+
+  useEffect(() => {
+    const observer = new MutationObserver(() => requestAnimationFrame(checkFabOverlap));
+    observer.observe(document.body, { childList: true, subtree: true });
+    window.addEventListener('resize', checkFabOverlap);
+    checkFabOverlap();
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', checkFabOverlap);
+    };
+  }, [checkFabOverlap]);
 
   const showNotification = (message: string, type: 'success' | 'error' = 'success') => {
     if (notificationTimerRef.current) {
@@ -287,7 +327,7 @@ function App() {
         <nav className="w-72 glass-dark border-r border-zinc-800 flex flex-col p-6 relative z-10 titlebar-no-drag">
           {electron.isElectron && <div className="titlebar-drag absolute top-0 left-0 right-0 h-20 z-50 pointer-events-auto" />}
 
-          <div className="mb-12 mt-8  relative z-10 titlebar-no-drag">
+          <div className="mb-6 mt-8  relative z-10 titlebar-no-drag">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center ">
                 <Zap className="w-7 h-7 text-white" />
@@ -302,121 +342,144 @@ function App() {
             <VersionBadge appVersion={appVersion} isElectron={electron.isElectron} />
           </div>
 
-          <div className="space-y-2 flex-1">
-            <button
-              onClick={() => setActiveTab('env')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'env'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'env' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
+          <div className="flex-1 flex flex-col">
+            {/* Group: Configuration */}
+            <div className="mb-4">
+              <button
+                onClick={() => setCollapsedGroups(prev => ({ ...prev, config: !prev.config }))}
+                className="w-full flex items-center justify-between px-3 mb-1.5 group/header cursor-pointer"
               >
-                <Terminal className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">Environment</span>
-              {activeTab === 'env' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
+                <span className="text-base font-semibold tracking-wide text-zinc-500 group-hover/header:text-zinc-400 transition-colors">Configuration</span>
+                <ChevronDown className={`w-3 h-3 text-zinc-600 group-hover/header:text-zinc-400 transition-all ${collapsedGroups.config ? '-rotate-90' : ''}`} />
+              </button>
+              <div className={`space-y-1 overflow-hidden transition-all duration-200 ${collapsedGroups.config ? 'max-h-0 opacity-0' : 'max-h-40 opacity-100'}`}>
+                <button
+                  onClick={() => setActiveTab('env')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
+                    activeTab === 'env'
+                      ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                      : 'hover:glass border border-transparent hover:border-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg transition-all ${
+                      activeTab === 'env' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <Terminal className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm text-white">Environment</span>
+                  {activeTab === 'env' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
+                </button>
 
-            <button
-              onClick={() => setActiveTab('mcp')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'mcp'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'mcp' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
+                <button
+                  onClick={() => setActiveTab('mcp')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
+                    activeTab === 'mcp'
+                      ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                      : 'hover:glass border border-transparent hover:border-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg transition-all ${
+                      activeTab === 'mcp' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <Server className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm text-white">MCP Servers</span>
+                  {activeTab === 'mcp' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
+                </button>
+              </div>
+            </div>
+
+            {/* Group: Extensions */}
+            <div>
+              <button
+                onClick={() => setCollapsedGroups(prev => ({ ...prev, extensions: !prev.extensions }))}
+                className="w-full flex items-center justify-between px-3 mb-1.5 group/header cursor-pointer"
               >
-                <Server className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">MCP Servers</span>
-              {activeTab === 'mcp' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
+                <span className="text-base font-semibold tracking-wide text-zinc-500 group-hover/header:text-zinc-400 transition-colors">Extensions</span>
+                <ChevronDown className={`w-3 h-3 text-zinc-600 group-hover/header:text-zinc-400 transition-all ${collapsedGroups.extensions ? '-rotate-90' : ''}`} />
+              </button>
+              <div className={`space-y-1 overflow-hidden transition-all duration-200 ${collapsedGroups.extensions ? 'max-h-0 opacity-0' : 'max-h-96 opacity-100'}`}>
+                <button
+                  onClick={() => setActiveTab('commands')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
+                    activeTab === 'commands'
+                      ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                      : 'hover:glass border border-transparent hover:border-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg transition-all ${
+                      activeTab === 'commands' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <Command className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm text-white">Commands</span>
+                  {activeTab === 'commands' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
+                </button>
 
-            <button
-              onClick={() => setActiveTab('commands')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'commands'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'commands' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
-              >
-                <Command className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">Commands</span>
-              {activeTab === 'commands' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
+                <button
+                  onClick={() => setActiveTab('skills')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
+                    activeTab === 'skills'
+                      ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                      : 'hover:glass border border-transparent hover:border-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg transition-all ${
+                      activeTab === 'skills' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <Zap className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm text-white">Skills</span>
+                  {activeTab === 'skills' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
+                </button>
 
-            <button
-              onClick={() => setActiveTab('skills')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'skills'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'skills' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
-              >
-                <Zap className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">Skills</span>
-              {activeTab === 'skills' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
+                <button
+                  onClick={() => setActiveTab('agents')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
+                    activeTab === 'agents'
+                      ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                      : 'hover:glass border border-transparent hover:border-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg transition-all ${
+                      activeTab === 'agents' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <Users className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm text-white">Agents</span>
+                  {activeTab === 'agents' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
+                </button>
 
-            <button
-              onClick={() => setActiveTab('agents')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'agents'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'agents' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
-              >
-                <Users className="w-5 h-5 text-white" />
+                <button
+                  onClick={() => setActiveTab('plugins')}
+                  className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
+                    activeTab === 'plugins'
+                      ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
+                      : 'hover:glass border border-transparent hover:border-zinc-700'
+                  }`}
+                >
+                  <div
+                    className={`p-1.5 rounded-lg transition-all ${
+                      activeTab === 'plugins' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
+                    }`}
+                  >
+                    <Package className="w-4 h-4 text-white" />
+                  </div>
+                  <span className="font-medium text-sm text-white">Plugins</span>
+                  {activeTab === 'plugins' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
+                </button>
               </div>
-              <span className="font-medium text-white">Agents</span>
-              {activeTab === 'agents' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
-
-            <button
-              onClick={() => setActiveTab('plugins')}
-              className={`w-full flex items-center space-x-3 px-4 py-4 rounded-xl transition-all group  ${
-                activeTab === 'plugins'
-                  ? 'glass border border-zinc-600 shadow-lg shadow-black/20 '
-                  : 'hover:glass border border-transparent hover:border-zinc-700'
-              }`}
-            >
-              <div
-                className={`p-2 rounded-lg transition-all ${
-                  activeTab === 'plugins' ? 'bg-zinc-700 pulse-ring' : 'bg-zinc-900 group-hover:bg-zinc-800/50'
-                }`}
-              >
-                <Package className="w-5 h-5 text-white" />
-              </div>
-              <span className="font-medium text-white">Plugins</span>
-              {activeTab === 'plugins' && <div className="ml-auto w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>}
-            </button>
-
+            </div>
           </div>
 
           <button
@@ -649,19 +712,26 @@ function App() {
     </div>
 
 
-      {/* AI Assistant FAB — outside overflow-hidden to ensure correct fixed positioning */}
-      <button
-        id="ai-assistant-fab"
-        onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
-        className={`fixed bottom-6 right-6 z-50 w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
-          isAIDrawerOpen
-            ? 'bg-purple-700 shadow-purple-500/40 ring-2 ring-purple-400 pulse-ring'
-            : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/30 hover:shadow-purple-500/50'
+      {/* AI Assistant FAB — auto-docks to right edge when a panel overlaps */}
+      <div
+        id="ai-assistant-fab-wrap"
+        className={`fixed bottom-0 right-0 z-50 p-6 transition-all duration-300 ease-in-out ${
+          fabDocked && !isAIDrawerOpen ? 'translate-x-[46px] hover:translate-x-0' : 'translate-x-0'
         }`}
-        title="AI Assistant"
       >
-        <Sparkles className="w-6 h-6 text-white" />
-      </button>
+        <button
+          id="ai-assistant-fab"
+          onClick={() => setIsAIDrawerOpen(!isAIDrawerOpen)}
+          className={`w-14 h-14 rounded-full flex items-center justify-center shadow-lg transition-all ${
+            isAIDrawerOpen
+              ? 'bg-purple-700 shadow-purple-500/40 ring-2 ring-purple-400 pulse-ring'
+              : 'bg-purple-600 hover:bg-purple-700 shadow-purple-500/30 hover:shadow-purple-500/50'
+          }`}
+          title="AI Assistant"
+        >
+          <Sparkles className="w-6 h-6 text-white" />
+        </button>
+      </div>
 
       <AIAssistantDrawer
         isOpen={isAIDrawerOpen}
