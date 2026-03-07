@@ -290,7 +290,7 @@ const app = express();
 const isElectron = !!(process.versions as Record<string, string>).electron;
 
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '50mb' }));
 
 if (isElectron) {
   const frontendPath = path.join(__dirname, '../../frontend/dist');

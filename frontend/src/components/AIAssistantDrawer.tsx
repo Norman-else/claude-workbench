@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown } from 'lucide-react';
-import type { AIModelOption, AIToolInfo, AIConversation } from '../types';
+import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip } from 'lucide-react';
+import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment } from '../types';
 import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
 import ReactMarkdown from 'react-markdown';
@@ -93,7 +93,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         hasAutoNamed.current.delete(activeConversationId);
       });
   }, [activeConversationId, conversations, selectedModel]);
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete });
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, stopGeneration } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete });
 
   const [input, setInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -116,6 +116,8 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [modelSlashMenuOpen, setModelSlashMenuOpen] = useState(false);
   const [modelSlashFilterText, setModelSlashFilterText] = useState('');
   const [modelSlashSelectedIndex, setModelSlashSelectedIndex] = useState(0);
+  const [attachments, setAttachments] = useState<AIAttachment[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Compute filtered tools for slash command menu
   const slashFilteredTools = useMemo(() => {
@@ -145,10 +147,14 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   }, [conversations, activeConversationId]);
 
   // ── Scroll to bottom on new messages ──
+  const prevMessageCountRef = useRef(0);
   useEffect(() => {
-    if (messagesEndRef.current) {
-      messagesEndRef.current.scrollIntoView({ behavior: 'smooth' });
+    if (messagesEndRef.current && chatMessages.length > 0) {
+      // Use instant scroll when conversation loads (bulk messages), smooth for streaming
+      const isInitialLoad = prevMessageCountRef.current === 0 && chatMessages.length > 1;
+      messagesEndRef.current.scrollIntoView({ behavior: isInitialLoad ? 'instant' : 'smooth' });
     }
+    prevMessageCountRef.current = chatMessages.length;
   }, [chatMessages]);
 
   // Close model dropdown on outside click
@@ -298,6 +304,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   }, [activeConversationId, conversations]);
 
   const handleSwitchConversation = useCallback((id: string) => {
+    prevMessageCountRef.current = 0;
     setActiveConversationId(id);
     setShowConversationList(false);
   }, []);
@@ -460,8 +467,57 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     }
   }, [tools]);
 
+  const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+    Array.from(files).forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        const att: AIAttachment = {
+          name: file.name,
+          mediaType: file.type || 'application/octet-stream',
+          data: base64,
+          preview: file.type.startsWith('image/') ? result : undefined,
+        };
+        setAttachments((prev) => [...prev, att]);
+      };
+      reader.readAsDataURL(file);
+    });
+    // Reset so the same file can be re-selected
+    e.target.value = '';
+  }, []);
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLTextAreaElement>) => {
+    const files = e.clipboardData?.files;
+    if (!files || files.length === 0) return;
+    const imageFiles = Array.from(files).filter((f) => f.type.startsWith('image/'));
+    if (imageFiles.length === 0) return;
+    e.preventDefault();
+    imageFiles.forEach((file) => {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const result = reader.result as string;
+        const base64 = result.split(',')[1];
+        const att: AIAttachment = {
+          name: file.name || 'pasted-image.png',
+          mediaType: file.type,
+          data: base64,
+          preview: result,
+        };
+        setAttachments((prev) => [...prev, att]);
+      };
+      reader.readAsDataURL(file);
+    });
+  }, []);
+
+  const removeAttachment = useCallback((index: number) => {
+    setAttachments((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
   const handleSend = useCallback(() => {
-    if (!input.trim() || chatIsLoading) return;
+    if ((!input.trim() && attachments.length === 0) || chatIsLoading) return;
     const raw = input.trim();
     let msg = raw;
     let tool: string | undefined;
@@ -482,8 +538,9 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       textareaRef.current.style.height = 'auto';
     }
     setDismissedError(null);
-    sendMessage(msg || (tool ? `Use tool: ${tool}` : ''), selectedModel, tool);
-  }, [input, chatIsLoading, sendMessage, selectedModel, tools]);
+    sendMessage(msg || (tool ? `Use tool: ${tool}` : ''), selectedModel, tool, attachments.length > 0 ? attachments : undefined);
+    setAttachments([]);
+  }, [input, chatIsLoading, sendMessage, selectedModel, tools, attachments]);
 
   const isDropdownDisabled = modelsLoading || noProfile || modelOptions.length === 0;
   const selectedLabel = modelOptions.find((opt) => opt.id === selectedModel)?.label ?? '';
@@ -652,7 +709,31 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                     : 'bg-white/10 text-white/90 rounded-tl-sm'
                 }`}>
                   {msg.role === 'user' ? (
-                    <p className="whitespace-pre-wrap">{msg.content}</p>
+                    <div>
+                      {msg.attachments && msg.attachments.length > 0 && (
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {msg.attachments.map((att, attIdx) =>
+                            att.mediaType.startsWith('image/') ? (
+                              <img
+                                key={attIdx}
+                                src={`data:${att.mediaType};base64,${att.data}`}
+                                alt={att.name}
+                                className="max-w-full rounded-lg max-h-48 object-contain"
+                              />
+                            ) : (
+                              <span
+                                key={attIdx}
+                                className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/[0.08] border border-white/[0.12] text-xs text-white/60"
+                              >
+                                <Paperclip className="w-3 h-3" />
+                                {att.name}
+                              </span>
+                            )
+                          )}
+                        </div>
+                      )}
+                      <p className="whitespace-pre-wrap">{msg.content}</p>
+                    </div>
                   ) : (
                     <div className="prose prose-invert prose-sm max-w-none">
                       {chatIsLoading && chatMessages[chatMessages.length - 1]?.id === msg.id && msg.content === '' ? (
@@ -850,6 +931,44 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           )}
 
 
+          {/* Attachment preview area */}
+          {attachments.length > 0 && (
+            <div className="ai-attachment-preview flex flex-wrap gap-2 px-2 py-2 mb-1 rounded-lg border border-white/[0.08]">
+              {attachments.map((att, idx) => (
+                <div key={idx} className="relative group">
+                  {att.mediaType.startsWith('image/') ? (
+                    <div className="relative">
+                      <img
+                        src={att.preview || `data:${att.mediaType};base64,${att.data}`}
+                        alt={att.name}
+                        className="h-16 rounded-lg object-cover border border-white/[0.12]"
+                      />
+                      <button
+                        onClick={() => removeAttachment(idx)}
+                        className="absolute -top-1.5 -right-1.5 w-5 h-5 rounded-full bg-black/70 border border-white/20 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                        aria-label={`Remove ${att.name}`}
+                      >
+                        <X className="w-3 h-3 text-white/80" />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="relative flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-white/[0.08] border border-white/[0.12]">
+                      <Paperclip className="w-3 h-3 text-white/40" />
+                      <span className="text-xs text-white/60 max-w-[120px] truncate">{att.name}</span>
+                      <button
+                        onClick={() => removeAttachment(idx)}
+                        className="ml-1 w-4 h-4 rounded-full flex items-center justify-center text-white/30 hover:text-white/70 hover:bg-white/10 transition-colors"
+                        aria-label={`Remove ${att.name}`}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
           {/* Input container — textarea on top, toolbar on bottom */}
           <div className={`ai-chat-input-container relative rounded-2xl border transition-all duration-200 ${
             inputFocused
@@ -864,6 +983,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               rows={1}
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
+              onPaste={handlePaste}
               onFocus={() => setInputFocused(true)}
               onBlur={() => setInputFocused(false)}
               disabled={chatIsLoading || noProfile}
@@ -918,22 +1038,52 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                 >
                   <Wrench className="w-3.5 h-3.5" />
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={noProfile || chatIsLoading}
+                  className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 text-white/30 hover:text-white/60 hover:bg-white/[0.06] disabled:opacity-30 disabled:cursor-not-allowed"
+                  aria-label="Attach file"
+                  title="Attach file or image"
+                >
+                  <Paperclip className="w-3.5 h-3.5" />
+                </button>
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  multiple
+                  className="hidden"
+                  accept="image/png,image/jpeg,image/gif,image/webp,application/pdf,text/plain,text/markdown,.md,.json,.yaml,.yml,.csv,.xml,.html,.css,.js,.ts,.tsx,.py"
+                  onChange={handleFileSelect}
+                />
               </div>
 
-              {/* Right: send button */}
+              {/* Right: send / stop button */}
               <div className="flex items-center gap-1">
-                <button
-                  onClick={handleSend}
-                  disabled={!input.trim() || chatIsLoading || noProfile}
-                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 ${
-                    input.trim() && !chatIsLoading && !noProfile
-                      ? 'bg-blue-600 hover:bg-blue-500 hover:scale-105 shadow-lg shadow-blue-600/20 cursor-pointer'
-                      : 'bg-white/10 opacity-40 cursor-not-allowed'
-                  }`}
-                  aria-label="Send message"
-                >
-                  <Send className="w-3.5 h-3.5 text-white" />
-                </button>
+                {chatIsLoading ? (
+                  <button
+                    onClick={stopGeneration}
+                    className="w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 bg-red-600/80 hover:bg-red-500 hover:scale-105 shadow-lg shadow-red-600/20 cursor-pointer"
+                    aria-label="Stop generating"
+                    title="Stop generating"
+                  >
+                    <span className="w-2.5 h-2.5 rounded-sm bg-white block" />
+                  </button>
+                ) : (
+                  <button
+                    onClick={handleSend}
+                    disabled={(!input.trim() && attachments.length === 0) || noProfile}
+                    className={`w-7 h-7 rounded-lg flex items-center justify-center transition-all duration-150 ${
+                      (input.trim() || attachments.length > 0) && !noProfile
+                        ? 'bg-blue-600 hover:bg-blue-500 hover:scale-105 shadow-lg shadow-blue-600/20 cursor-pointer'
+                        : 'bg-white/10 opacity-40 cursor-not-allowed'
+                    }`}
+                    aria-label="Send message"
+                  >
+                    <Send className="w-3.5 h-3.5 text-white" />
+                  </button>
+                )}
               </div>
             </div>
           </div>

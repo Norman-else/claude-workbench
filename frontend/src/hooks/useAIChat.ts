@@ -1,12 +1,13 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { AIChatMessage, AIChatStreamEvent, AIToolCall } from '../types';
+import type { AIChatMessage, AIChatStreamEvent, AIToolCall, AIAttachment } from '../types';
 import { streamConversationChat, getConversation, deleteConversation } from '../api';
 
 interface UseAIChatReturn {
   messages: AIChatMessage[];
   isLoading: boolean;
   error: string | null;
-  sendMessage: (message: string, model: string, forceTool?: string) => Promise<void>;
+  sendMessage: (message: string, model: string, forceTool?: string, attachments?: AIAttachment[]) => Promise<void>;
+  stopGeneration: () => void;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
 }
@@ -41,7 +42,7 @@ export function useAIChat(
     return () => { cancelled = true; };
   }, [conversationId]);
 
-  const sendMessage = useCallback(async (message: string, model: string, forceTool?: string) => {
+  const sendMessage = useCallback(async (message: string, model: string, forceTool?: string, attachments?: AIAttachment[]) => {
     if (!conversationId) return;
 
     // Abort any in-flight request
@@ -57,6 +58,7 @@ export function useAIChat(
       role: 'user',
       content: message,
       timestamp: new Date().toISOString(),
+      ...(attachments && attachments.length > 0 ? { attachments } : {}),
     };
     setMessages((prev) => [...prev, userMsg]);
     setIsLoading(true);
@@ -74,7 +76,8 @@ export function useAIChat(
     setMessages((prev) => [...prev, assistantMsg]);
 
     try {
-      const response = await streamConversationChat(conversationId, message, model, controller.signal, forceTool);
+      const apiAttachments = attachments?.map(a => ({ name: a.name, mediaType: a.mediaType, data: a.data }));
+      const response = await streamConversationChat(conversationId, message, model, controller.signal, forceTool, apiAttachments);
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Request failed' }));
         throw new Error((errData as { error?: string }).error || `HTTP ${response.status}`);
@@ -84,6 +87,27 @@ export function useAIChat(
       const decoder = new TextDecoder();
       let assistantContent = '';
       const toolCalls: AIToolCall[] = [];
+      let rafScheduled = false;
+      let pendingToolUpdate = false;
+
+      // Throttled UI update: batches all token deltas within a single animation frame
+      function scheduleUIUpdate(): void {
+        if (rafScheduled) return;
+        rafScheduled = true;
+        requestAnimationFrame(() => {
+          rafScheduled = false;
+          const update: Partial<AIChatMessage> = { content: assistantContent };
+          if (pendingToolUpdate) {
+            update.toolCalls = [...toolCalls];
+            pendingToolUpdate = false;
+          }
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, ...update } : m
+            )
+          );
+        });
+      }
 
       while (true) {
         const { done, value } = await reader.read();
@@ -106,11 +130,7 @@ export function useAIChat(
 
           if (event.type === 'text_delta' && event.text) {
             assistantContent += event.text;
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, content: assistantContent } : m
-              )
-            );
+            scheduleUIUpdate();
           } else if (event.type === 'tool_call' && event.tool) {
             const tc: AIToolCall = {
               name: event.tool.name,
@@ -118,11 +138,8 @@ export function useAIChat(
               result: event.tool.result,
             };
             toolCalls.push(tc);
-            setMessages((prev) =>
-              prev.map((m) =>
-                m.id === assistantId ? { ...m, toolCalls: [...toolCalls] } : m
-              )
-            );
+            pendingToolUpdate = true;
+            scheduleUIUpdate();
             if (options?.onToolCall) {
               options.onToolCall(tc.name);
             }
@@ -133,6 +150,13 @@ export function useAIChat(
           }
         }
       }
+
+      // Final flush: ensure last buffered content is rendered
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === assistantId ? { ...m, content: assistantContent, toolCalls: [...toolCalls] } : m
+        )
+      );
       // Stream completed successfully — notify caller
       if (options?.onStreamComplete) {
         // Use setTimeout to ensure state updates from streaming are flushed before callback fires
@@ -167,6 +191,14 @@ export function useAIChat(
     }
   }, [conversationId, options?.onToolCall, options?.onStreamComplete]);
 
+  const stopGeneration = useCallback(() => {
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+      abortControllerRef.current = null;
+    }
+  }, []);
+
+
   const clearHistory = useCallback(async () => {
     if (!conversationId) return;
     await deleteConversation(conversationId);
@@ -187,5 +219,5 @@ export function useAIChat(
     }
   }, [conversationId]);
 
-  return { messages, isLoading, error, sendMessage, clearHistory, loadHistory };
+  return { messages, isLoading, error, sendMessage, stopGeneration, clearHistory, loadHistory };
 }

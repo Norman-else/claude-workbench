@@ -206,12 +206,20 @@ export interface AIToolCall {
   result?: string;
 }
 
+export interface AIAttachment {
+  name: string;
+  mediaType: string;  // e.g. 'image/png', 'application/pdf', 'text/plain'
+  data: string;       // base64-encoded content
+  preview?: string;   // base64 thumbnail for images (optional, for display)
+}
+
 export interface AIChatMessage {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: string;
   toolCalls?: AIToolCall[];
+  attachments?: AIAttachment[];
 }
 
 export interface AIChatStreamEvent {

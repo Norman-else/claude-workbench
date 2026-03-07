@@ -314,7 +314,7 @@ export function registerAIAssistantRoutes(app: Express): void {
   // POST /api/ai/conversations/:id/chat — SSE streaming scoped to a conversation
   app.post('/api/ai/conversations/:id/chat', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { message, model, forceTool } = req.body as { message: string; model: string; forceTool?: string };
+    const { message, model, forceTool, attachments } = req.body as { message: string; model: string; forceTool?: string; attachments?: Array<{ name: string; mediaType: string; data: string }> };
 
     const creds = await getActiveProfileCredentials();
     if (!creds) {
@@ -350,14 +350,51 @@ export function registerAIAssistantRoutes(app: Express): void {
         role: 'user',
         content: message,
         timestamp: new Date().toISOString(),
+        ...(attachments && attachments.length > 0 ? { attachments } : {}),
       };
       conv.messages.push(userMsg);
 
       // Build conversation for Anthropic API
-      const conversationMessages: Anthropic.MessageParam[] = conv.messages.map((m) => ({
-        role: m.role as 'user' | 'assistant',
-        content: m.content,
-      }));
+      const conversationMessages: Anthropic.MessageParam[] = conv.messages.map((m) => {
+        // Build multimodal content blocks for messages with attachments
+        if (m.attachments && m.attachments.length > 0 && m.role === 'user') {
+          const contentBlocks: Anthropic.ContentBlockParam[] = [];
+          for (const att of m.attachments) {
+            if (att.mediaType.startsWith('image/')) {
+              contentBlocks.push({
+                type: 'image',
+                source: {
+                  type: 'base64',
+                  media_type: att.mediaType as 'image/png' | 'image/jpeg' | 'image/gif' | 'image/webp',
+                  data: att.data,
+                },
+              });
+            } else if (att.mediaType === 'application/pdf') {
+              contentBlocks.push({
+                type: 'document',
+                source: {
+                  type: 'base64',
+                  media_type: 'application/pdf',
+                  data: att.data,
+                },
+              } as Anthropic.ContentBlockParam);
+            } else {
+              // Text-based files: decode and inject as text block
+              try {
+                const decoded = Buffer.from(att.data, 'base64').toString('utf-8');
+                contentBlocks.push({ type: 'text', text: `--- File: ${att.name} ---\n${decoded}` });
+              } catch {
+                contentBlocks.push({ type: 'text', text: `[Attachment: ${att.name}]` });
+              }
+            }
+          }
+          if (m.content) {
+            contentBlocks.push({ type: 'text', text: m.content });
+          }
+          return { role: m.role as 'user' | 'assistant', content: contentBlocks };
+        }
+        return { role: m.role as 'user' | 'assistant', content: m.content };
+      });
 
       const SYSTEM_PROMPT = `You are an AI assistant for Claude Workbench, a GUI management tool for Claude Code CLI.
 You help users manage their Claude Code environment through natural language.
@@ -454,7 +491,7 @@ If the user asks about current events, real-time information, or anything requir
 
         const stream = client.messages.stream({
           model,
-          max_tokens: 4096,
+          max_tokens: 16384,
           system: SYSTEM_PROMPT,
           messages: conversationMessages,
           tools: [...webSearchTool, ...toolDefinitions] as unknown as Anthropic.Messages.Tool[],
@@ -519,6 +556,21 @@ If the user asks about current events, real-time information, or anything requir
           });
           continue;
         }
+
+        // Auto-continue if response was truncated due to max_tokens
+        if (finalMessage.stop_reason === 'max_tokens') {
+          // Append current partial assistant response to conversation for continuation
+          conversationMessages.push({
+            role: 'assistant' as const,
+            content: finalMessage.content as unknown as Anthropic.MessageParam['content'],
+          });
+          conversationMessages.push({
+            role: 'user' as const,
+            content: 'Your previous response was cut off due to length limits. Please continue exactly where you left off. Do not repeat any content you already provided — just pick up from the exact point of truncation and continue.',
+          });
+          continue;
+        }
+
         break;
       }
 
@@ -869,6 +921,7 @@ interface AIChatMessageForHistory {
   content: string;
   timestamp: string;
   toolCalls?: Array<{ name: string; input: Record<string, unknown>; result?: string }>;
+  attachments?: Array<{ name: string; mediaType: string; data: string }>;
 }
 
 interface AIChatHistoryFile {

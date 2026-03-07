@@ -1107,6 +1107,28 @@ html[data-theme="light"] .glass-dark .text-blue-300\/60 {
   color: rgba(37, 99, 235, 0.6) !important;
 }
 
+/* Light mode: attachment preview area */
+html[data-theme="light"] .ai-attachment-preview {
+  background: rgba(0, 0, 0, 0.03) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html[data-theme="light"] .ai-attachment-preview img {
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html[data-theme="light"] .ai-attachment-preview .bg-white\/\[0\.08\] {
+  background: rgba(0, 0, 0, 0.05) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+html[data-theme="light"] .ai-attachment-preview .text-white\/40 {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+html[data-theme="light"] .ai-attachment-preview .text-white\/60 {
+  color: rgba(0, 0, 0, 0.55) !important;
+}
+html[data-theme="light"] .ai-attachment-preview .bg-black\/70 {
+  background: rgba(0, 0, 0, 0.6) !important;
+}
+
 
 /* Floating AI assistant panel — elevated glass effect */
 #ai-assistant-panel {

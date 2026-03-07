@@ -303,12 +303,13 @@ export function streamConversationChat(
   message: string,
   model: string,
   signal?: AbortSignal,
-  forceTool?: string
+  forceTool?: string,
+  attachments?: Array<{ name: string; mediaType: string; data: string }>
 ): Promise<Response> {
   return fetch('/api/ai/conversations/' + conversationId + '/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, model, ...(forceTool ? { forceTool } : {}) }),
+    body: JSON.stringify({ message, model, ...(forceTool ? { forceTool } : {}), ...(attachments && attachments.length > 0 ? { attachments } : {}) }),
     signal,
   });
 }
