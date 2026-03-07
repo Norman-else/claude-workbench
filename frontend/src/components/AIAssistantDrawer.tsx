@@ -728,6 +728,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                     ref={idx === slashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     onMouseDown={(e) => {
                       e.preventDefault(); // prevent textarea blur
+                      e.stopPropagation(); // prevent outside-click handler from closing drawer
                       setInput('/' + tool.name + ' ');
                       setSlashMenuOpen(false);
                       setSlashFilterText('');
@@ -773,6 +774,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                     ref={idx === modelSlashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     onMouseDown={(e) => {
                       e.preventDefault();
+                      e.stopPropagation(); // prevent outside-click handler from closing drawer
                       setSelectedModel(opt.id);
                       setInput('');
                       setModelSlashMenuOpen(false);
@@ -827,6 +829,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                       <button
                         key={tool.name}
                         type="button"
+                        onMouseDown={(e) => e.stopPropagation()} // prevent outside-click handler from closing drawer
                         onClick={() => {
                           setInput('/' + tool.name + ' ');
                           setToolPaletteOpen(false);
