@@ -196,28 +196,6 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => document.removeEventListener('mousedown', handleConvListClick);
   }, [showConversationList]);
 
-  // Close floating panel on outside click
-  useEffect(() => {
-    if (!isOpen) return;
-    function handleOutsideClick(e: MouseEvent) {
-      // Skip outside-click handling when confirmation dialog is open
-      if (showDeleteConfirm) return;
-      if (showConversationList) return;
-      const panel = document.getElementById('ai-assistant-panel');
-      const fab = document.getElementById('ai-assistant-fab');
-      if (panel && !panel.contains(e.target as Node) && fab && !fab.contains(e.target as Node)) {
-        onClose();
-      }
-    }
-    // Delay to avoid closing immediately on the same click that opened it
-    const timer = setTimeout(() => {
-      document.addEventListener('mousedown', handleOutsideClick);
-    }, 100);
-    return () => {
-      clearTimeout(timer);
-      document.removeEventListener('mousedown', handleOutsideClick);
-    };
-  }, [isOpen, onClose, showDeleteConfirm, showConversationList]);
 
   // ── Load conversations + models + tools on open ──
   useEffect(() => {
@@ -809,7 +787,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                     ref={idx === slashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     onMouseDown={(e) => {
                       e.preventDefault(); // prevent textarea blur
-                      e.stopPropagation(); // prevent outside-click handler from closing drawer
+                      e.stopPropagation();
                       setInput('/' + tool.name + ' ');
                       setSlashMenuOpen(false);
                       setSlashFilterText('');
@@ -855,7 +833,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                     ref={idx === modelSlashSelectedIndex ? (el) => el?.scrollIntoView({ block: 'nearest' }) : undefined}
                     onMouseDown={(e) => {
                       e.preventDefault();
-                      e.stopPropagation(); // prevent outside-click handler from closing drawer
+                      e.stopPropagation();
                       setSelectedModel(opt.id);
                       setInput('');
                       setModelSlashMenuOpen(false);
@@ -910,7 +888,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                       <button
                         key={tool.name}
                         type="button"
-                        onMouseDown={(e) => e.stopPropagation()} // prevent outside-click handler from closing drawer
+                        onMouseDown={(e) => e.stopPropagation()}
                         onClick={() => {
                           setInput('/' + tool.name + ' ');
                           setToolPaletteOpen(false);
