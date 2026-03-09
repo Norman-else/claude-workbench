@@ -155,7 +155,7 @@ export function SkillsMarketplace({
                   onClick={() => setDropdownOpen((v) => !v)}
                   className="w-full flex items-center justify-between px-3 py-2 glass border border-zinc-700 rounded-xl text-white text-sm hover:border-zinc-600 transition-colors"
                 >
-                  <span className="truncate">{selectedName}</span>
+                  <span className="truncate">{selected ? selected.source.repo : selectedName}</span>
                   <ChevronDown className={`w-4 h-4 text-zinc-400 shrink-0 transition-transform duration-150 ${dropdownOpen ? 'rotate-180' : ''}`} />
                 </button>
                 {dropdownOpen && (
@@ -167,7 +167,7 @@ export function SkillsMarketplace({
                         onClick={() => { setSelectedName(m.name); setDropdownOpen(false); setSearchQuery(''); }}
                         className={`w-full flex items-center justify-between px-3 py-2 text-sm text-white text-left hover:bg-zinc-800 transition-colors ${m.name === selectedName ? 'bg-zinc-800' : ''}`}
                       >
-                        <span className="truncate">{m.name}</span>
+                        <span className="truncate">{m.source.repo}</span>
                         {m.name === selectedName && <Check className="w-3.5 h-3.5 shrink-0 text-blue-400" />}
                       </button>
                     ))}
