@@ -150,6 +150,7 @@ export interface MarketplacePlugin {
   skills?: string[];
   version?: string;
   category?: string;
+  lspServers?: Record<string, unknown>;
 }
 
 export interface MarketplaceManifest {
@@ -199,6 +200,13 @@ export interface InstalledPluginDetails {
   agents: PluginContentFile[];     // agents/ 目录下的 .md 文件
 }
 
+
+export interface MarketplacePluginDetails {
+  commands: Array<{ name: string; filename: string }>;
+  skills: Array<{ name: string; filename: string }>;
+  agents: Array<{ name: string; filename: string; model?: string }>;
+  lspServers: Array<{ name: string; command: string; extensions: string[] }>;
+}
 
 export interface AIToolCall {
   name: string;

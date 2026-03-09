@@ -10,6 +10,7 @@ import type {
   Agent,
   MarketplaceInfo,
   InstalledPluginDetails,
+  MarketplacePluginDetails,
   AIChatHistory,
   AIChatMessage,
   AIModelOption,
@@ -233,6 +234,10 @@ export async function uninstallPlugin(marketplace: string, plugin: string): Prom
 
 export function getInstalledPluginDetails(): Promise<InstalledPluginDetails[]> {
   return requestJson('/api/plugins/installed-details');
+}
+
+export function getMarketplacePluginDetails(marketplace: string, plugin: string): Promise<MarketplacePluginDetails> {
+  return requestJson(`/api/plugins/marketplace-plugin-details?marketplace=${encodeURIComponent(marketplace)}&plugin=${encodeURIComponent(plugin)}`);
 }
 
 

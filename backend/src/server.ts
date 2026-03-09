@@ -1691,6 +1691,101 @@ app.get('/api/plugins/installed-details', async (_req: Request, res: Response) =
   }
 });
 
+// Get details (commands/skills/agents) for a marketplace plugin by scanning its source directory
+app.get('/api/plugins/marketplace-plugin-details', async (req: Request, res: Response) => {
+  try {
+    const marketplace = req.query.marketplace as string;
+    const plugin = req.query.plugin as string;
+    if (!marketplace || !plugin) {
+      res.status(400).json({ error: 'marketplace and plugin query params are required' });
+      return;
+    }
+
+    const manifest = await readMarketplaceManifest(marketplace);
+    if (!manifest) {
+      res.status(404).json({ error: `Marketplace "${marketplace}" manifest not found` });
+      return;
+    }
+
+    const pluginEntry = manifest.plugins.find((p) => p.name === plugin);
+    if (!pluginEntry) {
+      res.status(404).json({ error: `Plugin "${plugin}" not found in marketplace "${marketplace}"` });
+      return;
+    }
+
+    const pluginDir = path.join(MARKETPLACES_DIR, marketplace, pluginEntry.source);
+    try {
+      await fs.access(pluginDir);
+    } catch {
+      res.status(404).json({ error: `Plugin source directory not found` });
+      return;
+    }
+
+    const commands: Array<{ name: string; filename: string }> = [];
+    const skills: Array<{ name: string; filename: string }> = [];
+    const agents: Array<{ name: string; filename: string; model?: string }> = [];
+
+    // Scan commands/
+    try {
+      const commandsDir = path.join(pluginDir, 'commands');
+      const commandEntries = await fs.readdir(commandsDir);
+      for (const entry of commandEntries) {
+        if (entry.endsWith('.md')) {
+          commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+        }
+      }
+    } catch { /* directory doesn't exist */ }
+
+    // Scan skills/
+    try {
+      const skillsDir = path.join(pluginDir, 'skills');
+      const skillEntries = await fs.readdir(skillsDir);
+      for (const entry of skillEntries) {
+        const entryPath = path.join(skillsDir, entry);
+        const stat = await fs.stat(entryPath);
+        if (stat.isDirectory()) {
+          try {
+            await fs.access(path.join(entryPath, 'SKILL.md'));
+            skills.push({ name: entry, filename: 'SKILL.md' });
+          } catch { /* no SKILL.md */ }
+        }
+      }
+    } catch { /* directory doesn't exist */ }
+
+    // Scan agents/
+    try {
+      const agentsDir = path.join(pluginDir, 'agents');
+      const agentEntries = await fs.readdir(agentsDir);
+      for (const entry of agentEntries) {
+        if (entry.endsWith('.md')) {
+          let model = '';
+          try {
+            const agentContent = await fs.readFile(path.join(agentsDir, entry), 'utf-8');
+            const { frontmatter } = parseFrontmatter(agentContent);
+            model = frontmatter.model ?? '';
+          } catch { /* ignore */ }
+          agents.push({ name: entry.replace(/\.md$/, ''), filename: entry, model });
+        }
+      }
+    } catch { /* directory doesn't exist */ }
+
+    // Extract lspServers from manifest (if any)
+    const lspServers: Array<{ name: string; command: string; extensions: string[] }> = [];
+    const rawLsp = (pluginEntry as Record<string, unknown>).lspServers;
+    if (rawLsp && typeof rawLsp === 'object') {
+      for (const [name, cfg] of Object.entries(rawLsp as Record<string, Record<string, unknown>>)) {
+        const command = (cfg.command as string) || '';
+        const extMap = (cfg.extensionToLanguage || {}) as Record<string, string>;
+        lspServers.push({ name, command, extensions: Object.keys(extMap) });
+      }
+    }
+
+    res.json({ commands, skills, agents, lspServers });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
 app.get('/api/plugins/command-content', async (req: Request, res: Response) => {
   try {
     const { installPath, filename } = req.query as { installPath: string; filename: string };
