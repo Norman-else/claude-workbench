@@ -1,6 +1,7 @@
-import { useState, useEffect, useRef } from 'react';
-import { X, Store, Package, ChevronDown, ChevronUp, RefreshCw, Trash2, Download, Plus, Check, Search } from 'lucide-react';
-import type { MarketplaceInfo, InstalledPluginsFile } from '../types';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import { X, Store, Package, ChevronDown, ChevronUp, RefreshCw, Trash2, Download, Plus, Check, Search, Terminal, Zap, Users, Loader2, Server } from 'lucide-react';
+import type { MarketplaceInfo, InstalledPluginsFile, MarketplacePluginDetails } from '../types';
+import { getMarketplacePluginDetails } from '../api';
 
 interface SkillsMarketplaceProps {
   open: boolean;
@@ -29,6 +30,8 @@ export function SkillsMarketplace({
 }: SkillsMarketplaceProps) {
   const [selectedName, setSelectedName] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [pluginDetails, setPluginDetails] = useState<Record<string, MarketplacePluginDetails>>({});
+  const [loadingDetails, setLoadingDetails] = useState<Record<string, boolean>>({});
   const [operatingPlugin, setOperatingPlugin] = useState<string | null>(null);
   const [updating, setUpdating] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -43,6 +46,8 @@ export function SkillsMarketplace({
     if (!open) {
       setSelectedName(null);
       setExpanded({});
+      setPluginDetails({});
+      setLoadingDetails({});
       setSearchQuery('');
     }
   }, [open, marketplaces]);
@@ -68,9 +73,23 @@ export function SkillsMarketplace({
     return !!(records && records.length > 0);
   };
 
-  const toggleExpanded = (pluginName: string) => {
+  const toggleExpanded = useCallback(async (pluginName: string) => {
+    const wasExpanded = expanded[pluginName] ?? false;
     setExpanded((prev) => ({ ...prev, [pluginName]: !prev[pluginName] }));
-  };
+
+    // Fetch details on first expand
+    if (!wasExpanded && !pluginDetails[pluginName] && !loadingDetails[pluginName] && selected) {
+      setLoadingDetails((prev) => ({ ...prev, [pluginName]: true }));
+      try {
+        const details = await getMarketplacePluginDetails(selected.name, pluginName);
+        setPluginDetails((prev) => ({ ...prev, [pluginName]: details }));
+      } catch {
+        // Silently fail — will show "no details" state
+      } finally {
+        setLoadingDetails((prev) => ({ ...prev, [pluginName]: false }));
+      }
+    }
+  }, [expanded, pluginDetails, loadingDetails, selected]);
 
   const handleInstall = async (marketplace: string, plugin: string) => {
     setOperatingPlugin(plugin);
@@ -281,9 +300,14 @@ export function SkillsMarketplace({
                           Installed
                         </span>
                       )}
-                      {plugin.skills && plugin.skills.length > 0 && (
+                      {plugin.version && (
                         <span className="text-xs text-zinc-500 bg-zinc-800/80 px-1.5 py-0.5 rounded">
-                          {plugin.skills.length} skills
+                          v{plugin.version}
+                        </span>
+                      )}
+                      {plugin.lspServers && Object.keys(plugin.lspServers).length > 0 && (
+                        <span className="text-xs font-medium text-cyan-400 bg-cyan-900/30 px-1.5 py-0.5 rounded">
+                          LSP
                         </span>
                       )}
                     </div>
@@ -292,27 +316,123 @@ export function SkillsMarketplace({
                       <p className="text-xs text-zinc-400 line-clamp-2 mb-2 ml-6">{plugin.description}</p>
                     )}
 
-                    {plugin.skills && plugin.skills.length > 0 && (
-                      <button
-                        onClick={() => toggleExpanded(plugin.name)}
-                        className="ml-6 flex items-center space-x-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
-                      >
-                        {isExpanded ? (
-                          <ChevronUp className="w-3 h-3" />
-                        ) : (
-                          <ChevronDown className="w-3 h-3" />
-                        )}
-                        <span>{isExpanded ? 'Hide skills' : 'Show skills'}</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => toggleExpanded(plugin.name)}
+                      className="ml-6 flex items-center space-x-1 text-xs text-zinc-500 hover:text-zinc-300 transition-colors"
+                    >
+                      {isExpanded ? (
+                        <ChevronUp className="w-3 h-3" />
+                      ) : (
+                        <ChevronDown className="w-3 h-3" />
+                      )}
+                      <span>{isExpanded ? 'Hide details' : 'View details'}</span>
+                    </button>
 
-                    {isExpanded && plugin.skills && (
-                      <div className="ml-6 mt-2 space-y-1">
-                        {plugin.skills.map((skill) => (
-                          <div key={skill} className="text-xs text-zinc-500 font-mono">
-                            {skill.replace(/^\.\/skills\//, '').replace(/^\.\//, '')}
+                    {isExpanded && (
+                      <div className="ml-6 mt-3 space-y-3">
+                        {loadingDetails[plugin.name] && (
+                          <div className="flex items-center space-x-2 text-xs text-zinc-500">
+                            <Loader2 className="w-3 h-3 animate-spin" />
+                            <span>Loading details...</span>
                           </div>
-                        ))}
+                        )}
+
+                        {pluginDetails[plugin.name] && (() => {
+                          const details = pluginDetails[plugin.name];
+                          const hasContent = details.commands.length > 0 || details.skills.length > 0 || details.agents.length > 0 || details.lspServers.length > 0;
+
+                          if (!hasContent) {
+                            return (
+                              <p className="text-xs text-zinc-600 italic">No commands, skills, agents, or LSP servers found</p>
+                            );
+                          }
+
+                          return (
+                            <>
+                              {details.lspServers.length > 0 && (
+                                <div>
+                                  <div className="flex items-center space-x-1.5 mb-1.5">
+                                    <Server className="w-3 h-3 text-cyan-400" />
+                                    <span className="text-xs font-medium text-cyan-400">LSP Servers ({details.lspServers.length})</span>
+                                  </div>
+                                  <div className="space-y-1 ml-4.5">
+                                    {details.lspServers.map((lsp) => (
+                                      <div key={lsp.name} className="text-xs">
+                                        <span className="text-zinc-400 font-mono">{lsp.command}</span>
+                                        {lsp.extensions.length > 0 && (
+                                          <div className="flex flex-wrap gap-1 mt-0.5">
+                                            {lsp.extensions.map((ext) => (
+                                              <span key={ext} className="text-[10px] text-zinc-500 bg-zinc-800/80 px-1 py-0.5 rounded">
+                                                {ext}
+                                              </span>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {details.commands.length > 0 && (
+                                <div>
+                                  <div className="flex items-center space-x-1.5 mb-1.5">
+                                    <Terminal className="w-3 h-3 text-blue-400" />
+                                    <span className="text-xs font-medium text-blue-400">Commands ({details.commands.length})</span>
+                                  </div>
+                                  <div className="space-y-0.5 ml-4.5">
+                                    {details.commands.map((cmd) => (
+                                      <div key={cmd.name} className="text-xs text-zinc-400 font-mono">
+                                        /{cmd.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {details.skills.length > 0 && (
+                                <div>
+                                  <div className="flex items-center space-x-1.5 mb-1.5">
+                                    <Zap className="w-3 h-3 text-amber-400" />
+                                    <span className="text-xs font-medium text-amber-400">Skills ({details.skills.length})</span>
+                                  </div>
+                                  <div className="space-y-0.5 ml-4.5">
+                                    {details.skills.map((skill) => (
+                                      <div key={skill.name} className="text-xs text-zinc-400 font-mono">
+                                        {skill.name}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {details.agents.length > 0 && (
+                                <div>
+                                  <div className="flex items-center space-x-1.5 mb-1.5">
+                                    <Users className="w-3 h-3 text-purple-400" />
+                                    <span className="text-xs font-medium text-purple-400">Agents ({details.agents.length})</span>
+                                  </div>
+                                  <div className="space-y-0.5 ml-4.5">
+                                    {details.agents.map((agent) => (
+                                      <div key={agent.name} className="flex items-center space-x-2 text-xs text-zinc-400 font-mono">
+                                        <span>{agent.name}</span>
+                                        {agent.model && (
+                                          <span className="text-zinc-600 text-[10px] bg-zinc-800/80 px-1 py-0.5 rounded">
+                                            {agent.model}
+                                          </span>
+                                        )}
+                                      </div>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()}
+
+                        {!loadingDetails[plugin.name] && !pluginDetails[plugin.name] && (
+                          <p className="text-xs text-zinc-600 italic">Failed to load details</p>
+                        )}
                       </div>
                     )}
                   </div>
