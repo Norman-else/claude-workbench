@@ -22,6 +22,7 @@ export function AddMarketplaceModal({ open, onClose, onAdd, showNotification }: 
     try {
       await onAdd(url.trim());
       setUrl('');
+      setAdding(false);
       onClose();
       showNotification('Marketplace added successfully!');
     } catch (err) {
