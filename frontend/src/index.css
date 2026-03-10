@@ -1746,3 +1746,61 @@ html[data-theme="light"] .ai-command-confirm .text-white\/70 {
 html[data-theme="light"] .ai-command-confirm .bg-emerald-600 {
   color: #ffffff !important;
 }
+
+/* ======================================================
+   AI Settings Panel — Light Mode
+   ====================================================== */
+html[data-theme="light"] .ai-settings-panel .text-white\/50 {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+html[data-theme="light"] .ai-settings-panel .text-white\/70 {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+html[data-theme="light"] .ai-settings-panel .text-white\/40 {
+  color: rgba(0, 0, 0, 0.45) !important;
+}
+html[data-theme="light"] .ai-settings-panel .text-white\/30 {
+  color: rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="light"] .ai-settings-panel .text-white\/20 {
+  color: rgba(0, 0, 0, 0.25) !important;
+}
+html[data-theme="light"] .ai-settings-panel .bg-white\/\[0\.04\] {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+html[data-theme="light"] .ai-settings-panel .bg-white\/\[0\.06\] {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+html[data-theme="light"] .ai-settings-panel .border-white\/\[0\.06\] {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .ai-settings-panel .border-white\/\[0\.08\] {
+  border-color: rgba(0, 0, 0, 0.1) !important;
+}
+html[data-theme="light"] .ai-settings-panel .text-white\/80 {
+  color: rgba(0, 0, 0, 0.75) !important;
+}
+html[data-theme="light"] .ai-settings-input {
+  background: #ffffff !important;
+  border-color: #d4d4d8 !important;
+  color: #18181b !important;
+}
+html[data-theme="light"] .ai-settings-input::placeholder {
+  color: #a1a1aa !important;
+}
+html[data-theme="light"] .ai-settings-input:focus {
+  border-color: rgba(0, 0, 0, 0.25) !important;
+  background: #ffffff !important;
+}
+html[data-theme="light"] .ai-settings-panel .bg-blue-600\/20 {
+  background: rgba(37, 99, 235, 0.1) !important;
+}
+html[data-theme="light"] .ai-settings-panel .text-blue-400 {
+  color: #2563eb !important;
+}
+html[data-theme="light"] .ai-settings-panel .border-blue-500\/20 {
+  border-color: rgba(37, 99, 235, 0.2) !important;
+}
+html[data-theme="light"] .ai-settings-panel .hover\:text-red-400:hover {
+  color: #dc2626 !important;
+}

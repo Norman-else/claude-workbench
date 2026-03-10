@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe, Clock, Layers, Server, Terminal, Zap, ShoppingBag, Settings, HardDrive, Package } from 'lucide-react';
 import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment, SavedProject } from '../types';
-import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects } from '../api';
+import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects, getTerminalWhitelist, saveTerminalWhitelist } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
 import { useProject } from '../ProjectContext';
 import ReactMarkdown from 'react-markdown';
@@ -159,6 +159,13 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [attachments, setAttachments] = useState<AIAttachment[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // ── Settings panel state ──
+  const [showSettings, setShowSettings] = useState(false);
+  const [defaultWhitelist, setDefaultWhitelist] = useState<string[]>([]);
+  const [userWhitelist, setUserWhitelist] = useState<string[]>([]);
+  const [whitelistInput, setWhitelistInput] = useState('');
+  const [whitelistLoading, setWhitelistLoading] = useState(false);
+
   // Compute filtered tools for slash command menu
   const slashFilteredTools = useMemo(() => {
     if (!slashMenuOpen || tools.length === 0) return [];
@@ -312,6 +319,26 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => { cancelled = true; };
   }, [isOpen]);
 
+  // ── Fetch whitelist when settings panel opens ──
+  useEffect(() => {
+    if (!showSettings) return;
+    let cancelled = false;
+    setWhitelistLoading(true);
+    getTerminalWhitelist()
+      .then((data) => {
+        if (cancelled) return;
+        setDefaultWhitelist(data.defaultWhitelist);
+        setUserWhitelist(data.userWhitelist);
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setDefaultWhitelist([]);
+        setUserWhitelist([]);
+      })
+      .finally(() => { if (!cancelled) setWhitelistLoading(false); });
+    return () => { cancelled = true; };
+  }, [showSettings]);
+
   // Restore project selection when active conversation or projects list changes
   const initialProjectRestoredRef = useRef<string | null>(null);
   useEffect(() => {
@@ -367,6 +394,22 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       // Delete failed
     }
   }, [activeConversationId, conversations]);
+
+  const handleAddWhitelistItem = useCallback(async () => {
+    const newItem = whitelistInput.trim();
+    if (!newItem) return;
+    if (userWhitelist.includes(newItem) || defaultWhitelist.includes(newItem)) return;
+    const updated = [...userWhitelist, newItem];
+    setUserWhitelist(updated);
+    setWhitelistInput('');
+    try { await saveTerminalWhitelist(updated); } catch { /* save failed */ }
+  }, [whitelistInput, userWhitelist, defaultWhitelist]);
+
+  const handleRemoveWhitelistItem = useCallback(async (item: string) => {
+    const filtered = userWhitelist.filter(i => i !== item);
+    setUserWhitelist(filtered);
+    try { await saveTerminalWhitelist(filtered); } catch { /* save failed */ }
+  }, [userWhitelist]);
 
   const handleSwitchConversation = useCallback((id: string) => {
     prevMessageCountRef.current = 0;
@@ -732,6 +775,14 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
             <Trash2 className="w-4 h-4" />
           </button>
           <button
+            onClick={() => setShowSettings(v => !v)}
+            className={`p-1 rounded transition-colors ${showSettings ? 'text-blue-400 bg-blue-600/15' : 'text-white/40 hover:text-white/70'}`}
+            aria-label="Settings"
+            title="Settings"
+          >
+            <Settings className="w-4 h-4" />
+          </button>
+          <button
             onClick={() => setIsFullscreen(f => !f)}
             className="text-white/40 hover:text-white/70 p-1 rounded transition-colors"
             aria-label={isFullscreen ? 'Exit fullscreen' : 'Fullscreen'}
@@ -834,14 +885,94 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               </div>
             </div>
           )}
-          {!noProfile && chatMessages.length === 0 && (
+          {!noProfile && showSettings && (
+            <div className="ai-settings-panel space-y-4">
+              {/* Section header */}
+              <div className="flex items-center gap-2">
+                <Terminal className="w-4 h-4 text-white/50" />
+                <h3 className="text-xs font-semibold text-white/70 tracking-wide uppercase">Terminal Command Whitelist</h3>
+              </div>
+
+              {whitelistLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <span className="text-[11px] text-white/30 animate-pulse">Loading…</span>
+                </div>
+              ) : (
+                <>
+                  {/* Built-in Commands */}
+                  <div>
+                    <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider">Built-in Commands</label>
+                    <div className="mt-2 flex flex-wrap gap-1.5">
+                      {defaultWhitelist.map((cmd) => (
+                        <span
+                          key={cmd}
+                          className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-[10px] text-white/30 font-mono"
+                        >
+                          {cmd}
+                        </span>
+                      ))}
+                      {defaultWhitelist.length === 0 && (
+                        <span className="text-[10px] text-white/20 italic">None</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Divider */}
+                  <div className="border-t border-white/[0.08]" />
+
+                  {/* Custom Commands */}
+                  <div>
+                    <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Custom Commands</label>
+                    <div className="mt-2 flex gap-2">
+                      <input
+                        type="text"
+                        value={whitelistInput}
+                        onChange={(e) => setWhitelistInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddWhitelistItem(); } }}
+                        placeholder="e.g. docker, yarn"
+                        className="ai-settings-input flex-1 min-w-0 rounded-md bg-white/[0.06] border border-white/[0.08] px-2.5 py-1.5 text-xs text-white/80 placeholder-white/20 outline-none focus:border-white/[0.2] focus:bg-white/[0.08] transition-colors"
+                      />
+                      <button
+                        onClick={handleAddWhitelistItem}
+                        disabled={!whitelistInput.trim()}
+                        className="rounded-md px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-500/20 hover:bg-blue-600/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                      >
+                        Add
+                      </button>
+                    </div>
+                    <div className="mt-2.5 space-y-1">
+                      {userWhitelist.map((cmd) => (
+                        <div
+                          key={cmd}
+                          className="group flex items-center justify-between rounded-md bg-white/[0.06] border border-white/[0.08] px-2.5 py-1.5 transition-colors hover:bg-white/[0.08]"
+                        >
+                          <span className="text-xs text-white/70 font-mono truncate">{cmd}</span>
+                          <button
+                            onClick={() => handleRemoveWhitelistItem(cmd)}
+                            className="ml-2 shrink-0 text-white/20 hover:text-red-400 transition-colors p-0.5 rounded"
+                            aria-label={`Remove ${cmd}`}
+                          >
+                            <X className="w-3 h-3" />
+                          </button>
+                        </div>
+                      ))}
+                      {userWhitelist.length === 0 && (
+                        <p className="text-[10px] text-white/20 italic py-1">No custom commands added</p>
+                      )}
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+          {!noProfile && !showSettings && chatMessages.length === 0 && (
             <div className="flex items-center justify-center h-full">
               <p className="text-white/40 text-sm text-center px-8">
                 Ask me about your environments, MCP servers, or commands
               </p>
             </div>
           )}
-          {chatMessages.map((msg) => (
+          {!showSettings && chatMessages.map((msg) => (
             <div
               key={msg.id}
               className={`flex gap-3 ${msg.role === 'user' ? 'flex-row-reverse' : 'flex-row'}`}
@@ -928,7 +1059,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               </div>
             </div>
           ))}
-          <div ref={messagesEndRef} />
+          {!showSettings && <div ref={messagesEndRef} />}
         </div>
 
         {/* Terminal command confirmation */}
