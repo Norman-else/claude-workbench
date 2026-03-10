@@ -278,7 +278,7 @@ export interface CommandConfirmation {
   workingDirectory: string;
 }
 
-export interface TerminalWhitelistResponse {
-  defaultWhitelist: string[];
-  userWhitelist: string[];
+export interface TerminalConfirmCommandsResponse {
+  defaultCommands: string[];
+  userCommands: string[];
 }

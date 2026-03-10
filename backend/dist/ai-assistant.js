@@ -564,11 +564,7 @@ If the user asks about current events, real-time information, or anything requir
                             const command = typeof toolInput.command === 'string' ? toolInput.command : '';
                             const cwd = resolveCommandCwd(toolInput);
                             const timeoutMs = typeof toolInput.timeout_ms === 'number' ? Math.min(Math.max(1000, toolInput.timeout_ms), 120_000) : 30_000;
-                            if (await isWhitelistedCommand(command)) {
-                                // Auto-execute whitelisted commands
-                                result = await handleExecuteTerminalCommand(command, cwd, timeoutMs);
-                            }
-                            else {
+                            if (await requiresConfirmation(command)) {
                                 // Send confirmation request to frontend and wait
                                 const requestId = crypto.randomUUID();
                                 sendSSE({
@@ -592,6 +588,10 @@ If the user asks about current events, real-time information, or anything requir
                                 else {
                                     result = JSON.stringify({ error: 'Command rejected by user', command });
                                 }
+                            }
+                            else {
+                                // Auto-execute safe commands
+                                result = await handleExecuteTerminalCommand(command, cwd, timeoutMs);
                             }
                         }
                         else {
@@ -692,33 +692,33 @@ If the user asks about current events, real-time information, or anything requir
         pending.resolve(approved === true);
         res.json({ success: true, approved: approved === true });
     });
-    // GET /api/ai/terminal-whitelist — Return default + user-defined whitelist
-    app.get('/api/ai/terminal-whitelist', async (_req, res) => {
+    // GET /api/ai/terminal-confirm-commands — Return default + user-defined confirmation command list
+    app.get('/api/ai/terminal-confirm-commands', async (_req, res) => {
         try {
-            const userWhitelist = await getUserTerminalWhitelist();
+            const userCommands = await getUserConfirmCommands();
             res.json({
-                defaultWhitelist: DEFAULT_TERMINAL_COMMAND_WHITELIST,
-                userWhitelist,
+                defaultCommands: DEFAULT_CONFIRM_COMMANDS,
+                userCommands,
             });
         }
         catch (err) {
             res.status(500).json({ error: err.message });
         }
     });
-    // PUT /api/ai/terminal-whitelist — Save user-defined whitelist
-    app.put('/api/ai/terminal-whitelist', async (req, res) => {
+    // PUT /api/ai/terminal-confirm-commands — Save user-defined confirmation command list
+    app.put('/api/ai/terminal-confirm-commands', async (req, res) => {
         try {
-            const { userWhitelist } = req.body;
-            if (!Array.isArray(userWhitelist)) {
-                res.status(400).json({ error: 'userWhitelist must be an array of strings' });
+            const { userCommands } = req.body;
+            if (!Array.isArray(userCommands)) {
+                res.status(400).json({ error: 'userCommands must be an array of strings' });
                 return;
             }
-            const cleaned = userWhitelist
+            const cleaned = userCommands
                 .filter((item) => typeof item === 'string')
                 .map(s => s.trim())
                 .filter(s => s.length > 0);
-            await saveUserTerminalWhitelist(cleaned);
-            res.json({ success: true, userWhitelist: cleaned });
+            await saveUserConfirmCommands(cleaned);
+            res.json({ success: true, userCommands: cleaned });
         }
         catch (err) {
             res.status(500).json({ error: err.message });
@@ -843,7 +843,7 @@ File System:
 - write_local_path: Write text content to a local file (home directory or project directory)
 
 Terminal:
-- execute_terminal_command: Execute a shell command on the user's machine. Safe read-only commands run automatically; others require user confirmation.
+- execute_terminal_command: Execute a shell command on the user's machine. Most commands run automatically. Dangerous commands (rm, kill, sudo, etc.) require user confirmation. Users can configure which commands need confirmation.
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
@@ -1636,7 +1636,7 @@ export const toolDefinitions = [
     },
     {
         name: 'execute_terminal_command',
-        description: 'Execute a terminal/shell command on the user\'s machine. Safe read-only commands (ls, cat, git status, etc.) execute automatically. Other commands require user confirmation before execution. Use this when the user asks to run shell commands, check system state, or perform operations that need terminal access.',
+        description: 'Execute a terminal/shell command on the user\'s machine. Most commands execute automatically. Dangerous commands (rm, kill, sudo, format, etc.) require user confirmation. Supports both Unix shells and Windows PowerShell.',
         input_schema: {
             type: 'object',
             properties: {
@@ -2664,41 +2664,71 @@ async function handleWriteLocalPath(input) {
 // ============================================================
 // Terminal command execution
 // ============================================================
-// Default whitelist of command prefixes that are safe to auto-execute without user confirmation.
-// These are read-only / informational commands that don't modify system state.
-const DEFAULT_TERMINAL_COMMAND_WHITELIST = [
-    // File system inspection (read-only)
-    'ls', 'dir', 'pwd', 'find', 'which', 'whereis', 'file', 'stat', 'du', 'df',
-    'wc', 'head', 'tail', 'cat', 'less', 'more', 'tree',
-    // Text search / processing (read-only)
-    'grep', 'rg', 'ag', 'ack', 'sed -n', 'awk',
-    // Git inspection (read-only)
-    'git status', 'git log', 'git diff', 'git branch', 'git remote', 'git tag',
-    'git show', 'git blame', 'git shortlog', 'git stash list', 'git rev-parse',
-    'git config --get', 'git config --list', 'git ls-files', 'git describe',
-    // Package manager inspection (read-only)
-    'npm list', 'npm ls', 'npm view', 'npm outdated', 'npm config list',
-    'yarn list', 'yarn info', 'yarn why',
-    'pip list', 'pip show', 'pip freeze',
-    'cargo metadata',
-    // System info (read-only)
-    'echo', 'date', 'uptime', 'whoami', 'hostname', 'uname', 'env', 'printenv',
-    'node --version', 'npm --version', 'python --version', 'pip --version',
-    'java -version', 'go version', 'rustc --version', 'cargo --version',
-    // Process inspection (read-only)
-    'ps', 'top -l 1', 'lsof',
-    // Network inspection (read-only)
-    'curl -I', 'curl --head', 'ping -c', 'dig', 'nslookup', 'host',
+// Default list of dangerous command prefixes that require user confirmation before execution.
+// Commands NOT in this list (or the user-defined list) will auto-execute.
+const DEFAULT_CONFIRM_COMMANDS = [
+    // Destructive file operations
+    'rm', 'rmdir', 'del', 'rd',
+    'mv', 'move',
+    'shred', 'wipe',
+    // Elevated / system-level
+    'sudo', 'su',
+    'runas',
+    'doas',
+    // System control
+    'shutdown', 'reboot', 'poweroff', 'halt', 'init',
+    'systemctl stop', 'systemctl disable', 'systemctl restart',
+    // Disk / format
+    'mkfs', 'fdisk', 'dd', 'parted', 'diskutil eraseDisk', 'diskutil partitionDisk',
+    'format', // Windows format
+    // Process control
+    'kill', 'killall', 'pkill',
+    'taskkill', // Windows
+    'Stop-Process', // PowerShell
+    // Package install / modify (may change system state)
+    'npm install', 'npm i', 'npm uninstall', 'npm update', 'npm ci',
+    'yarn add', 'yarn remove', 'yarn install',
+    'pnpm add', 'pnpm remove', 'pnpm install',
+    'pip install', 'pip uninstall',
+    'apt install', 'apt remove', 'apt purge', 'apt-get install', 'apt-get remove',
+    'brew install', 'brew uninstall', 'brew remove',
+    'cargo install', 'cargo uninstall',
+    'choco install', 'choco uninstall', // Windows Chocolatey
+    'winget install', 'winget uninstall', // Windows winget
+    'Install-Module', 'Uninstall-Module', // PowerShell
+    // Git write operations
+    'git push', 'git push --force', 'git reset --hard', 'git clean',
+    'git rebase', 'git merge', 'git checkout -b',
+    // Docker / container
+    'docker rm', 'docker rmi', 'docker stop', 'docker kill',
+    'docker system prune', 'docker volume rm', 'docker network rm',
+    // Dangerous network
+    'iptables', 'ufw', 'netsh', // Windows netsh
+    // Registry (Windows)
+    'reg delete', 'reg add',
+    'Remove-Item', 'Remove-ItemProperty', // PowerShell
+    // Permissions
+    'chmod', 'chown', 'chgrp',
+    'icacls', 'takeown', // Windows
+    // Environment modification
+    'export', 'unset', 'setx', // Windows setx
+    '[Environment]::SetEnvironmentVariable', // PowerShell
+    // Service management (Windows)
+    'sc delete', 'sc stop',
+    'Stop-Service', 'Remove-Service', // PowerShell
+    // Database
+    'dropdb', 'drop database', 'DROP DATABASE',
+    'mongo --eval', 'redis-cli FLUSHALL', 'redis-cli FLUSHDB',
 ];
 /**
- * Read user-defined whitelist from settings.json.
+ * Read user-defined confirmation command list from settings.json.
  * Returns an empty array if not configured.
  */
-async function getUserTerminalWhitelist() {
+async function getUserConfirmCommands() {
     try {
         const raw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
         const settings = JSON.parse(raw);
-        const list = settings.terminalCommandWhitelist;
+        const list = settings.terminalConfirmCommands;
         if (Array.isArray(list)) {
             return list.filter((item) => typeof item === 'string' && item.trim().length > 0);
         }
@@ -2707,31 +2737,33 @@ async function getUserTerminalWhitelist() {
     return [];
 }
 /**
- * Save user-defined whitelist to settings.json (merges with existing settings).
+ * Save user-defined confirmation command list to settings.json (merges with existing settings).
  */
-async function saveUserTerminalWhitelist(whitelist) {
+async function saveUserConfirmCommands(commands) {
     let settings = {};
     try {
         const raw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
         settings = JSON.parse(raw);
     }
     catch { /* start fresh */ }
-    settings.terminalCommandWhitelist = whitelist;
+    settings.terminalConfirmCommands = commands;
     await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
 }
 /**
- * Check if a command matches the auto-execute whitelist (default + user-defined).
- * The command is trimmed and compared against whitelist prefixes.
+ * Check if a command requires user confirmation before execution.
+ * Returns true if the command matches any prefix in the default + user-defined confirmation list.
  */
-async function isWhitelistedCommand(command) {
+async function requiresConfirmation(command) {
     const trimmed = command.trim();
-    const userWhitelist = await getUserTerminalWhitelist();
-    const combined = [...DEFAULT_TERMINAL_COMMAND_WHITELIST, ...userWhitelist];
+    const userCommands = await getUserConfirmCommands();
+    const combined = [...DEFAULT_CONFIRM_COMMANDS, ...userCommands];
     return combined.some(prefix => {
-        // Exact match or prefix match followed by space/end
-        if (trimmed === prefix)
+        // Case-insensitive prefix matching for cross-platform support
+        const lowerTrimmed = trimmed.toLowerCase();
+        const lowerPrefix = prefix.toLowerCase();
+        if (lowerTrimmed === lowerPrefix)
             return true;
-        if (trimmed.startsWith(prefix + ' '))
+        if (lowerTrimmed.startsWith(lowerPrefix + ' '))
             return true;
         return false;
     });
@@ -2739,16 +2771,30 @@ async function isWhitelistedCommand(command) {
 // Map to hold pending command confirmations: requestId -> { resolve, reject, command, cwd }
 const pendingCommandConfirmations = new Map();
 /**
+ * Detect the appropriate shell for the current platform.
+ * On Windows: uses PowerShell (pwsh if available, otherwise powershell.exe)
+ * On Unix: uses SHELL env var, defaults to /bin/sh
+ */
+function getShell() {
+    if (process.platform === 'win32') {
+        // Prefer PowerShell Core (pwsh) over Windows PowerShell
+        return process.env.COMSPEC ? 'powershell.exe' : 'powershell.exe';
+    }
+    return process.env.SHELL || '/bin/sh';
+}
+/**
  * Execute a terminal command with timeout and output limits.
+ * Supports Unix shells and Windows PowerShell.
  */
 async function executeShellCommand(command, cwd, timeoutMs) {
     const { exec } = await import('child_process');
+    const shell = getShell();
     return new Promise((resolve) => {
         const child = exec(command, {
             cwd,
             timeout: timeoutMs,
             maxBuffer: 1_048_576, // 1MB max output
-            shell: process.env.SHELL || '/bin/sh',
+            shell,
             env: { ...process.env },
         }, (error, stdout, stderr) => {
             const exitCode = error ? error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? -2 : (child.exitCode ?? 1) : 0;

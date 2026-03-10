@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe, Clock, Layers, Server, Terminal, Zap, ShoppingBag, Settings, HardDrive, Package } from 'lucide-react';
 import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment, SavedProject } from '../types';
-import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects, getTerminalWhitelist, saveTerminalWhitelist } from '../api';
+import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects, getTerminalConfirmCommands, saveTerminalConfirmCommands } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
 import { useProject } from '../ProjectContext';
 import ReactMarkdown from 'react-markdown';
@@ -161,10 +161,10 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
 
   // ── Settings panel state ──
   const [showSettings, setShowSettings] = useState(false);
-  const [defaultWhitelist, setDefaultWhitelist] = useState<string[]>([]);
-  const [userWhitelist, setUserWhitelist] = useState<string[]>([]);
-  const [whitelistInput, setWhitelistInput] = useState('');
-  const [whitelistLoading, setWhitelistLoading] = useState(false);
+  const [defaultConfirmCmds, setDefaultConfirmCmds] = useState<string[]>([]);
+  const [userConfirmCmds, setUserConfirmCmds] = useState<string[]>([]);
+  const [confirmCmdInput, setConfirmCmdInput] = useState('');
+  const [confirmCmdsLoading, setConfirmCmdsLoading] = useState(false);
 
   // Compute filtered tools for slash command menu
   const slashFilteredTools = useMemo(() => {
@@ -319,23 +319,23 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => { cancelled = true; };
   }, [isOpen]);
 
-  // ── Fetch whitelist when settings panel opens ──
+  // ── Fetch confirmation commands when settings panel opens ──
   useEffect(() => {
     if (!showSettings) return;
     let cancelled = false;
-    setWhitelistLoading(true);
-    getTerminalWhitelist()
+    setConfirmCmdsLoading(true);
+    getTerminalConfirmCommands()
       .then((data) => {
         if (cancelled) return;
-        setDefaultWhitelist(data.defaultWhitelist);
-        setUserWhitelist(data.userWhitelist);
+        setDefaultConfirmCmds(data.defaultCommands);
+        setUserConfirmCmds(data.userCommands);
       })
       .catch(() => {
         if (cancelled) return;
-        setDefaultWhitelist([]);
-        setUserWhitelist([]);
+        setDefaultConfirmCmds([]);
+        setUserConfirmCmds([]);
       })
-      .finally(() => { if (!cancelled) setWhitelistLoading(false); });
+      .finally(() => { if (!cancelled) setConfirmCmdsLoading(false); });
     return () => { cancelled = true; };
   }, [showSettings]);
 
@@ -395,21 +395,21 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     }
   }, [activeConversationId, conversations]);
 
-  const handleAddWhitelistItem = useCallback(async () => {
-    const newItem = whitelistInput.trim();
+  const handleAddConfirmCmd = useCallback(async () => {
+    const newItem = confirmCmdInput.trim();
     if (!newItem) return;
-    if (userWhitelist.includes(newItem) || defaultWhitelist.includes(newItem)) return;
-    const updated = [...userWhitelist, newItem];
-    setUserWhitelist(updated);
-    setWhitelistInput('');
-    try { await saveTerminalWhitelist(updated); } catch { /* save failed */ }
-  }, [whitelistInput, userWhitelist, defaultWhitelist]);
+    if (userConfirmCmds.includes(newItem) || defaultConfirmCmds.includes(newItem)) return;
+    const updated = [...userConfirmCmds, newItem];
+    setUserConfirmCmds(updated);
+    setConfirmCmdInput('');
+    try { await saveTerminalConfirmCommands(updated); } catch { /* save failed */ }
+  }, [confirmCmdInput, userConfirmCmds, defaultConfirmCmds]);
 
-  const handleRemoveWhitelistItem = useCallback(async (item: string) => {
-    const filtered = userWhitelist.filter(i => i !== item);
-    setUserWhitelist(filtered);
-    try { await saveTerminalWhitelist(filtered); } catch { /* save failed */ }
-  }, [userWhitelist]);
+  const handleRemoveConfirmCmd = useCallback(async (item: string) => {
+    const filtered = userConfirmCmds.filter(i => i !== item);
+    setUserConfirmCmds(filtered);
+    try { await saveTerminalConfirmCommands(filtered); } catch { /* save failed */ }
+  }, [userConfirmCmds]);
 
   const handleSwitchConversation = useCallback((id: string) => {
     prevMessageCountRef.current = 0;
@@ -890,20 +890,23 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
               {/* Section header */}
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-white/50" />
-                <h3 className="text-xs font-semibold text-white/70 tracking-wide uppercase">Terminal Command Whitelist</h3>
+                <h3 className="text-xs font-semibold text-white/70 tracking-wide uppercase">Commands Requiring Confirmation</h3>
               </div>
+              <p className="text-[11px] text-white/30 leading-relaxed -mt-2">
+                Commands matching these prefixes will require your approval before running. All other commands execute automatically.
+              </p>
 
-              {whitelistLoading ? (
+              {confirmCmdsLoading ? (
                 <div className="flex items-center justify-center py-8">
                   <span className="text-[11px] text-white/30 animate-pulse">Loading…</span>
                 </div>
               ) : (
                 <>
-                  {/* Built-in Commands */}
+                  {/* Built-in Dangerous Commands */}
                   <div>
-                    <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider">Built-in Commands</label>
+                    <label className="text-[10px] font-medium text-white/30 uppercase tracking-wider">Built-in</label>
                     <div className="mt-2 flex flex-wrap gap-1.5">
-                      {defaultWhitelist.map((cmd) => (
+                      {defaultConfirmCmds.map((cmd) => (
                         <span
                           key={cmd}
                           className="inline-flex items-center px-2 py-0.5 rounded-md bg-white/[0.04] border border-white/[0.06] text-[10px] text-white/30 font-mono"
@@ -911,7 +914,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                           {cmd}
                         </span>
                       ))}
-                      {defaultWhitelist.length === 0 && (
+                      {defaultConfirmCmds.length === 0 && (
                         <span className="text-[10px] text-white/20 italic">None</span>
                       )}
                     </div>
@@ -922,33 +925,33 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
 
                   {/* Custom Commands */}
                   <div>
-                    <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Custom Commands</label>
+                    <label className="text-[10px] font-medium text-white/40 uppercase tracking-wider">Custom</label>
                     <div className="mt-2 flex gap-2">
                       <input
                         type="text"
-                        value={whitelistInput}
-                        onChange={(e) => setWhitelistInput(e.target.value)}
-                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddWhitelistItem(); } }}
-                        placeholder="e.g. docker, yarn"
+                        value={confirmCmdInput}
+                        onChange={(e) => setConfirmCmdInput(e.target.value)}
+                        onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); handleAddConfirmCmd(); } }}
+                        placeholder="e.g. docker compose down, kubectl delete"
                         className="ai-settings-input flex-1 min-w-0 rounded-md bg-white/[0.06] border border-white/[0.08] px-2.5 py-1.5 text-xs text-white/80 placeholder-white/20 outline-none focus:border-white/[0.2] focus:bg-white/[0.08] transition-colors"
                       />
                       <button
-                        onClick={handleAddWhitelistItem}
-                        disabled={!whitelistInput.trim()}
+                        onClick={handleAddConfirmCmd}
+                        disabled={!confirmCmdInput.trim()}
                         className="rounded-md px-3 py-1.5 text-xs font-medium bg-blue-600/20 text-blue-400 border border-blue-500/20 hover:bg-blue-600/30 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
                       >
                         Add
                       </button>
                     </div>
                     <div className="mt-2.5 space-y-1">
-                      {userWhitelist.map((cmd) => (
+                      {userConfirmCmds.map((cmd) => (
                         <div
                           key={cmd}
                           className="group flex items-center justify-between rounded-md bg-white/[0.06] border border-white/[0.08] px-2.5 py-1.5 transition-colors hover:bg-white/[0.08]"
                         >
                           <span className="text-xs text-white/70 font-mono truncate">{cmd}</span>
                           <button
-                            onClick={() => handleRemoveWhitelistItem(cmd)}
+                            onClick={() => handleRemoveConfirmCmd(cmd)}
                             className="ml-2 shrink-0 text-white/20 hover:text-red-400 transition-colors p-0.5 rounded"
                             aria-label={`Remove ${cmd}`}
                           >
@@ -956,7 +959,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                           </button>
                         </div>
                       ))}
-                      {userWhitelist.length === 0 && (
+                      {userConfirmCmds.length === 0 && (
                         <p className="text-[10px] text-white/20 italic py-1">No custom commands added</p>
                       )}
                     </div>
