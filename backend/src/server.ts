@@ -1713,63 +1713,114 @@ app.get('/api/plugins/marketplace-plugin-details', async (req: Request, res: Res
       return;
     }
 
-    const pluginDir = path.join(MARKETPLACES_DIR, marketplace, pluginEntry.source);
-    try {
-      await fs.access(pluginDir);
-    } catch {
-      res.status(404).json({ error: `Plugin source directory not found` });
-      return;
-    }
-
+    const marketplaceDir = path.join(MARKETPLACES_DIR, marketplace);
     const commands: Array<{ name: string; filename: string }> = [];
     const skills: Array<{ name: string; filename: string }> = [];
     const agents: Array<{ name: string; filename: string; model?: string }> = [];
 
-    // Scan commands/
-    try {
-      const commandsDir = path.join(pluginDir, 'commands');
-      const commandEntries = await fs.readdir(commandsDir);
-      for (const entry of commandEntries) {
-        if (entry.endsWith('.md')) {
-          commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+    // Helper: scan a directory for standard commands/, skills/, agents/ layout + root-level skills
+    async function scanPluginDirectory(dir: string): Promise<void> {
+      // Scan commands/
+      try {
+        const commandsDir = path.join(dir, 'commands');
+        const commandEntries = await fs.readdir(commandsDir);
+        for (const entry of commandEntries) {
+          if (entry.endsWith('.md')) {
+            commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+          }
         }
-      }
-    } catch { /* directory doesn't exist */ }
+      } catch { /* directory doesn't exist */ }
 
-    // Scan skills/
-    try {
-      const skillsDir = path.join(pluginDir, 'skills');
-      const skillEntries = await fs.readdir(skillsDir);
-      for (const entry of skillEntries) {
-        const entryPath = path.join(skillsDir, entry);
-        const stat = await fs.stat(entryPath);
-        if (stat.isDirectory()) {
+      // Scan skills/ subdirectory (standard layout)
+      try {
+        const skillsDir = path.join(dir, 'skills');
+        const skillEntries = await fs.readdir(skillsDir);
+        for (const entry of skillEntries) {
+          const entryPath = path.join(skillsDir, entry);
+          const stat = await fs.stat(entryPath);
+          if (stat.isDirectory()) {
+            try {
+              await fs.access(path.join(entryPath, 'SKILL.md'));
+              skills.push({ name: entry, filename: 'SKILL.md' });
+            } catch { /* no SKILL.md */ }
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+
+      // Scan root-level for skills: subdirectories containing SKILL.md directly in pluginDir
+      try {
+        const rootEntries = await fs.readdir(dir, { withFileTypes: true });
+        for (const entry of rootEntries) {
+          if (entry.isDirectory() && !['commands', 'skills', 'agents', '.git', 'node_modules'].includes(entry.name) && !entry.name.startsWith('.')) {
+            try {
+              await fs.access(path.join(dir, entry.name, 'SKILL.md'));
+              if (!skills.some(s => s.name === entry.name)) {
+                skills.push({ name: entry.name, filename: 'SKILL.md' });
+              }
+            } catch { /* no SKILL.md in this subdir */ }
+          }
+        }
+      } catch { /* can't read directory */ }
+
+      // Check if root itself has SKILL.md (the plugin directory is itself a skill)
+      try {
+        await fs.access(path.join(dir, 'SKILL.md'));
+        const rootSkillName = path.basename(dir);
+        if (!skills.some(s => s.name === rootSkillName)) {
+          skills.push({ name: rootSkillName, filename: 'SKILL.md' });
+        }
+      } catch { /* no root SKILL.md */ }
+
+      // Scan agents/
+      try {
+        const agentsDir = path.join(dir, 'agents');
+        const agentEntries = await fs.readdir(agentsDir);
+        for (const entry of agentEntries) {
+          if (entry.endsWith('.md')) {
+            let model = '';
+            try {
+              const agentContent = await fs.readFile(path.join(agentsDir, entry), 'utf-8');
+              const { frontmatter } = parseFrontmatter(agentContent);
+              model = frontmatter.model ?? '';
+            } catch { /* ignore */ }
+            agents.push({ name: entry.replace(/\.md$/, ''), filename: entry, model });
+          }
+        }
+      } catch { /* directory doesn't exist */ }
+    }
+
+    // Case 1: Plugin has explicit skills array in manifest
+    if (pluginEntry.skills && pluginEntry.skills.length > 0) {
+      for (const skillPath of pluginEntry.skills) {
+        const relativePath = skillPath.replace(/^\.\//,  '');
+        const srcDir = path.join(marketplaceDir, relativePath);
+        try {
+          await fs.access(srcDir);
+          // Check if this path is a skill itself (has SKILL.md)
           try {
-            await fs.access(path.join(entryPath, 'SKILL.md'));
-            skills.push({ name: entry, filename: 'SKILL.md' });
-          } catch { /* no SKILL.md */ }
-        }
+            await fs.access(path.join(srcDir, 'SKILL.md'));
+            const skillName = path.basename(relativePath);
+            if (!skills.some(s => s.name === skillName)) {
+              skills.push({ name: skillName, filename: 'SKILL.md' });
+            }
+          } catch { /* not a direct skill */ }
+          // Also scan it as a plugin directory (may contain commands/skills/agents)
+          await scanPluginDirectory(srcDir);
+        } catch { /* source dir doesn't exist */ }
       }
-    } catch { /* directory doesn't exist */ }
+    }
+    // Case 2: String source — local directory within marketplace repo
+    else if (typeof pluginEntry.source === 'string') {
+      const pluginDir = path.join(marketplaceDir, pluginEntry.source);
+      try {
+        await fs.access(pluginDir);
+        await scanPluginDirectory(pluginDir);
+      } catch { /* source dir doesn't exist — continue to return manifest-level data */ }
+    }
+    // Case 3: Object source (e.g. { source: 'url', url: '...' }) — remote plugin
+    // Cannot scan locally; we'll return manifest-level data only (lspServers, etc.)
 
-    // Scan agents/
-    try {
-      const agentsDir = path.join(pluginDir, 'agents');
-      const agentEntries = await fs.readdir(agentsDir);
-      for (const entry of agentEntries) {
-        if (entry.endsWith('.md')) {
-          let model = '';
-          try {
-            const agentContent = await fs.readFile(path.join(agentsDir, entry), 'utf-8');
-            const { frontmatter } = parseFrontmatter(agentContent);
-            model = frontmatter.model ?? '';
-          } catch { /* ignore */ }
-          agents.push({ name: entry.replace(/\.md$/, ''), filename: entry, model });
-        }
-      }
-    } catch { /* directory doesn't exist */ }
-
-    // Extract lspServers from manifest (if any)
+    // Extract lspServers from manifest (works for all source types including remote)
     const lspServers: Array<{ name: string; command: string; extensions: string[] }> = [];
     const rawLsp = (pluginEntry as Record<string, unknown>).lspServers;
     if (rawLsp && typeof rawLsp === 'object') {
