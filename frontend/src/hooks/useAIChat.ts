@@ -6,7 +6,7 @@ interface UseAIChatReturn {
   messages: AIChatMessage[];
   isLoading: boolean;
   error: string | null;
-  sendMessage: (message: string, model: string, forceTool?: string, attachments?: AIAttachment[]) => Promise<void>;
+  sendMessage: (message: string, model: string, forceTool?: string, attachments?: AIAttachment[], projectPath?: string) => Promise<void>;
   stopGeneration: () => void;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
@@ -14,7 +14,7 @@ interface UseAIChatReturn {
 
 export function useAIChat(
   conversationId: string | null,
-  options?: { onToolCall?: (toolName: string) => void; onStreamComplete?: () => void }
+  options?: { onToolCall?: (toolName: string) => void; onStreamComplete?: () => void; projectPath?: string }
 ): UseAIChatReturn {
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
@@ -80,7 +80,7 @@ export function useAIChat(
 
     try {
       const apiAttachments = attachments?.map(a => ({ name: a.name, mediaType: a.mediaType, data: a.data }));
-      const response = await streamConversationChat(conversationId, message, model, controller.signal, forceTool, apiAttachments);
+      const response = await streamConversationChat(conversationId, message, model, controller.signal, forceTool, apiAttachments, options?.projectPath);
       if (!response.ok) {
         const errData = await response.json().catch(() => ({ error: 'Request failed' }));
         throw new Error((errData as { error?: string }).error || `HTTP ${response.status}`);
@@ -189,7 +189,7 @@ export function useAIChat(
       setIsLoading(false);
       abortControllerRef.current = null;
     }
-  }, [conversationId, options?.onToolCall, options?.onStreamComplete]);
+  }, [conversationId, options?.onToolCall, options?.onStreamComplete, options?.projectPath]);
 
   const stopGeneration = useCallback(() => {
     if (abortControllerRef.current) {

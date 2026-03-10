@@ -1,8 +1,9 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip } from 'lucide-react';
-import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment } from '../types';
-import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName } from '../api';
+import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe } from 'lucide-react';
+import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment, SavedProject } from '../types';
+import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
+import { useProject } from '../ProjectContext';
 import ReactMarkdown from 'react-markdown';
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter';
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism';
@@ -93,7 +94,32 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
         hasAutoNamed.current.delete(activeConversationId);
       });
   }, [activeConversationId, conversations, selectedModel]);
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, stopGeneration } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete });
+  const { projects: sidebarProjects } = useProject();
+  const [aiSelectedProject, setAiSelectedProject] = useState<SavedProject | null>(null);
+  const [aiProjects, setAiProjects] = useState<SavedProject[]>([]);
+  const [showProjectDropdown, setShowProjectDropdown] = useState(false);
+  const projectDropdownRef = useRef<HTMLDivElement>(null);
+  const currentProjectPath = aiSelectedProject?.path ?? undefined;
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, stopGeneration } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete, projectPath: currentProjectPath });
+
+  const handleProjectSwitch = useCallback(async (project: SavedProject | null) => {
+    const prevPath = aiSelectedProject?.path ?? null;
+    const newPath = project?.path ?? null;
+    if (prevPath === newPath) {
+      setShowProjectDropdown(false);
+      return;
+    }
+    setAiSelectedProject(project);
+    setShowProjectDropdown(false);
+    // Always create a new conversation on project switch to avoid stale context
+    try {
+      const newConv = await createConversation(newPath ?? undefined);
+      setConversations(prev => [newConv, ...prev]);
+      setActiveConversationId(newConv.id);
+    } catch {
+      // ignore
+    }
+  }, [aiSelectedProject]);
 
   const [input, setInput] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -207,6 +233,25 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     return () => document.removeEventListener('mousedown', handleConvListClick);
   }, [showConversationList]);
 
+  // Close project dropdown on outside click
+  useEffect(() => {
+    function handleProjectDropdownClick(e: MouseEvent) {
+      if (projectDropdownRef.current && !projectDropdownRef.current.contains(e.target as Node)) {
+        setShowProjectDropdown(false);
+      }
+    }
+    if (showProjectDropdown) {
+      document.addEventListener('mousedown', handleProjectDropdownClick);
+    }
+    return () => document.removeEventListener('mousedown', handleProjectDropdownClick);
+  }, [showProjectDropdown]);
+
+  // Load projects list when drawer opens or sidebar projects change
+  useEffect(() => {
+    if (!isOpen) return;
+    getProjects().then(setAiProjects).catch(() => setAiProjects([]));
+  }, [isOpen, sidebarProjects]);
+
 
   // ── Load conversations + models + tools on open ──
   useEffect(() => {
@@ -241,6 +286,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           if (cancelled) return;
           setConversations([newConv]);
           setActiveConversationId(newConv.id);
+          setAiSelectedProject(null);
         }
       })
       .catch(() => {
@@ -251,6 +297,22 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
       .finally(() => { if (!cancelled) setConversationsLoading(false); });
     return () => { cancelled = true; };
   }, [isOpen]);
+
+  // Restore project selection when active conversation or projects list changes
+  const initialProjectRestoredRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!activeConversationId || conversations.length === 0) return;
+    // Only auto-restore on conversation load, not during active editing
+    if (initialProjectRestoredRef.current === activeConversationId) return;
+    initialProjectRestoredRef.current = activeConversationId;
+    const conv = conversations.find(c => c.id === activeConversationId);
+    if (conv?.projectPath) {
+      const proj = aiProjects.find(p => p.path === conv.projectPath);
+      setAiSelectedProject(proj ?? { path: conv.projectPath, name: conv.projectPath.split('/').pop() || conv.projectPath, addedAt: '' });
+    } else {
+      setAiSelectedProject(null);
+    }
+  }, [activeConversationId, conversations, aiProjects]);
 
   const autoResize = () => {
     const ta = textareaRef.current;
@@ -263,14 +325,14 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
 
   const handleNewChat = useCallback(async () => {
     try {
-      const newConv = await createConversation();
+      const newConv = await createConversation(currentProjectPath);
       setConversations(prev => [newConv, ...prev]);
       setActiveConversationId(newConv.id);
       setShowConversationList(false);
     } catch {
       // Failed to create conversation
     }
-  }, []);
+  }, [currentProjectPath]);
 
   const handleDeleteConversation = useCallback(async () => {
     if (!activeConversationId) return;
@@ -296,7 +358,15 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
     prevMessageCountRef.current = 0;
     setActiveConversationId(id);
     setShowConversationList(false);
-  }, []);
+    // Restore project selection from conversation metadata
+    const conv = conversations.find(c => c.id === id);
+    if (conv?.projectPath) {
+      const proj = aiProjects.find(p => p.path === conv.projectPath);
+      setAiSelectedProject(proj ?? { path: conv.projectPath, name: conv.projectPath.split('/').pop() || conv.projectPath, addedAt: '' });
+    } else {
+      setAiSelectedProject(null);
+    }
+  }, [conversations, aiProjects]);
 
   const handleDeleteFromList = useCallback(async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -599,11 +669,19 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
                       }`} />
                       <div className="flex-1 min-w-0">
                         <span className="text-xs truncate block">{conv.name}</span>
-                        <span className={`text-[10px] ${
-                          conv.id === activeConversationId ? 'text-white/40' : 'text-white/20'
-                        }`}>
-                          {formatRelativeTime(conv.updatedAt)}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`text-[10px] ${
+                            conv.id === activeConversationId ? 'text-white/40' : 'text-white/20'
+                          }`}>
+                            {formatRelativeTime(conv.updatedAt)}
+                          </span>
+                          {conv.projectPath && (
+                            <span className="ai-conv-project-badge inline-flex items-center gap-0.5 text-[9px] px-1 py-0 rounded">
+                              <FolderOpen className="w-2.5 h-2.5" />
+                              {conv.projectPath.split('/').pop() || conv.projectPath}
+                            </span>
+                          )}
+                        </div>
                       </div>
                       {conversations.length > 1 && (
                         <button
@@ -654,6 +732,77 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           >
             <X className="w-5 h-5" />
           </button>
+        </div>
+
+        {/* Project scope bar */}
+        <div ref={projectDropdownRef} className="relative px-4 py-1.5 border-b border-white/[0.08] flex items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setShowProjectDropdown(v => !v)}
+            className="ai-project-trigger flex items-center gap-1.5 min-w-0 rounded-md px-2 py-1 transition-colors"
+          >
+            {aiSelectedProject ? (
+              <FolderOpen className="w-3 h-3 text-emerald-400 shrink-0" />
+            ) : (
+              <Globe className="w-3 h-3 text-white/40 shrink-0" />
+            )}
+            <span className={`text-[11px] font-medium truncate max-w-[180px] ${aiSelectedProject ? 'text-emerald-300' : 'text-white/50'}`}>
+              {aiSelectedProject ? aiSelectedProject.name : 'Global'}
+            </span>
+            <ChevronDown className={`w-2.5 h-2.5 text-white/25 shrink-0 transition-transform ${showProjectDropdown ? 'rotate-180' : ''}`} />
+          </button>
+          {aiSelectedProject && (
+            <span className="ai-project-path text-[10px] text-white/20 truncate flex-1 min-w-0" title={aiSelectedProject.path}>
+              {aiSelectedProject.path}
+            </span>
+          )}
+
+          {/* Project dropdown */}
+          {showProjectDropdown && (
+            <div className="ai-project-dropdown absolute top-full left-3 right-3 mt-1 rounded-lg border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in z-30">
+              <div className="max-h-[220px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
+                {/* Global option */}
+                <button
+                  type="button"
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    handleProjectSwitch(null);
+                  }}
+                  className={`ai-project-option w-full flex items-center gap-2 px-3 py-2 text-left transition-colors duration-75 ${
+                    !aiSelectedProject ? 'ai-project-option--active' : ''
+                  }`}
+                >
+                  <Globe className="w-3.5 h-3.5 shrink-0" />
+                  <span className="text-xs font-medium flex-1">Global</span>
+                  {!aiSelectedProject && <Check className="w-3 h-3 shrink-0 text-blue-400" />}
+                </button>
+                {/* Separator + project list */}
+                {aiProjects.length > 0 && (
+                  <div className="ai-project-divider border-t border-white/[0.06] mx-2" />
+                )}
+                {aiProjects.map((proj) => (
+                  <button
+                    key={proj.path}
+                    type="button"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      handleProjectSwitch(proj);
+                    }}
+                    className={`ai-project-option w-full flex items-center gap-2 px-3 py-2 text-left transition-colors duration-75 ${
+                      aiSelectedProject?.path === proj.path ? 'ai-project-option--active' : ''
+                    }`}
+                  >
+                    <FolderOpen className="w-3.5 h-3.5 shrink-0" />
+                    <div className="flex-1 min-w-0">
+                      <span className="text-xs font-medium truncate block">{proj.name}</span>
+                      <span className="ai-project-option-path text-[10px] truncate block">{proj.path}</span>
+                    </div>
+                    {aiSelectedProject?.path === proj.path && <Check className="w-3 h-3 shrink-0 text-emerald-400" />}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Messages area */}

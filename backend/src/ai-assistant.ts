@@ -13,6 +13,24 @@ const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_AGENTS_DIR = path.join(HOME_DIR, '.claude', 'agents');
+
+function resolveProjectPaths(projectPath?: string) {
+  if (!projectPath) {
+    return {
+      claudeJsonPath: CLAUDE_JSON_PATH,
+      commandsDir: CLAUDE_COMMANDS_DIR,
+      skillsDir: CLAUDE_SKILLS_DIR,
+      agentsDir: CLAUDE_AGENTS_DIR,
+    };
+  }
+  const resolved = path.resolve(projectPath);
+  return {
+    claudeJsonPath: path.join(resolved, '.mcp.json'),
+    commandsDir: path.join(resolved, '.claude', 'commands'),
+    skillsDir: path.join(resolved, '.claude', 'skills'),
+    agentsDir: path.join(resolved, '.claude', 'agents'),
+  };
+}
 const AI_HISTORY_PATH = path.join(HOME_DIR, '.claude', 'ai-assistant-history.json');
 const CONVERSATIONS_DIR = path.join(HOME_DIR, '.claude', 'ai-assistant-conversations');
 const CONVERSATIONS_INDEX_PATH = path.join(CONVERSATIONS_DIR, 'index.json');
@@ -178,14 +196,15 @@ export function registerAIAssistantRoutes(app: Express): void {
   });
 
   // POST /api/ai/conversations
-  app.post('/api/ai/conversations', async (_req: Request, res: Response) => {
+  app.post('/api/ai/conversations', async (req: Request, res: Response) => {
     try {
+      const { projectPath } = req.body as { projectPath?: string };
       const now = new Date().toISOString();
       const id = crypto.randomUUID();
-      const conv: ConversationFile = { id, name: 'New Chat', messages: [], createdAt: now, updatedAt: now };
+      const conv: ConversationFile = { id, name: 'New Chat', messages: [], createdAt: now, updatedAt: now, ...(projectPath ? { projectPath } : {}) };
       await saveConversation(conv);
       const index = await loadConversationIndex();
-      const meta: ConversationMeta = { id, name: conv.name, createdAt: now, updatedAt: now };
+      const meta: ConversationMeta = { id, name: conv.name, createdAt: now, updatedAt: now, ...(projectPath ? { projectPath } : {}) };
       index.conversations.unshift(meta);
       await saveConversationIndex(index);
       res.json(meta);
@@ -231,9 +250,9 @@ export function registerAIAssistantRoutes(app: Express): void {
   app.patch('/api/ai/conversations/:id', async (req: Request, res: Response) => {
     try {
       const { id } = req.params;
-      const { name } = req.body as { name: string };
-      if (!name || typeof name !== 'string') {
-        res.status(400).json({ error: 'name is required' });
+      const { name, projectPath } = req.body as { name?: string; projectPath?: string | null };
+      if (!name && projectPath === undefined) {
+        res.status(400).json({ error: 'name or projectPath is required' });
         return;
       }
       const conv = await loadConversation(id);
@@ -241,17 +260,31 @@ export function registerAIAssistantRoutes(app: Express): void {
         res.status(404).json({ error: 'Conversation not found' });
         return;
       }
-      conv.name = name;
+      if (name) conv.name = name;
+      if (projectPath !== undefined) {
+        if (projectPath === null) {
+          delete conv.projectPath;
+        } else {
+          conv.projectPath = projectPath;
+        }
+      }
       conv.updatedAt = new Date().toISOString();
       await saveConversation(conv);
       const index = await loadConversationIndex();
       const meta = index.conversations.find((c) => c.id === id);
       if (meta) {
-        meta.name = name;
+        if (name) meta.name = name;
+        if (projectPath !== undefined) {
+          if (projectPath === null) {
+            delete meta.projectPath;
+          } else {
+            meta.projectPath = projectPath;
+          }
+        }
         meta.updatedAt = conv.updatedAt;
         await saveConversationIndex(index);
       }
-      const updatedMeta: ConversationMeta = { id, name, createdAt: conv.createdAt, updatedAt: conv.updatedAt };
+      const updatedMeta: ConversationMeta = { id, name: conv.name, createdAt: conv.createdAt, updatedAt: conv.updatedAt, ...(conv.projectPath ? { projectPath: conv.projectPath } : {}) };
       res.json(updatedMeta);
     } catch (err) {
       res.status(500).json({ error: (err as Error).message });
@@ -314,7 +347,7 @@ export function registerAIAssistantRoutes(app: Express): void {
   // POST /api/ai/conversations/:id/chat — SSE streaming scoped to a conversation
   app.post('/api/ai/conversations/:id/chat', async (req: Request, res: Response) => {
     const { id } = req.params;
-    const { message, model, forceTool, attachments } = req.body as { message: string; model: string; forceTool?: string; attachments?: Array<{ name: string; mediaType: string; data: string }> };
+    const { message, model, forceTool, attachments, projectPath } = req.body as { message: string; model: string; forceTool?: string; attachments?: Array<{ name: string; mediaType: string; data: string }>; projectPath?: string };
 
     const creds = await getActiveProfileCredentials();
     if (!creds) {
@@ -480,8 +513,16 @@ File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
 - write_local_path: Write text content to a local file (home directory only)
 
+Project-scoped tools:
+Many tools accept an optional 'project_path' parameter. When provided, the tool operates on project-level configuration instead of global:
+- MCP servers read from {project_path}/.mcp.json instead of ~/.claude.json
+- Commands read from {project_path}/.claude/commands/ instead of ~/.claude/commands/
+- Skills read from {project_path}/.claude/skills/ instead of ~/.claude/skills/
+- Agents read from {project_path}/.claude/agents/ instead of ~/.claude/agents/
+When the user is working with a specific project, use project_path to scope operations to that project.
+
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
-If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
+If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.${projectPath ? `\n\nCurrent project context: The user is working in project "${projectPath}". For all project-scoped tools (MCP, commands, skills, agents), automatically use project_path: "${projectPath}" unless the user explicitly asks for global configuration.` : ''}`;
 
       const webSearchTool = [{
         type: 'web_search_20250305' as const,
@@ -540,7 +581,11 @@ If the user asks about current events, real-time information, or anything requir
 
           for (const toolBlock of toolUseBlocks) {
             if (toolBlock.name === 'web_search') continue;
-            const result = await executeToolHandler(toolBlock.name, toolBlock.input as ToolInput);
+            const toolInput = toolBlock.input as ToolInput;
+            if (projectPath && !toolInput.project_path) {
+              toolInput.project_path = projectPath;
+            }
+            const result = await executeToolHandler(toolBlock.name, toolInput);
             toolCallsForHistory.push({
               name: toolBlock.name,
               input: toolBlock.input as Record<string, unknown>,
@@ -960,6 +1005,7 @@ interface ConversationMeta {
   name: string;
   createdAt: string;
   updatedAt: string;
+  projectPath?: string;
 }
 
 interface ConversationIndex {
@@ -972,6 +1018,7 @@ interface ConversationFile {
   messages: AIChatMessageForHistory[];
   createdAt: string;
   updatedAt: string;
+  projectPath?: string;
 }
 
 // --- Conversation storage helpers ---
@@ -1217,22 +1264,22 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
   {
     name: 'get_mcp_server_statuses',
     description: 'Get the list of configured MCP servers from ~/.claude.json. Returns server names, commands, and whether env vars are configured.',
-    input_schema: { type: 'object', properties: {} },
+    input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
   },
   {
     name: 'list_commands',
     description: 'List custom Claude CLI slash-commands stored in ~/.claude/commands/. Returns command names and their first line as description.',
-    input_schema: { type: 'object', properties: {} },
+    input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
   },
   {
     name: 'list_skills',
     description: 'List agent skills stored in ~/.claude/skills/. Returns skill names and descriptions from SKILL.md files.',
-    input_schema: { type: 'object', properties: {} },
+    input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
   },
   {
     name: 'get_app_config',
     description: 'Get a high-level overview of the app config: active profile name, MCP server count, command count, skill count, and agent count. No credentials returned.',
-    input_schema: { type: 'object', properties: {} },
+    input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
   },
   {
     name: 'start_mcp_server',
@@ -1288,7 +1335,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Get the full content of a specific custom command by name.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Command name (without .md extension)' } },
+      properties: { name: { type: 'string', description: 'Command name (without .md extension)' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
@@ -1300,6 +1347,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       properties: {
         name: { type: 'string', description: 'Command name' },
         content: { type: 'string', description: 'Command content (markdown)' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'content'],
     },
@@ -1312,6 +1360,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       properties: {
         name: { type: 'string', description: 'Command name' },
         content: { type: 'string', description: 'New command content (markdown)' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'content'],
     },
@@ -1321,7 +1370,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Delete a custom command by name.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Command name to delete' } },
+      properties: { name: { type: 'string', description: 'Command name to delete' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
@@ -1330,7 +1379,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Get the full SKILL.md content for a specific skill.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Skill name' } },
+      properties: { name: { type: 'string', description: 'Skill name' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
@@ -1342,6 +1391,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       properties: {
         name: { type: 'string', description: 'Skill name' },
         content: { type: 'string', description: 'SKILL.md content' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'content'],
     },
@@ -1351,21 +1401,21 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Delete an agent skill by name.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Skill name to delete' } },
+      properties: { name: { type: 'string', description: 'Skill name to delete' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
   {
     name: 'list_agents',
     description: 'List user agents stored in ~/.claude/agents/. Returns agent names, descriptions, and model settings.',
-    input_schema: { type: 'object', properties: {} },
+    input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
   },
   {
     name: 'get_agent',
     description: 'Get the full content of a specific user agent by name.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Agent name (without .md extension)' } },
+      properties: { name: { type: 'string', description: 'Agent name (without .md extension)' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
@@ -1377,6 +1427,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       properties: {
         name: { type: 'string', description: 'Agent name (lowercase, numbers, hyphens, max 64 chars)' },
         content: { type: 'string', description: 'Agent content (markdown with frontmatter)' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'content'],
     },
@@ -1389,6 +1440,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       properties: {
         name: { type: 'string', description: 'Agent name to update' },
         content: { type: 'string', description: 'New agent content (markdown with frontmatter)' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'content'],
     },
@@ -1398,7 +1450,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Delete a user agent by name.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Agent name to delete' } },
+      properties: { name: { type: 'string', description: 'Agent name to delete' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
@@ -1579,6 +1631,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
       properties: {
         name: { type: 'string', description: 'Skill name to update' },
         content: { type: 'string', description: 'New SKILL.md content' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'content'],
     },
@@ -1593,6 +1646,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
         command: { type: 'string', description: 'Command to run (e.g. "npx", "node", "python")' },
         args: { type: 'array', items: { type: 'string' }, description: 'Command arguments' },
         env: { type: 'object', description: 'Environment variables as key-value pairs' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name', 'command'],
     },
@@ -1602,7 +1656,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
     description: 'Remove an MCP server from ~/.claude.json config by name.',
     input_schema: {
       type: 'object',
-      properties: { name: { type: 'string', description: 'Server name to remove' } },
+      properties: { name: { type: 'string', description: 'Server name to remove' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
       required: ['name'],
     },
   },
@@ -1616,6 +1670,7 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
         command: { type: 'string', description: 'New command' },
         args: { type: 'array', items: { type: 'string' }, description: 'New args' },
         env: { type: 'object', description: 'New environment variables' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
       },
       required: ['name'],
     },
@@ -1737,9 +1792,11 @@ async function handleDeactivateEnvironment(_input: ToolInput): Promise<string> {
   return JSON.stringify({ success: true, message: 'Deactivated active profile' });
 }
 
-async function handleGetMcpServerStatuses(_input: ToolInput): Promise<string> {
+async function handleGetMcpServerStatuses(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   try {
-    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
     const config = JSON.parse(content) as { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }> };
     const servers = config.mcpServers || {};
     const result = Object.entries(servers).map(([name, srv]) => ({
@@ -1754,13 +1811,15 @@ async function handleGetMcpServerStatuses(_input: ToolInput): Promise<string> {
   }
 }
 
-async function handleListCommands(_input: ToolInput): Promise<string> {
+async function handleListCommands(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   try {
-    const entries = await fs.readdir(CLAUDE_COMMANDS_DIR).catch(() => [] as string[]);
+    const entries = await fs.readdir(paths.commandsDir).catch(() => [] as string[]);
     const commands = [];
     for (const entry of entries.filter((e) => e.endsWith('.md'))) {
       try {
-        const content = await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, entry), 'utf-8');
+        const content = await fs.readFile(path.join(paths.commandsDir, entry), 'utf-8');
         const firstLine = content.split('\n').find((l) => l.trim()) || '';
         commands.push({ name: entry.replace(/\.md$/, ''), description: firstLine.replace(/^#+\s*/, '') });
       } catch {
@@ -1773,13 +1832,15 @@ async function handleListCommands(_input: ToolInput): Promise<string> {
   }
 }
 
-async function handleListSkills(_input: ToolInput): Promise<string> {
+async function handleListSkills(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   try {
-    const entries = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
+    const entries = await fs.readdir(paths.skillsDir, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
     const skills = [];
     for (const entry of entries.filter((e) => e.isDirectory())) {
       try {
-        const skillMdPath = path.join(CLAUDE_SKILLS_DIR, entry.name, 'SKILL.md');
+        const skillMdPath = path.join(paths.skillsDir, entry.name, 'SKILL.md');
         const content = await fs.readFile(skillMdPath, 'utf-8');
         const lines = content.split('\n').slice(0, 5).filter((l) => l.trim());
         const description = lines.find((l) => !l.startsWith('#') && !l.startsWith('---')) || '';
@@ -1794,32 +1855,34 @@ async function handleListSkills(_input: ToolInput): Promise<string> {
   }
 }
 
-async function handleGetAppConfig(_input: ToolInput): Promise<string> {
+async function handleGetAppConfig(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const creds = await getActiveProfileCredentials();
   const activeProfileName = creds ? 'Active profile found' : null;
 
   let mcpCount = 0;
   try {
-    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
     const config = JSON.parse(content) as { mcpServers?: Record<string, unknown> };
     mcpCount = Object.keys(config.mcpServers || {}).length;
   } catch { /* ignore */ }
 
   let commandCount = 0;
   try {
-    const entries = await fs.readdir(CLAUDE_COMMANDS_DIR).catch(() => [] as string[]);
+    const entries = await fs.readdir(paths.commandsDir).catch(() => [] as string[]);
     commandCount = entries.filter((e) => e.endsWith('.md')).length;
   } catch { /* ignore */ }
 
   let skillCount = 0;
   try {
-    const entries = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
+    const entries = await fs.readdir(paths.skillsDir, { withFileTypes: true }).catch(() => [] as import('fs').Dirent[]);
     skillCount = entries.filter((e) => e.isDirectory()).length;
   } catch { /* ignore */ }
 
   let agentCount = 0;
   try {
-    const entries = await fs.readdir(CLAUDE_AGENTS_DIR).catch(() => [] as string[]);
+    const entries = await fs.readdir(paths.agentsDir).catch(() => [] as string[]);
     agentCount = entries.filter((e) => e.endsWith('.md')).length;
   } catch { /* ignore */ }
 
@@ -1829,6 +1892,7 @@ async function handleGetAppConfig(_input: ToolInput): Promise<string> {
     commandCount,
     skillCount,
     agentCount,
+    ...(projectPath ? { projectPath } : {}),
   });
 }
 
@@ -1891,9 +1955,11 @@ async function handleGetMcpRuntimeStatus(input: ToolInput): Promise<string> {
 }
 
 async function handleGetCommand(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   try {
-    const content = await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, `${name}.md`), 'utf-8');
+    const content = await fs.readFile(path.join(paths.commandsDir, `${name}.md`), 'utf-8');
     return JSON.stringify({ name, content });
   } catch {
     return JSON.stringify({ error: `Command not found: ${name}` });
@@ -1901,10 +1967,11 @@ async function handleGetCommand(input: ToolInput): Promise<string> {
 }
 
 async function handleCreateCommand(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
   const name = input.name as string;
   const content = input.content as string;
   try {
-    const resp = await fetch('http://localhost:3001/api/commands', {
+    const resp = await fetch(`http://localhost:3001/api/commands${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content }),
@@ -1917,10 +1984,12 @@ async function handleCreateCommand(input: ToolInput): Promise<string> {
 }
 
 async function handleUpdateCommand(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   const content = input.content as string;
   try {
-    await fs.writeFile(path.join(CLAUDE_COMMANDS_DIR, `${name}.md`), content, 'utf-8');
+    await fs.writeFile(path.join(paths.commandsDir, `${name}.md`), content, 'utf-8');
     return JSON.stringify({ success: true });
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -1928,9 +1997,10 @@ async function handleUpdateCommand(input: ToolInput): Promise<string> {
 }
 
 async function handleDeleteCommand(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
   const name = input.name as string;
   try {
-    const resp = await fetch(`http://localhost:3001/api/commands/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const resp = await fetch(`http://localhost:3001/api/commands/${encodeURIComponent(name)}${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, { method: 'DELETE' });
     const data = await resp.json();
     return JSON.stringify(data);
   } catch (err) {
@@ -1939,9 +2009,11 @@ async function handleDeleteCommand(input: ToolInput): Promise<string> {
 }
 
 async function handleGetSkill(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   try {
-    const content = await fs.readFile(path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md'), 'utf-8');
+    const content = await fs.readFile(path.join(paths.skillsDir, name, 'SKILL.md'), 'utf-8');
     return JSON.stringify({ name, content });
   } catch {
     return JSON.stringify({ error: `Skill not found: ${name}` });
@@ -1949,10 +2021,11 @@ async function handleGetSkill(input: ToolInput): Promise<string> {
 }
 
 async function handleCreateSkill(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
   const name = input.name as string;
   const content = input.content as string;
   try {
-    const resp = await fetch('http://localhost:3001/api/skills', {
+    const resp = await fetch(`http://localhost:3001/api/skills${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content }),
@@ -1965,9 +2038,10 @@ async function handleCreateSkill(input: ToolInput): Promise<string> {
 }
 
 async function handleDeleteSkill(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
   const name = input.name as string;
   try {
-    const resp = await fetch(`http://localhost:3001/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const resp = await fetch(`http://localhost:3001/api/skills/${encodeURIComponent(name)}${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, { method: 'DELETE' });
     const data = await resp.json();
     return JSON.stringify(data);
   } catch (err) {
@@ -1975,13 +2049,15 @@ async function handleDeleteSkill(input: ToolInput): Promise<string> {
   }
 }
 
-async function handleListAgents(_input: ToolInput): Promise<string> {
+async function handleListAgents(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   try {
-    const entries = await fs.readdir(CLAUDE_AGENTS_DIR).catch(() => [] as string[]);
+    const entries = await fs.readdir(paths.agentsDir).catch(() => [] as string[]);
     const agents = [];
     for (const entry of entries.filter((e) => e.endsWith('.md'))) {
       try {
-        const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, entry), 'utf-8');
+        const content = await fs.readFile(path.join(paths.agentsDir, entry), 'utf-8');
         const parsed = parseFrontmatter(content);
         agents.push({
           name: entry.replace(/\.md$/, ''),
@@ -1999,9 +2075,11 @@ async function handleListAgents(_input: ToolInput): Promise<string> {
 }
 
 async function handleGetAgent(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   try {
-    const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), 'utf-8');
+    const content = await fs.readFile(path.join(paths.agentsDir, `${name}.md`), 'utf-8');
     return JSON.stringify({ name, content });
   } catch {
     return JSON.stringify({ error: `Agent not found: ${name}` });
@@ -2009,10 +2087,11 @@ async function handleGetAgent(input: ToolInput): Promise<string> {
 }
 
 async function handleCreateAgent(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
   const name = input.name as string;
   const content = input.content as string;
   try {
-    const resp = await fetch('http://localhost:3001/api/agents', {
+    const resp = await fetch(`http://localhost:3001/api/agents${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name, content }),
@@ -2025,10 +2104,12 @@ async function handleCreateAgent(input: ToolInput): Promise<string> {
 }
 
 async function handleUpdateAgent(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   const content = input.content as string;
   try {
-    const filePath = path.join(CLAUDE_AGENTS_DIR, `${name}.md`);
+    const filePath = path.join(paths.agentsDir, `${name}.md`);
     await fs.access(filePath);
     await fs.writeFile(filePath, content, 'utf-8');
     return JSON.stringify({ success: true });
@@ -2038,9 +2119,10 @@ async function handleUpdateAgent(input: ToolInput): Promise<string> {
 }
 
 async function handleDeleteAgent(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
   const name = input.name as string;
   try {
-    const resp = await fetch(`http://localhost:3001/api/agents/${encodeURIComponent(name)}`, { method: 'DELETE' });
+    const resp = await fetch(`http://localhost:3001/api/agents/${encodeURIComponent(name)}${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, { method: 'DELETE' });
     const data = await resp.json();
     return JSON.stringify(data);
   } catch (err) {
@@ -2483,10 +2565,12 @@ async function handleGetCurrentDatetime(_input: ToolInput): Promise<string> {
 }
 
 async function handleUpdateSkill(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   const content = input.content as string;
   try {
-    const skillPath = path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md');
+    const skillPath = path.join(paths.skillsDir, name, 'SKILL.md');
     // Check skill exists
     try {
       await fs.access(skillPath);
@@ -2501,12 +2585,14 @@ async function handleUpdateSkill(input: ToolInput): Promise<string> {
 }
 
 async function handleAddMcpServer(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   const command = input.command as string;
   const args = (input.args as string[]) || [];
   const env = (input.env as Record<string, string>) || undefined;
   try {
-    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
     const config = JSON.parse(content) as { mcpServers?: Record<string, unknown>; [key: string]: unknown };
     if (!config.mcpServers) config.mcpServers = {};
     if (config.mcpServers[name]) {
@@ -2515,7 +2601,7 @@ async function handleAddMcpServer(input: ToolInput): Promise<string> {
     const entry: { command: string; args: string[]; env?: Record<string, string> } = { command, args };
     if (env) entry.env = env;
     config.mcpServers[name] = entry;
-    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    await fs.writeFile(paths.claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
     return JSON.stringify({ success: true, message: `Added MCP server: ${name}` });
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -2523,15 +2609,17 @@ async function handleAddMcpServer(input: ToolInput): Promise<string> {
 }
 
 async function handleRemoveMcpServer(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   try {
-    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
     const config = JSON.parse(content) as { mcpServers?: Record<string, unknown>; [key: string]: unknown };
     if (!config.mcpServers || !config.mcpServers[name]) {
       return JSON.stringify({ error: `MCP server not found: ${name}` });
     }
     delete config.mcpServers[name];
-    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    await fs.writeFile(paths.claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
     return JSON.stringify({ success: true, message: `Removed MCP server: ${name}` });
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
@@ -2539,9 +2627,11 @@ async function handleRemoveMcpServer(input: ToolInput): Promise<string> {
 }
 
 async function handleUpdateMcpServer(input: ToolInput): Promise<string> {
+  const projectPath = input.project_path as string | undefined;
+  const paths = resolveProjectPaths(projectPath);
   const name = input.name as string;
   try {
-    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+    const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
     const config = JSON.parse(content) as { mcpServers?: Record<string, { command: string; args?: string[]; env?: Record<string, string> }>; [key: string]: unknown };
     if (!config.mcpServers || !config.mcpServers[name]) {
       return JSON.stringify({ error: `MCP server not found: ${name}` });
@@ -2551,7 +2641,7 @@ async function handleUpdateMcpServer(input: ToolInput): Promise<string> {
     if (input.args !== undefined) server.args = input.args as string[];
     if (input.env !== undefined) server.env = input.env as Record<string, string>;
     config.mcpServers[name] = server;
-    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+    await fs.writeFile(paths.claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
     return JSON.stringify({ success: true, message: `Updated MCP server: ${name}` });
   } catch (err) {
     return JSON.stringify({ error: (err as Error).message });
