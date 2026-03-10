@@ -1049,6 +1049,102 @@ html[data-theme="light"] .ai-conversation-list button:hover {
 }
 
 /* ======================================================
+   AI Project Scope Selector
+   ====================================================== */
+.ai-project-trigger {
+  background: transparent;
+}
+.ai-project-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.ai-project-dropdown {
+  background: #18181b;
+  backdrop-filter: blur(16px);
+}
+.ai-project-option {
+  color: rgba(255, 255, 255, 0.7);
+}
+.ai-project-option svg {
+  color: rgba(255, 255, 255, 0.3);
+}
+.ai-project-option:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.ai-project-option--active {
+  background: rgba(59, 130, 246, 0.12);
+  color: #fff;
+}
+.ai-project-option--active svg {
+  color: #60a5fa;
+}
+.ai-project-option-path {
+  color: rgba(255, 255, 255, 0.2);
+}
+
+/* Light mode */
+html[data-theme="light"] .ai-project-trigger:hover {
+  background: rgba(0, 0, 0, 0.05);
+}
+html[data-theme="light"] .ai-project-trigger .text-emerald-300 {
+  color: #059669 !important;
+}
+html[data-theme="light"] .ai-project-trigger .text-emerald-400 {
+  color: #059669 !important;
+}
+html[data-theme="light"] .ai-project-trigger .text-white\/50 {
+  color: rgba(0, 0, 0, 0.5) !important;
+}
+html[data-theme="light"] .ai-project-trigger .text-white\/40 {
+  color: rgba(0, 0, 0, 0.4) !important;
+}
+html[data-theme="light"] .ai-project-trigger .text-white\/25 {
+  color: rgba(0, 0, 0, 0.3) !important;
+}
+html[data-theme="light"] .ai-project-path {
+  color: rgba(0, 0, 0, 0.3) !important;
+}
+html[data-theme="light"] .ai-project-dropdown {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+html[data-theme="light"] .ai-project-option {
+  color: #374151;
+}
+html[data-theme="light"] .ai-project-option svg {
+  color: rgba(0, 0, 0, 0.3);
+}
+html[data-theme="light"] .ai-project-option:hover {
+  background: rgba(0, 0, 0, 0.04);
+}
+html[data-theme="light"] .ai-project-option--active {
+  background: rgba(37, 99, 235, 0.08);
+  color: #1e293b;
+}
+html[data-theme="light"] .ai-project-option--active svg {
+  color: #2563eb;
+}
+html[data-theme="light"] .ai-project-option--active .text-emerald-400 {
+  color: #059669 !important;
+}
+html[data-theme="light"] .ai-project-option-path {
+  color: rgba(0, 0, 0, 0.3);
+}
+html[data-theme="light"] .ai-project-divider {
+  border-color: rgba(0, 0, 0, 0.06) !important;
+}
+
+/* Conversation list project badge */
+.ai-conv-project-badge {
+  background: rgba(16, 185, 129, 0.15);
+  color: rgba(16, 185, 129, 0.7);
+}
+html[data-theme="light"] .ai-conv-project-badge {
+  background: rgba(5, 150, 105, 0.1);
+  color: rgba(5, 150, 105, 0.8);
+}
+
+/* ======================================================
    AI Slash Command Menu
    ====================================================== */
 .ai-slash-menu {
@@ -1383,4 +1479,89 @@ html[data-theme="light"] .version-popup-retry-btn {
 html[data-theme="light"] .version-popup-retry-btn:hover {
   background: rgba(220, 38, 38, 0.15);
   border-color: rgba(220, 38, 38, 0.35);
+}
+
+/* ======================================================
+   Project Selector — Light Mode Overrides
+   ====================================================== */
+
+/* Dropdown panel */
+html[data-theme="light"] .project-selector-dropdown {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.12), 0 2px 8px rgba(0, 0, 0, 0.06);
+}
+html[data-theme="light"] .project-selector-dropdown button:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Add project modal */
+html[data-theme="light"] .project-add-modal {
+  background: rgba(255, 255, 255, 0.98) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.15), 0 4px 12px rgba(0, 0, 0, 0.08);
+}
+
+/* ======================================================
+   Directory Browser — Light Mode Overrides
+   ====================================================== */
+
+html[data-theme="light"] .directory-browser {
+  background: rgba(255, 255, 255, 0.95) !important;
+  border-color: rgba(0, 0, 0, 0.12) !important;
+}
+
+html[data-theme="light"] .directory-browser .border-zinc-800 {
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Quick access buttons */
+html[data-theme="light"] .dir-browser-quick-btn {
+  color: #52525b;
+}
+html[data-theme="light"] .dir-browser-quick-btn:hover {
+  color: #18181b !important;
+  background: rgba(0, 0, 0, 0.06) !important;
+}
+html[data-theme="light"] .dir-browser-quick-btn.bg-zinc-700 {
+  background: #e4e4e7 !important;
+  color: #18181b !important;
+}
+
+/* Directory list items */
+html[data-theme="light"] .dir-browser-item:hover {
+  background: rgba(0, 0, 0, 0.04) !important;
+}
+
+/* Select button — keep white bg with dark text in light mode */
+html[data-theme="light"] .dir-browser-select-btn {
+  background: #18181b !important;
+  color: #ffffff !important;
+}
+html[data-theme="light"] .dir-browser-select-btn:hover {
+  background: #27272a !important;
+}
+
+/* Scrollbar inside directory list */
+.dir-browser-list::-webkit-scrollbar {
+  width: 6px;
+}
+.dir-browser-list::-webkit-scrollbar-track {
+  background: transparent;
+}
+.dir-browser-list::-webkit-scrollbar-thumb {
+  background: #3f3f46;
+  border-radius: 3px;
+}
+html[data-theme="light"] .dir-browser-list::-webkit-scrollbar-thumb {
+  background: #d4d4d8;
+}
+
+/* Hide horizontal scrollbar on breadcrumbs */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
 }
