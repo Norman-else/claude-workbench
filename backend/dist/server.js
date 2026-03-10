@@ -26,6 +26,7 @@ const CACHE_DIR = path.join(PLUGINS_DIR, 'cache');
 const KNOWN_MARKETPLACES_PATH = path.join(PLUGINS_DIR, 'known_marketplaces.json');
 const INSTALLED_PLUGINS_PATH = path.join(PLUGINS_DIR, 'installed_plugins.json');
 const PORT = 3001;
+const WORKBENCH_PROJECTS_PATH = path.join(HOME_DIR, '.claude', 'workbench-projects.json');
 // ============================================================
 // Git Helpers
 // ============================================================
@@ -215,7 +216,7 @@ function addLog(serverName, type, message) {
 const app = express();
 const isElectron = !!process.versions.electron;
 app.use(cors());
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '50mb' }));
 if (isElectron) {
     const frontendPath = path.join(__dirname, '../../frontend/dist');
     console.log(`[Server] Serving frontend static files from: ${frontendPath}`);
@@ -353,12 +354,37 @@ function validateAgentName(name) {
     return /^[a-z0-9-]{1,64}$/.test(name);
 }
 // ============================================================
+// Project-level config helper
+// ============================================================
+function resolveConfigPaths(projectPath) {
+    if (!projectPath) {
+        return {
+            commandsDir: CLAUDE_COMMANDS_DIR,
+            skillsDir: CLAUDE_SKILLS_DIR,
+            agentsDir: CLAUDE_AGENTS_DIR,
+            mcpConfigPath: CLAUDE_JSON_PATH,
+        };
+    }
+    // Validate path safety
+    const resolved = path.resolve(projectPath);
+    if (resolved.includes('..'))
+        throw new Error('Invalid project path');
+    return {
+        commandsDir: path.join(resolved, '.claude', 'commands'),
+        skillsDir: path.join(resolved, '.claude', 'skills'),
+        agentsDir: path.join(resolved, '.claude', 'agents'),
+        mcpConfigPath: path.join(resolved, '.mcp.json'),
+    };
+}
+// ============================================================
 // Routes: Claude config
 // ============================================================
-app.get('/api/claude-config', async (_req, res) => {
+app.get('/api/claude-config', async (req, res) => {
     try {
-        await ensureFileExists(CLAUDE_JSON_PATH, '{}');
-        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+        const projectPath = req.query.projectPath;
+        const { mcpConfigPath } = resolveConfigPaths(projectPath);
+        await ensureFileExists(mcpConfigPath, '{}');
+        const content = await fs.readFile(mcpConfigPath, 'utf-8');
         res.json(JSON.parse(content || '{}'));
     }
     catch (err) {
@@ -367,8 +393,11 @@ app.get('/api/claude-config', async (_req, res) => {
 });
 app.post('/api/claude-config', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { mcpConfigPath } = resolveConfigPaths(projectPath);
         const config = req.body;
-        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2));
+        await fs.mkdir(path.dirname(mcpConfigPath), { recursive: true });
+        await fs.writeFile(mcpConfigPath, JSON.stringify(config, null, 2));
         res.json({ success: true, message: 'Configuration saved successfully' });
     }
     catch (err) {
@@ -569,15 +598,129 @@ app.post('/api/claude-settings-content', async (req, res) => {
     }
 });
 // ============================================================
+// Routes: Projects
+// ============================================================
+app.get('/api/projects', async (_req, res) => {
+    try {
+        let projects = [];
+        try {
+            const raw = await fs.readFile(WORKBENCH_PROJECTS_PATH, 'utf-8');
+            const data = JSON.parse(raw);
+            projects = data.projects ?? [];
+        }
+        catch {
+            // File doesn't exist yet
+        }
+        res.json({ projects });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.post('/api/projects', async (req, res) => {
+    try {
+        const { path: projectPath } = req.body;
+        if (!projectPath)
+            return res.status(400).json({ error: 'path is required' });
+        const resolved = path.resolve(projectPath);
+        if (resolved.includes('..'))
+            return res.status(400).json({ error: 'Invalid project path' });
+        try {
+            const stats = await fs.stat(resolved);
+            if (!stats.isDirectory())
+                return res.status(400).json({ error: 'Path is not a directory' });
+        }
+        catch {
+            return res.status(400).json({ error: `Directory not found: ${resolved}` });
+        }
+        let projects = [];
+        try {
+            const raw = await fs.readFile(WORKBENCH_PROJECTS_PATH, 'utf-8');
+            const data = JSON.parse(raw);
+            projects = data.projects ?? [];
+        }
+        catch {
+            // File doesn't exist yet
+        }
+        if (projects.some((p) => p.path === resolved)) {
+            return res.status(409).json({ error: 'Project already exists' });
+        }
+        const name = path.basename(resolved);
+        const newProject = { path: resolved, name, addedAt: new Date().toISOString() };
+        projects.push(newProject);
+        await fs.mkdir(path.dirname(WORKBENCH_PROJECTS_PATH), { recursive: true });
+        await fs.writeFile(WORKBENCH_PROJECTS_PATH, JSON.stringify({ projects }, null, 2), 'utf-8');
+        res.json({ success: true, project: newProject });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.delete('/api/projects/:encodedPath', async (req, res) => {
+    try {
+        const decodedPath = Buffer.from(req.params.encodedPath, 'base64').toString('utf-8');
+        let projects = [];
+        try {
+            const raw = await fs.readFile(WORKBENCH_PROJECTS_PATH, 'utf-8');
+            const data = JSON.parse(raw);
+            projects = data.projects ?? [];
+        }
+        catch {
+            return res.status(404).json({ error: 'No projects found' });
+        }
+        const idx = projects.findIndex((p) => p.path === decodedPath);
+        if (idx === -1)
+            return res.status(404).json({ error: 'Project not found' });
+        projects.splice(idx, 1);
+        await fs.writeFile(WORKBENCH_PROJECTS_PATH, JSON.stringify({ projects }, null, 2), 'utf-8');
+        res.json({ success: true, message: 'Project removed' });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/projects/validate', async (req, res) => {
+    try {
+        const projectPath = req.query.path;
+        if (!projectPath)
+            return res.status(400).json({ error: 'path query parameter is required' });
+        const resolved = path.resolve(projectPath);
+        let exists = false;
+        let hasClaudeDir = false;
+        try {
+            const stats = await fs.stat(resolved);
+            exists = stats.isDirectory();
+        }
+        catch {
+            // Directory doesn't exist
+        }
+        if (exists) {
+            try {
+                await fs.access(path.join(resolved, '.claude'));
+                hasClaudeDir = true;
+            }
+            catch {
+                // No .claude directory
+            }
+        }
+        res.json({ exists, hasClaudeDir, resolvedPath: resolved });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+// ============================================================
 // Routes: Commands
 // ============================================================
-app.get('/api/commands', async (_req, res) => {
+app.get('/api/commands', async (req, res) => {
     try {
-        await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
-        const files = await fs.readdir(CLAUDE_COMMANDS_DIR);
+        const projectPath = req.query.projectPath;
+        const { commandsDir } = resolveConfigPaths(projectPath);
+        await fs.mkdir(commandsDir, { recursive: true });
+        const files = await fs.readdir(commandsDir);
         const commands = await Promise.all(files.map(async (file) => ({
             name: file,
-            content: await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, file), 'utf-8'),
+            content: await fs.readFile(path.join(commandsDir, file), 'utf-8'),
         })));
         res.json(commands);
     }
@@ -587,9 +730,11 @@ app.get('/api/commands', async (_req, res) => {
 });
 app.post('/api/commands', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { commandsDir } = resolveConfigPaths(projectPath);
         const { name, content } = req.body;
-        await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
-        await fs.writeFile(path.join(CLAUDE_COMMANDS_DIR, name), content);
+        await fs.mkdir(commandsDir, { recursive: true });
+        await fs.writeFile(path.join(commandsDir, name), content);
         res.json({ success: true, message: 'Command saved successfully' });
     }
     catch (err) {
@@ -598,8 +743,10 @@ app.post('/api/commands', async (req, res) => {
 });
 app.delete('/api/commands/:name', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { commandsDir } = resolveConfigPaths(projectPath);
         const { name } = req.params;
-        await fs.unlink(path.join(CLAUDE_COMMANDS_DIR, name));
+        await fs.unlink(path.join(commandsDir, name));
         res.json({ success: true, message: 'Command deleted successfully' });
     }
     catch (err) {
@@ -609,15 +756,17 @@ app.delete('/api/commands/:name', async (req, res) => {
 // ============================================================
 // Routes: Skills
 // ============================================================
-app.get('/api/skills', async (_req, res) => {
+app.get('/api/skills', async (req, res) => {
     try {
-        await fs.mkdir(CLAUDE_SKILLS_DIR, { recursive: true });
-        const dirs = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true });
+        const projectPath = req.query.projectPath;
+        const { skillsDir } = resolveConfigPaths(projectPath);
+        await fs.mkdir(skillsDir, { recursive: true });
+        const dirs = await fs.readdir(skillsDir, { withFileTypes: true });
         const skills = (await Promise.all(dirs
             .filter((d) => d.isDirectory())
             .map(async (dir) => {
             try {
-                const skillFile = path.join(CLAUDE_SKILLS_DIR, dir.name, 'SKILL.md');
+                const skillFile = path.join(skillsDir, dir.name, 'SKILL.md');
                 const content = await fs.readFile(skillFile, 'utf-8');
                 const { frontmatter } = parseFrontmatter(content);
                 return {
@@ -639,6 +788,8 @@ app.get('/api/skills', async (_req, res) => {
 });
 app.post('/api/skills', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { skillsDir } = resolveConfigPaths(projectPath);
         const { name, content } = req.body;
         if (!name || !content)
             return res.status(400).json({ error: 'Name and content are required' });
@@ -646,7 +797,7 @@ app.post('/api/skills', async (req, res) => {
             return res.status(400).json({
                 error: 'Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
             });
-        const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
+        const skillPath = path.join(skillsDir, name);
         await fs.mkdir(skillPath, { recursive: true });
         await fs.writeFile(path.join(skillPath, 'SKILL.md'), content, 'utf-8');
         res.json({ success: true, message: 'Skill saved successfully' });
@@ -657,8 +808,10 @@ app.post('/api/skills', async (req, res) => {
 });
 app.delete('/api/skills/:name', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { skillsDir } = resolveConfigPaths(projectPath);
         const { name } = req.params;
-        await fs.rm(path.join(CLAUDE_SKILLS_DIR, name), {
+        await fs.rm(path.join(skillsDir, name), {
             recursive: true,
             force: true,
         });
@@ -671,15 +824,17 @@ app.delete('/api/skills/:name', async (req, res) => {
 // ============================================================
 // Routes: Agents
 // ============================================================
-app.get('/api/agents', async (_req, res) => {
+app.get('/api/agents', async (req, res) => {
     try {
-        await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
-        const files = await fs.readdir(CLAUDE_AGENTS_DIR);
+        const projectPath = req.query.projectPath;
+        const { agentsDir } = resolveConfigPaths(projectPath);
+        await fs.mkdir(agentsDir, { recursive: true });
+        const files = await fs.readdir(agentsDir);
         const agents = (await Promise.all(files
             .filter((f) => f.endsWith('.md'))
             .map(async (file) => {
             try {
-                const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, file), 'utf-8');
+                const content = await fs.readFile(path.join(agentsDir, file), 'utf-8');
                 const { frontmatter } = parseFrontmatter(content);
                 return {
                     name: file.replace(/\.md$/, ''),
@@ -700,6 +855,8 @@ app.get('/api/agents', async (_req, res) => {
 });
 app.post('/api/agents', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { agentsDir } = resolveConfigPaths(projectPath);
         const { name, content } = req.body;
         if (!name || !content)
             return res.status(400).json({ error: 'Name and content are required' });
@@ -707,8 +864,8 @@ app.post('/api/agents', async (req, res) => {
             return res.status(400).json({
                 error: 'Invalid agent name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
             });
-        await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
-        await fs.writeFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), content, 'utf-8');
+        await fs.mkdir(agentsDir, { recursive: true });
+        await fs.writeFile(path.join(agentsDir, `${name}.md`), content, 'utf-8');
         res.json({ success: true, message: 'Agent saved successfully' });
     }
     catch (err) {
@@ -717,8 +874,10 @@ app.post('/api/agents', async (req, res) => {
 });
 app.delete('/api/agents/:name', async (req, res) => {
     try {
+        const projectPath = req.query.projectPath;
+        const { agentsDir } = resolveConfigPaths(projectPath);
         const { name } = req.params;
-        await fs.unlink(path.join(CLAUDE_AGENTS_DIR, `${name}.md`));
+        await fs.unlink(path.join(agentsDir, `${name}.md`));
         res.json({ success: true, message: 'Agent deleted successfully' });
     }
     catch (err) {
@@ -1512,6 +1671,156 @@ app.get('/api/plugins/installed-details', async (_req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+// Get details (commands/skills/agents) for a marketplace plugin by scanning its source directory
+app.get('/api/plugins/marketplace-plugin-details', async (req, res) => {
+    try {
+        const marketplace = req.query.marketplace;
+        const plugin = req.query.plugin;
+        if (!marketplace || !plugin) {
+            res.status(400).json({ error: 'marketplace and plugin query params are required' });
+            return;
+        }
+        const manifest = await readMarketplaceManifest(marketplace);
+        if (!manifest) {
+            res.status(404).json({ error: `Marketplace "${marketplace}" manifest not found` });
+            return;
+        }
+        const pluginEntry = manifest.plugins.find((p) => p.name === plugin);
+        if (!pluginEntry) {
+            res.status(404).json({ error: `Plugin "${plugin}" not found in marketplace "${marketplace}"` });
+            return;
+        }
+        const marketplaceDir = path.join(MARKETPLACES_DIR, marketplace);
+        const commands = [];
+        const skills = [];
+        const agents = [];
+        // Helper: scan a directory for standard commands/, skills/, agents/ layout + root-level skills
+        async function scanPluginDirectory(dir) {
+            // Scan commands/
+            try {
+                const commandsDir = path.join(dir, 'commands');
+                const commandEntries = await fs.readdir(commandsDir);
+                for (const entry of commandEntries) {
+                    if (entry.endsWith('.md')) {
+                        commands.push({ name: entry.replace(/\.md$/, ''), filename: entry });
+                    }
+                }
+            }
+            catch { /* directory doesn't exist */ }
+            // Scan skills/ subdirectory (standard layout)
+            try {
+                const skillsDir = path.join(dir, 'skills');
+                const skillEntries = await fs.readdir(skillsDir);
+                for (const entry of skillEntries) {
+                    const entryPath = path.join(skillsDir, entry);
+                    const stat = await fs.stat(entryPath);
+                    if (stat.isDirectory()) {
+                        try {
+                            await fs.access(path.join(entryPath, 'SKILL.md'));
+                            skills.push({ name: entry, filename: 'SKILL.md' });
+                        }
+                        catch { /* no SKILL.md */ }
+                    }
+                }
+            }
+            catch { /* directory doesn't exist */ }
+            // Scan root-level for skills: subdirectories containing SKILL.md directly in pluginDir
+            try {
+                const rootEntries = await fs.readdir(dir, { withFileTypes: true });
+                for (const entry of rootEntries) {
+                    if (entry.isDirectory() && !['commands', 'skills', 'agents', '.git', 'node_modules'].includes(entry.name) && !entry.name.startsWith('.')) {
+                        try {
+                            await fs.access(path.join(dir, entry.name, 'SKILL.md'));
+                            if (!skills.some(s => s.name === entry.name)) {
+                                skills.push({ name: entry.name, filename: 'SKILL.md' });
+                            }
+                        }
+                        catch { /* no SKILL.md in this subdir */ }
+                    }
+                }
+            }
+            catch { /* can't read directory */ }
+            // Check if root itself has SKILL.md (the plugin directory is itself a skill)
+            try {
+                await fs.access(path.join(dir, 'SKILL.md'));
+                const rootSkillName = path.basename(dir);
+                if (!skills.some(s => s.name === rootSkillName)) {
+                    skills.push({ name: rootSkillName, filename: 'SKILL.md' });
+                }
+            }
+            catch { /* no root SKILL.md */ }
+            // Scan agents/
+            try {
+                const agentsDir = path.join(dir, 'agents');
+                const agentEntries = await fs.readdir(agentsDir);
+                for (const entry of agentEntries) {
+                    if (entry.endsWith('.md')) {
+                        let model = '';
+                        try {
+                            const agentContent = await fs.readFile(path.join(agentsDir, entry), 'utf-8');
+                            const { frontmatter } = parseFrontmatter(agentContent);
+                            model = frontmatter.model ?? '';
+                        }
+                        catch { /* ignore */ }
+                        agents.push({ name: entry.replace(/\.md$/, ''), filename: entry, model });
+                    }
+                }
+            }
+            catch { /* directory doesn't exist */ }
+        }
+        // Case 1: Plugin has explicit skills array in manifest
+        if (pluginEntry.skills && pluginEntry.skills.length > 0) {
+            for (const skillPath of pluginEntry.skills) {
+                const relativePath = skillPath.replace(/^\.\//, '');
+                const srcDir = path.join(marketplaceDir, relativePath);
+                try {
+                    await fs.access(srcDir);
+                    // Check if this path is a skill itself (has SKILL.md)
+                    try {
+                        await fs.access(path.join(srcDir, 'SKILL.md'));
+                        const skillName = path.basename(relativePath);
+                        if (!skills.some(s => s.name === skillName)) {
+                            skills.push({ name: skillName, filename: 'SKILL.md' });
+                        }
+                    }
+                    catch { /* not a direct skill */ }
+                    // Also scan it as a plugin directory (may contain commands/skills/agents)
+                    await scanPluginDirectory(srcDir);
+                }
+                catch { /* source dir doesn't exist */ }
+            }
+        }
+        // Case 2: String source — local directory within marketplace repo
+        else if (typeof pluginEntry.source === 'string') {
+            const pluginDir = path.join(marketplaceDir, pluginEntry.source);
+            try {
+                await fs.access(pluginDir);
+                await scanPluginDirectory(pluginDir);
+            }
+            catch { /* source dir doesn't exist — continue to return manifest-level data */ }
+        }
+        // Case 3: Object source (e.g. { source: 'url', url: '...' }) — remote plugin
+        // Cannot scan locally; we'll return manifest-level data only (lspServers, etc.)
+        // Extract lspServers from manifest (works for all source types including remote)
+        const lspServers = [];
+        const rawLsp = pluginEntry.lspServers;
+        if (rawLsp && typeof rawLsp === 'object') {
+            for (const [name, cfg] of Object.entries(rawLsp)) {
+                const command = cfg.command || '';
+                const extMap = (cfg.extensionToLanguage || {});
+                lspServers.push({ name, command, extensions: Object.keys(extMap) });
+            }
+        }
+        // Determine source type for frontend messaging
+        const sourceType = (pluginEntry.skills && pluginEntry.skills.length > 0) ? 'skills-array'
+            : (typeof pluginEntry.source === 'string') ? 'local'
+                : 'remote';
+        res.json({ commands, skills, agents, lspServers, sourceType });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 app.get('/api/plugins/command-content', async (req, res) => {
     try {
         const { installPath, filename } = req.query;
@@ -1535,6 +1844,21 @@ app.get('/api/plugins/agent-content', async (req, res) => {
             return;
         }
         const filePath = path.join(installPath, 'agents', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        res.json({ content });
+    }
+    catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+app.get('/api/plugins/skill-content', async (req, res) => {
+    try {
+        const { installPath, skillName } = req.query;
+        if (!installPath || !skillName) {
+            res.status(400).json({ error: 'installPath and skillName are required' });
+            return;
+        }
+        const filePath = path.join(installPath, 'skills', skillName, 'SKILL.md');
         const content = await fs.readFile(filePath, 'utf-8');
         res.json({ content });
     }

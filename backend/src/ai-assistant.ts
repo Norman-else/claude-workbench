@@ -511,7 +511,7 @@ App Overview:
 
 File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
-- write_local_path: Write text content to a local file (home directory only)
+- write_local_path: Write text content to a local file (home directory or project directory)
 
 Project-scoped tools:
 Many tools accept an optional 'project_path' parameter. When provided, the tool operates on project-level configuration instead of global:
@@ -793,7 +793,7 @@ App Overview:
 
 File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
-- write_local_path: Write text content to a local file (home directory only)
+- write_local_path: Write text content to a local file (home directory or project directory)
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
@@ -1677,12 +1677,13 @@ export const toolDefinitions: AnthropicToolDefinition[] = [
   },
   {
     name: 'write_local_path',
-    description: 'Write text content to a local file. Supports ~ (home dir) expansion. The file must be within the home directory. Creates parent directories if needed.',
+    description: 'Write text content to a local file. Supports ~ (home dir) expansion. The file must be within the home directory or the specified project directory. Creates parent directories if needed.',
     input_schema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Absolute path or ~ relative path to write to' },
         content: { type: 'string', description: 'Text content to write' },
+        project_path: { type: 'string', description: 'Optional project root path. If provided, allows writing within the project directory in addition to the home directory.' },
       },
       required: ['path', 'content'],
     },
@@ -2658,6 +2659,7 @@ async function handleWriteLocalPath(input: ToolInput): Promise<string> {
 
   const rawPath = input.path;
   const content = input.content;
+  const projectPath = typeof input.project_path === 'string' ? input.project_path : undefined;
 
   // Reject content larger than 1MB
   if (Buffer.byteLength(content, 'utf-8') > 1_048_576) {
@@ -2674,7 +2676,7 @@ async function handleWriteLocalPath(input: ToolInput): Promise<string> {
     targetPath = rawPath;
   }
 
-  // Security check: verify parent directory is under HOME_DIR
+  // Security check: verify parent directory is under HOME_DIR or project_path
   const parentDir = path.dirname(targetPath);
   let resolvedParent: string;
   try {
@@ -2689,8 +2691,22 @@ async function handleWriteLocalPath(input: ToolInput): Promise<string> {
   const isUnderHome =
     resolvedParent === normalizedHome ||
     resolvedParent.startsWith(normalizedHome + path.sep);
-  if (!isUnderHome) {
-    return JSON.stringify({ error: 'Access denied: path must be within the home directory' });
+
+  let isUnderProject = false;
+  if (projectPath) {
+    try {
+      const resolvedProject = path.resolve(projectPath);
+      const realProject = await fs.realpath(resolvedProject);
+      isUnderProject =
+        resolvedParent === realProject ||
+        resolvedParent.startsWith(realProject + path.sep);
+    } catch {
+      // Project path doesn't exist or can't be resolved — ignore
+    }
+  }
+
+  if (!isUnderHome && !isUnderProject) {
+    return JSON.stringify({ error: 'Access denied: path must be within the home directory or the project directory' });
   }
 
   try {

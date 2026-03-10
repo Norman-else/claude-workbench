@@ -11,6 +11,23 @@ const CLAUDE_JSON_PATH = path.join(HOME_DIR, '.claude.json');
 const CLAUDE_COMMANDS_DIR = path.join(HOME_DIR, '.claude', 'commands');
 const CLAUDE_SKILLS_DIR = path.join(HOME_DIR, '.claude', 'skills');
 const CLAUDE_AGENTS_DIR = path.join(HOME_DIR, '.claude', 'agents');
+function resolveProjectPaths(projectPath) {
+    if (!projectPath) {
+        return {
+            claudeJsonPath: CLAUDE_JSON_PATH,
+            commandsDir: CLAUDE_COMMANDS_DIR,
+            skillsDir: CLAUDE_SKILLS_DIR,
+            agentsDir: CLAUDE_AGENTS_DIR,
+        };
+    }
+    const resolved = path.resolve(projectPath);
+    return {
+        claudeJsonPath: path.join(resolved, '.mcp.json'),
+        commandsDir: path.join(resolved, '.claude', 'commands'),
+        skillsDir: path.join(resolved, '.claude', 'skills'),
+        agentsDir: path.join(resolved, '.claude', 'agents'),
+    };
+}
 const AI_HISTORY_PATH = path.join(HOME_DIR, '.claude', 'ai-assistant-history.json');
 const CONVERSATIONS_DIR = path.join(HOME_DIR, '.claude', 'ai-assistant-conversations');
 const CONVERSATIONS_INDEX_PATH = path.join(CONVERSATIONS_DIR, 'index.json');
@@ -159,14 +176,15 @@ export function registerAIAssistantRoutes(app) {
         }
     });
     // POST /api/ai/conversations
-    app.post('/api/ai/conversations', async (_req, res) => {
+    app.post('/api/ai/conversations', async (req, res) => {
         try {
+            const { projectPath } = req.body;
             const now = new Date().toISOString();
             const id = crypto.randomUUID();
-            const conv = { id, name: 'New Chat', messages: [], createdAt: now, updatedAt: now };
+            const conv = { id, name: 'New Chat', messages: [], createdAt: now, updatedAt: now, ...(projectPath ? { projectPath } : {}) };
             await saveConversation(conv);
             const index = await loadConversationIndex();
-            const meta = { id, name: conv.name, createdAt: now, updatedAt: now };
+            const meta = { id, name: conv.name, createdAt: now, updatedAt: now, ...(projectPath ? { projectPath } : {}) };
             index.conversations.unshift(meta);
             await saveConversationIndex(index);
             res.json(meta);
@@ -212,9 +230,9 @@ export function registerAIAssistantRoutes(app) {
     app.patch('/api/ai/conversations/:id', async (req, res) => {
         try {
             const { id } = req.params;
-            const { name } = req.body;
-            if (!name || typeof name !== 'string') {
-                res.status(400).json({ error: 'name is required' });
+            const { name, projectPath } = req.body;
+            if (!name && projectPath === undefined) {
+                res.status(400).json({ error: 'name or projectPath is required' });
                 return;
             }
             const conv = await loadConversation(id);
@@ -222,17 +240,35 @@ export function registerAIAssistantRoutes(app) {
                 res.status(404).json({ error: 'Conversation not found' });
                 return;
             }
-            conv.name = name;
+            if (name)
+                conv.name = name;
+            if (projectPath !== undefined) {
+                if (projectPath === null) {
+                    delete conv.projectPath;
+                }
+                else {
+                    conv.projectPath = projectPath;
+                }
+            }
             conv.updatedAt = new Date().toISOString();
             await saveConversation(conv);
             const index = await loadConversationIndex();
             const meta = index.conversations.find((c) => c.id === id);
             if (meta) {
-                meta.name = name;
+                if (name)
+                    meta.name = name;
+                if (projectPath !== undefined) {
+                    if (projectPath === null) {
+                        delete meta.projectPath;
+                    }
+                    else {
+                        meta.projectPath = projectPath;
+                    }
+                }
                 meta.updatedAt = conv.updatedAt;
                 await saveConversationIndex(index);
             }
-            const updatedMeta = { id, name, createdAt: conv.createdAt, updatedAt: conv.updatedAt };
+            const updatedMeta = { id, name: conv.name, createdAt: conv.createdAt, updatedAt: conv.updatedAt, ...(conv.projectPath ? { projectPath: conv.projectPath } : {}) };
             res.json(updatedMeta);
         }
         catch (err) {
@@ -295,7 +331,7 @@ export function registerAIAssistantRoutes(app) {
     // POST /api/ai/conversations/:id/chat — SSE streaming scoped to a conversation
     app.post('/api/ai/conversations/:id/chat', async (req, res) => {
         const { id } = req.params;
-        const { message, model, forceTool } = req.body;
+        const { message, model, forceTool, attachments, projectPath } = req.body;
         const creds = await getActiveProfileCredentials();
         if (!creds) {
             res.status(400).json({ error: 'No active environment profile' });
@@ -312,11 +348,21 @@ export function registerAIAssistantRoutes(app) {
         res.setHeader('Connection', 'keep-alive');
         res.flushHeaders();
         const abortController = new AbortController();
-        req.on('close', () => abortController.abort());
+        req.on('close', () => { connectionClosed = true; abortController.abort(); });
         const client = getAnthropicClient(creds);
+        let connectionClosed = false;
         function sendSSE(event) {
-            res.write(`data: ${JSON.stringify(event)}\n\n`);
+            if (connectionClosed)
+                return;
+            try {
+                res.write(`data: ${JSON.stringify(event)}\n\n`);
+            }
+            catch {
+                connectionClosed = true;
+            }
         }
+        let currentAssistantContent = '';
+        const toolCallsForHistory = [];
         try {
             // Append user message
             const userMsg = {
@@ -324,13 +370,53 @@ export function registerAIAssistantRoutes(app) {
                 role: 'user',
                 content: message,
                 timestamp: new Date().toISOString(),
+                ...(attachments && attachments.length > 0 ? { attachments } : {}),
             };
             conv.messages.push(userMsg);
             // Build conversation for Anthropic API
-            const conversationMessages = conv.messages.map((m) => ({
-                role: m.role,
-                content: m.content,
-            }));
+            const conversationMessages = conv.messages.map((m) => {
+                // Build multimodal content blocks for messages with attachments
+                if (m.attachments && m.attachments.length > 0 && m.role === 'user') {
+                    const contentBlocks = [];
+                    for (const att of m.attachments) {
+                        if (att.mediaType.startsWith('image/')) {
+                            contentBlocks.push({
+                                type: 'image',
+                                source: {
+                                    type: 'base64',
+                                    media_type: att.mediaType,
+                                    data: att.data,
+                                },
+                            });
+                        }
+                        else if (att.mediaType === 'application/pdf') {
+                            contentBlocks.push({
+                                type: 'document',
+                                source: {
+                                    type: 'base64',
+                                    media_type: 'application/pdf',
+                                    data: att.data,
+                                },
+                            });
+                        }
+                        else {
+                            // Text-based files: decode and inject as text block
+                            try {
+                                const decoded = Buffer.from(att.data, 'base64').toString('utf-8');
+                                contentBlocks.push({ type: 'text', text: `--- File: ${att.name} ---\n${decoded}` });
+                            }
+                            catch {
+                                contentBlocks.push({ type: 'text', text: `[Attachment: ${att.name}]` });
+                            }
+                        }
+                    }
+                    if (m.content) {
+                        contentBlocks.push({ type: 'text', text: m.content });
+                    }
+                    return { role: m.role, content: contentBlocks };
+                }
+                return { role: m.role, content: m.content };
+            });
             const SYSTEM_PROMPT = `You are an AI assistant for Claude Workbench, a GUI management tool for Claude Code CLI.
 You help users manage their Claude Code environment through natural language.
 
@@ -387,23 +473,35 @@ Agents:
 - get_plugin_agent: Get full content of a plugin agent
 - update_plugin_agent_model: Update the model setting of a plugin agent
 
-Marketplace:
+Plugins:
 - list_marketplaces: List registered marketplace sources
 - add_marketplace: Add a new marketplace source by GitHub URL
 - remove_marketplace: Remove a marketplace source by name
-- list_installed_plugins: List all installed plugins
+- list_installed_plugins: List all installed plugins with details (commands, skills, agents)
 - install_plugin: Install a plugin from a marketplace
 - uninstall_plugin: Uninstall a plugin
+- list_plugin_commands: List commands from installed plugins
+- list_plugin_skills: List skills from installed plugins
+- get_plugin_command: Get the full content of a plugin command
+- get_plugin_skill: Get the full content of a plugin skill (SKILL.md)
 
 App Overview:
 - get_app_config: Get high-level app config overview
 
 File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
-- write_local_path: Write text content to a local file (home directory only)
+- write_local_path: Write text content to a local file (home directory or project directory)
+
+Project-scoped tools:
+Many tools accept an optional 'project_path' parameter. When provided, the tool operates on project-level configuration instead of global:
+- MCP servers read from {project_path}/.mcp.json instead of ~/.claude.json
+- Commands read from {project_path}/.claude/commands/ instead of ~/.claude/commands/
+- Skills read from {project_path}/.claude/skills/ instead of ~/.claude/skills/
+- Agents read from {project_path}/.claude/agents/ instead of ~/.claude/agents/
+When the user is working with a specific project, use project_path to scope operations to that project.
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
-If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
+If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.${projectPath ? `\n\nCurrent project context: The user is working in project "${projectPath}". For all project-scoped tools (MCP, commands, skills, agents), automatically use project_path: "${projectPath}" unless the user explicitly asks for global configuration.` : ''}`;
             const webSearchTool = [{
                     type: 'web_search_20250305',
                     name: 'web_search',
@@ -411,14 +509,12 @@ If the user asks about current events, real-time information, or anything requir
                 }];
             let iteration = 0;
             const MAX_ITERATIONS = 10;
-            let currentAssistantContent = '';
-            const toolCallsForHistory = [];
             let isFirstIteration = true;
             while (iteration < MAX_ITERATIONS) {
                 iteration++;
                 const stream = client.messages.stream({
                     model,
-                    max_tokens: 4096,
+                    max_tokens: 16384,
                     system: SYSTEM_PROMPT,
                     messages: conversationMessages,
                     tools: [...webSearchTool, ...toolDefinitions],
@@ -455,7 +551,11 @@ If the user asks about current events, real-time information, or anything requir
                     for (const toolBlock of toolUseBlocks) {
                         if (toolBlock.name === 'web_search')
                             continue;
-                        const result = await executeToolHandler(toolBlock.name, toolBlock.input);
+                        const toolInput = toolBlock.input;
+                        if (projectPath && !toolInput.project_path) {
+                            toolInput.project_path = projectPath;
+                        }
+                        const result = await executeToolHandler(toolBlock.name, toolInput);
                         toolCallsForHistory.push({
                             name: toolBlock.name,
                             input: toolBlock.input,
@@ -474,6 +574,19 @@ If the user asks about current events, real-time information, or anything requir
                     conversationMessages.push({
                         role: 'user',
                         content: toolResultContents,
+                    });
+                    continue;
+                }
+                // Auto-continue if response was truncated due to max_tokens
+                if (finalMessage.stop_reason === 'max_tokens') {
+                    // Append current partial assistant response to conversation for continuation
+                    conversationMessages.push({
+                        role: 'assistant',
+                        content: finalMessage.content,
+                    });
+                    conversationMessages.push({
+                        role: 'user',
+                        content: 'Your previous response was cut off due to length limits. Please continue exactly where you left off. Do not repeat any content you already provided — just pick up from the exact point of truncation and continue.',
                     });
                     continue;
                 }
@@ -502,6 +615,19 @@ If the user asks about current events, real-time information, or anything requir
         }
         catch (err) {
             if (err.name === 'AbortError') {
+                // Save partial response on abort so user keeps what was already generated
+                if (currentAssistantContent) {
+                    const partialMsg = {
+                        id: crypto.randomUUID(),
+                        role: 'assistant',
+                        content: currentAssistantContent,
+                        timestamp: new Date().toISOString(),
+                        toolCalls: toolCallsForHistory.length > 0 ? toolCallsForHistory : undefined,
+                    };
+                    conv.messages.push(partialMsg);
+                    conv.updatedAt = new Date().toISOString();
+                    await saveConversation(conv).catch(() => { });
+                }
                 res.end();
                 return;
             }
@@ -525,10 +651,18 @@ If the user asks about current events, real-time information, or anything requir
         res.flushHeaders();
         // AbortController for client disconnect
         const abortController = new AbortController();
-        req.on('close', () => abortController.abort());
+        req.on('close', () => { connectionClosed = true; abortController.abort(); });
         const client = getAnthropicClient(creds);
+        let connectionClosed = false;
         function sendSSE(event) {
-            res.write(`data: ${JSON.stringify(event)}\n\n`);
+            if (connectionClosed)
+                return;
+            try {
+                res.write(`data: ${JSON.stringify(event)}\n\n`);
+            }
+            catch {
+                connectionClosed = true;
+            }
         }
         try {
             // Load history and append user message
@@ -601,20 +735,23 @@ Agents:
 - get_plugin_agent: Get full content of a plugin agent
 - update_plugin_agent_model: Update the model setting of a plugin agent
 
-Marketplace:
+Plugins:
 - list_marketplaces: List registered marketplace sources
 - add_marketplace: Add a new marketplace source by GitHub URL
 - remove_marketplace: Remove a marketplace source by name
-- list_installed_plugins: List all installed plugins
+- list_installed_plugins: List all installed plugins with details (commands, skills, agents)
 - install_plugin: Install a plugin from a marketplace
 - uninstall_plugin: Uninstall a plugin
+- list_plugin_commands: List commands from installed plugins
+- list_plugin_skills: List skills from installed plugins
+- get_plugin_command: Get the full content of a plugin command
 
 App Overview:
 - get_app_config: Get high-level app config overview
 
 File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
-- write_local_path: Write text content to a local file (home directory only)
+- write_local_path: Write text content to a local file (home directory or project directory)
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
@@ -981,22 +1118,22 @@ export const toolDefinitions = [
     {
         name: 'get_mcp_server_statuses',
         description: 'Get the list of configured MCP servers from ~/.claude.json. Returns server names, commands, and whether env vars are configured.',
-        input_schema: { type: 'object', properties: {} },
+        input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
     },
     {
         name: 'list_commands',
         description: 'List custom Claude CLI slash-commands stored in ~/.claude/commands/. Returns command names and their first line as description.',
-        input_schema: { type: 'object', properties: {} },
+        input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
     },
     {
         name: 'list_skills',
         description: 'List agent skills stored in ~/.claude/skills/. Returns skill names and descriptions from SKILL.md files.',
-        input_schema: { type: 'object', properties: {} },
+        input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
     },
     {
         name: 'get_app_config',
         description: 'Get a high-level overview of the app config: active profile name, MCP server count, command count, skill count, and agent count. No credentials returned.',
-        input_schema: { type: 'object', properties: {} },
+        input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
     },
     {
         name: 'start_mcp_server',
@@ -1052,7 +1189,7 @@ export const toolDefinitions = [
         description: 'Get the full content of a specific custom command by name.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Command name (without .md extension)' } },
+            properties: { name: { type: 'string', description: 'Command name (without .md extension)' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
@@ -1064,6 +1201,7 @@ export const toolDefinitions = [
             properties: {
                 name: { type: 'string', description: 'Command name' },
                 content: { type: 'string', description: 'Command content (markdown)' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'content'],
         },
@@ -1076,6 +1214,7 @@ export const toolDefinitions = [
             properties: {
                 name: { type: 'string', description: 'Command name' },
                 content: { type: 'string', description: 'New command content (markdown)' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'content'],
         },
@@ -1085,7 +1224,7 @@ export const toolDefinitions = [
         description: 'Delete a custom command by name.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Command name to delete' } },
+            properties: { name: { type: 'string', description: 'Command name to delete' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
@@ -1094,7 +1233,7 @@ export const toolDefinitions = [
         description: 'Get the full SKILL.md content for a specific skill.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Skill name' } },
+            properties: { name: { type: 'string', description: 'Skill name' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
@@ -1106,6 +1245,7 @@ export const toolDefinitions = [
             properties: {
                 name: { type: 'string', description: 'Skill name' },
                 content: { type: 'string', description: 'SKILL.md content' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'content'],
         },
@@ -1115,21 +1255,21 @@ export const toolDefinitions = [
         description: 'Delete an agent skill by name.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Skill name to delete' } },
+            properties: { name: { type: 'string', description: 'Skill name to delete' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
     {
         name: 'list_agents',
         description: 'List user agents stored in ~/.claude/agents/. Returns agent names, descriptions, and model settings.',
-        input_schema: { type: 'object', properties: {} },
+        input_schema: { type: 'object', properties: { project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } } },
     },
     {
         name: 'get_agent',
         description: 'Get the full content of a specific user agent by name.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Agent name (without .md extension)' } },
+            properties: { name: { type: 'string', description: 'Agent name (without .md extension)' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
@@ -1141,6 +1281,7 @@ export const toolDefinitions = [
             properties: {
                 name: { type: 'string', description: 'Agent name (lowercase, numbers, hyphens, max 64 chars)' },
                 content: { type: 'string', description: 'Agent content (markdown with frontmatter)' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'content'],
         },
@@ -1153,6 +1294,7 @@ export const toolDefinitions = [
             properties: {
                 name: { type: 'string', description: 'Agent name to update' },
                 content: { type: 'string', description: 'New agent content (markdown with frontmatter)' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'content'],
         },
@@ -1162,7 +1304,7 @@ export const toolDefinitions = [
         description: 'Delete a user agent by name.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Agent name to delete' } },
+            properties: { name: { type: 'string', description: 'Agent name to delete' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
@@ -1277,6 +1419,40 @@ export const toolDefinitions = [
         },
     },
     {
+        name: 'list_plugin_commands',
+        description: 'List commands from installed plugins. Returns command names, filenames, plugin names, and marketplace names.',
+        input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'list_plugin_skills',
+        description: 'List skills from installed plugins. Returns skill names, plugin names, and marketplace names.',
+        input_schema: { type: 'object', properties: {} },
+    },
+    {
+        name: 'get_plugin_command',
+        description: 'Get the full content of a plugin command.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                installPath: { type: 'string', description: 'Plugin install path' },
+                filename: { type: 'string', description: 'Command filename (e.g. "code-review.md")' },
+            },
+            required: ['installPath', 'filename'],
+        },
+    },
+    {
+        name: 'get_plugin_skill',
+        description: 'Get the full content of a plugin skill (SKILL.md).',
+        input_schema: {
+            type: 'object',
+            properties: {
+                installPath: { type: 'string', description: 'Plugin install path' },
+                skillName: { type: 'string', description: 'Skill directory name (e.g. "implement-design")' },
+            },
+            required: ['installPath', 'skillName'],
+        },
+    },
+    {
         name: 'read_local_path',
         description: 'Read a local file\'s text content or list a directory\'s entries. Supports ~ (home dir) expansion. Use this to inspect any config file, log file, or directory on the user\'s machine.',
         input_schema: {
@@ -1309,6 +1485,7 @@ export const toolDefinitions = [
             properties: {
                 name: { type: 'string', description: 'Skill name to update' },
                 content: { type: 'string', description: 'New SKILL.md content' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'content'],
         },
@@ -1323,6 +1500,7 @@ export const toolDefinitions = [
                 command: { type: 'string', description: 'Command to run (e.g. "npx", "node", "python")' },
                 args: { type: 'array', items: { type: 'string' }, description: 'Command arguments' },
                 env: { type: 'object', description: 'Environment variables as key-value pairs' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name', 'command'],
         },
@@ -1332,7 +1510,7 @@ export const toolDefinitions = [
         description: 'Remove an MCP server from ~/.claude.json config by name.',
         input_schema: {
             type: 'object',
-            properties: { name: { type: 'string', description: 'Server name to remove' } },
+            properties: { name: { type: 'string', description: 'Server name to remove' }, project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' } },
             required: ['name'],
         },
     },
@@ -1346,18 +1524,20 @@ export const toolDefinitions = [
                 command: { type: 'string', description: 'New command' },
                 args: { type: 'array', items: { type: 'string' }, description: 'New args' },
                 env: { type: 'object', description: 'New environment variables' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, operates on project-level config instead of global.' },
             },
             required: ['name'],
         },
     },
     {
         name: 'write_local_path',
-        description: 'Write text content to a local file. Supports ~ (home dir) expansion. The file must be within the home directory. Creates parent directories if needed.',
+        description: 'Write text content to a local file. Supports ~ (home dir) expansion. The file must be within the home directory or the specified project directory. Creates parent directories if needed.',
         input_schema: {
             type: 'object',
             properties: {
                 path: { type: 'string', description: 'Absolute path or ~ relative path to write to' },
                 content: { type: 'string', description: 'Text content to write' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, allows writing within the project directory in addition to the home directory.' },
             },
             required: ['path', 'content'],
         },
@@ -1466,9 +1646,11 @@ async function handleDeactivateEnvironment(_input) {
     }
     return JSON.stringify({ success: true, message: 'Deactivated active profile' });
 }
-async function handleGetMcpServerStatuses(_input) {
+async function handleGetMcpServerStatuses(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     try {
-        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
         const config = JSON.parse(content);
         const servers = config.mcpServers || {};
         const result = Object.entries(servers).map(([name, srv]) => ({
@@ -1483,13 +1665,15 @@ async function handleGetMcpServerStatuses(_input) {
         return JSON.stringify({ servers: [], count: 0 });
     }
 }
-async function handleListCommands(_input) {
+async function handleListCommands(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     try {
-        const entries = await fs.readdir(CLAUDE_COMMANDS_DIR).catch(() => []);
+        const entries = await fs.readdir(paths.commandsDir).catch(() => []);
         const commands = [];
         for (const entry of entries.filter((e) => e.endsWith('.md'))) {
             try {
-                const content = await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, entry), 'utf-8');
+                const content = await fs.readFile(path.join(paths.commandsDir, entry), 'utf-8');
                 const firstLine = content.split('\n').find((l) => l.trim()) || '';
                 commands.push({ name: entry.replace(/\.md$/, ''), description: firstLine.replace(/^#+\s*/, '') });
             }
@@ -1503,13 +1687,15 @@ async function handleListCommands(_input) {
         return JSON.stringify({ commands: [], count: 0 });
     }
 }
-async function handleListSkills(_input) {
+async function handleListSkills(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     try {
-        const entries = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true }).catch(() => []);
+        const entries = await fs.readdir(paths.skillsDir, { withFileTypes: true }).catch(() => []);
         const skills = [];
         for (const entry of entries.filter((e) => e.isDirectory())) {
             try {
-                const skillMdPath = path.join(CLAUDE_SKILLS_DIR, entry.name, 'SKILL.md');
+                const skillMdPath = path.join(paths.skillsDir, entry.name, 'SKILL.md');
                 const content = await fs.readFile(skillMdPath, 'utf-8');
                 const lines = content.split('\n').slice(0, 5).filter((l) => l.trim());
                 const description = lines.find((l) => !l.startsWith('#') && !l.startsWith('---')) || '';
@@ -1525,31 +1711,33 @@ async function handleListSkills(_input) {
         return JSON.stringify({ skills: [], count: 0 });
     }
 }
-async function handleGetAppConfig(_input) {
+async function handleGetAppConfig(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const creds = await getActiveProfileCredentials();
     const activeProfileName = creds ? 'Active profile found' : null;
     let mcpCount = 0;
     try {
-        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
         const config = JSON.parse(content);
         mcpCount = Object.keys(config.mcpServers || {}).length;
     }
     catch { /* ignore */ }
     let commandCount = 0;
     try {
-        const entries = await fs.readdir(CLAUDE_COMMANDS_DIR).catch(() => []);
+        const entries = await fs.readdir(paths.commandsDir).catch(() => []);
         commandCount = entries.filter((e) => e.endsWith('.md')).length;
     }
     catch { /* ignore */ }
     let skillCount = 0;
     try {
-        const entries = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true }).catch(() => []);
+        const entries = await fs.readdir(paths.skillsDir, { withFileTypes: true }).catch(() => []);
         skillCount = entries.filter((e) => e.isDirectory()).length;
     }
     catch { /* ignore */ }
     let agentCount = 0;
     try {
-        const entries = await fs.readdir(CLAUDE_AGENTS_DIR).catch(() => []);
+        const entries = await fs.readdir(paths.agentsDir).catch(() => []);
         agentCount = entries.filter((e) => e.endsWith('.md')).length;
     }
     catch { /* ignore */ }
@@ -1559,6 +1747,7 @@ async function handleGetAppConfig(_input) {
         commandCount,
         skillCount,
         agentCount,
+        ...(projectPath ? { projectPath } : {}),
     });
 }
 async function handleStartMcpServer(input) {
@@ -1620,9 +1809,11 @@ async function handleGetMcpRuntimeStatus(input) {
     }
 }
 async function handleGetCommand(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     try {
-        const content = await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, `${name}.md`), 'utf-8');
+        const content = await fs.readFile(path.join(paths.commandsDir, `${name}.md`), 'utf-8');
         return JSON.stringify({ name, content });
     }
     catch {
@@ -1630,10 +1821,11 @@ async function handleGetCommand(input) {
     }
 }
 async function handleCreateCommand(input) {
+    const projectPath = input.project_path;
     const name = input.name;
     const content = input.content;
     try {
-        const resp = await fetch('http://localhost:3001/api/commands', {
+        const resp = await fetch(`http://localhost:3001/api/commands${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, content }),
@@ -1646,10 +1838,12 @@ async function handleCreateCommand(input) {
     }
 }
 async function handleUpdateCommand(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     const content = input.content;
     try {
-        await fs.writeFile(path.join(CLAUDE_COMMANDS_DIR, `${name}.md`), content, 'utf-8');
+        await fs.writeFile(path.join(paths.commandsDir, `${name}.md`), content, 'utf-8');
         return JSON.stringify({ success: true });
     }
     catch (err) {
@@ -1657,9 +1851,10 @@ async function handleUpdateCommand(input) {
     }
 }
 async function handleDeleteCommand(input) {
+    const projectPath = input.project_path;
     const name = input.name;
     try {
-        const resp = await fetch(`http://localhost:3001/api/commands/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const resp = await fetch(`http://localhost:3001/api/commands/${encodeURIComponent(name)}${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, { method: 'DELETE' });
         const data = await resp.json();
         return JSON.stringify(data);
     }
@@ -1668,9 +1863,11 @@ async function handleDeleteCommand(input) {
     }
 }
 async function handleGetSkill(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     try {
-        const content = await fs.readFile(path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md'), 'utf-8');
+        const content = await fs.readFile(path.join(paths.skillsDir, name, 'SKILL.md'), 'utf-8');
         return JSON.stringify({ name, content });
     }
     catch {
@@ -1678,10 +1875,11 @@ async function handleGetSkill(input) {
     }
 }
 async function handleCreateSkill(input) {
+    const projectPath = input.project_path;
     const name = input.name;
     const content = input.content;
     try {
-        const resp = await fetch('http://localhost:3001/api/skills', {
+        const resp = await fetch(`http://localhost:3001/api/skills${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, content }),
@@ -1694,9 +1892,10 @@ async function handleCreateSkill(input) {
     }
 }
 async function handleDeleteSkill(input) {
+    const projectPath = input.project_path;
     const name = input.name;
     try {
-        const resp = await fetch(`http://localhost:3001/api/skills/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const resp = await fetch(`http://localhost:3001/api/skills/${encodeURIComponent(name)}${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, { method: 'DELETE' });
         const data = await resp.json();
         return JSON.stringify(data);
     }
@@ -1704,13 +1903,15 @@ async function handleDeleteSkill(input) {
         return JSON.stringify({ error: err.message });
     }
 }
-async function handleListAgents(_input) {
+async function handleListAgents(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     try {
-        const entries = await fs.readdir(CLAUDE_AGENTS_DIR).catch(() => []);
+        const entries = await fs.readdir(paths.agentsDir).catch(() => []);
         const agents = [];
         for (const entry of entries.filter((e) => e.endsWith('.md'))) {
             try {
-                const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, entry), 'utf-8');
+                const content = await fs.readFile(path.join(paths.agentsDir, entry), 'utf-8');
                 const parsed = parseFrontmatter(content);
                 agents.push({
                     name: entry.replace(/\.md$/, ''),
@@ -1729,9 +1930,11 @@ async function handleListAgents(_input) {
     }
 }
 async function handleGetAgent(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     try {
-        const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), 'utf-8');
+        const content = await fs.readFile(path.join(paths.agentsDir, `${name}.md`), 'utf-8');
         return JSON.stringify({ name, content });
     }
     catch {
@@ -1739,10 +1942,11 @@ async function handleGetAgent(input) {
     }
 }
 async function handleCreateAgent(input) {
+    const projectPath = input.project_path;
     const name = input.name;
     const content = input.content;
     try {
-        const resp = await fetch('http://localhost:3001/api/agents', {
+        const resp = await fetch(`http://localhost:3001/api/agents${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ name, content }),
@@ -1755,10 +1959,12 @@ async function handleCreateAgent(input) {
     }
 }
 async function handleUpdateAgent(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     const content = input.content;
     try {
-        const filePath = path.join(CLAUDE_AGENTS_DIR, `${name}.md`);
+        const filePath = path.join(paths.agentsDir, `${name}.md`);
         await fs.access(filePath);
         await fs.writeFile(filePath, content, 'utf-8');
         return JSON.stringify({ success: true });
@@ -1768,9 +1974,10 @@ async function handleUpdateAgent(input) {
     }
 }
 async function handleDeleteAgent(input) {
+    const projectPath = input.project_path;
     const name = input.name;
     try {
-        const resp = await fetch(`http://localhost:3001/api/agents/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const resp = await fetch(`http://localhost:3001/api/agents/${encodeURIComponent(name)}${projectPath ? '?projectPath=' + encodeURIComponent(projectPath) : ''}`, { method: 'DELETE' });
         const data = await resp.json();
         return JSON.stringify(data);
     }
@@ -1977,6 +2184,111 @@ async function handleUninstallPlugin(input) {
         return JSON.stringify({ error: err.message });
     }
 }
+async function handleListPluginCommands(_input) {
+    try {
+        const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
+        const data = await resp.json();
+        if (!resp.ok) {
+            const errorObj = typeof data === 'object' && data !== null ? data : {};
+            const errMsg = typeof errorObj.error === 'string' ? errorObj.error : `HTTP ${resp.status}`;
+            throw new Error(errMsg);
+        }
+        const root = typeof data === 'object' && data !== null ? data : null;
+        const plugins = Array.isArray(root?.plugins)
+            ? root.plugins
+            : (Array.isArray(data) ? data : []);
+        const commands = [];
+        for (const plugin of plugins) {
+            if (typeof plugin !== 'object' || plugin === null)
+                continue;
+            const pluginObj = plugin;
+            const installPath = typeof pluginObj.installPath === 'string' ? pluginObj.installPath : '';
+            const pluginName = typeof pluginObj.pluginName === 'string'
+                ? pluginObj.pluginName
+                : (typeof pluginObj.name === 'string' ? pluginObj.name : '');
+            const marketplaceName = typeof pluginObj.marketplaceName === 'string' ? pluginObj.marketplaceName : '';
+            const pluginCommands = Array.isArray(pluginObj.commands) ? pluginObj.commands : [];
+            for (const cmd of pluginCommands) {
+                if (typeof cmd !== 'object' || cmd === null)
+                    continue;
+                const cmdObj = cmd;
+                const filename = typeof cmdObj.filename === 'string' ? cmdObj.filename : '';
+                if (!filename || !installPath)
+                    continue;
+                const name = typeof cmdObj.name === 'string' ? cmdObj.name : filename.replace(/\.md$/, '');
+                commands.push({ name, filename, pluginName, marketplaceName, installPath });
+            }
+        }
+        return JSON.stringify({ commands, count: commands.length });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleListPluginSkills(_input) {
+    try {
+        const resp = await fetch('http://localhost:3001/api/plugins/installed-details');
+        const data = await resp.json();
+        if (!resp.ok) {
+            const errorObj = typeof data === 'object' && data !== null ? data : {};
+            const errMsg = typeof errorObj.error === 'string' ? errorObj.error : `HTTP ${resp.status}`;
+            throw new Error(errMsg);
+        }
+        const root = typeof data === 'object' && data !== null ? data : null;
+        const plugins = Array.isArray(root?.plugins)
+            ? root.plugins
+            : (Array.isArray(data) ? data : []);
+        const skills = [];
+        for (const plugin of plugins) {
+            if (typeof plugin !== 'object' || plugin === null)
+                continue;
+            const pluginObj = plugin;
+            const installPath = typeof pluginObj.installPath === 'string' ? pluginObj.installPath : '';
+            const pluginName = typeof pluginObj.pluginName === 'string'
+                ? pluginObj.pluginName
+                : (typeof pluginObj.name === 'string' ? pluginObj.name : '');
+            const marketplaceName = typeof pluginObj.marketplaceName === 'string' ? pluginObj.marketplaceName : '';
+            const pluginSkills = Array.isArray(pluginObj.skills) ? pluginObj.skills : [];
+            for (const skill of pluginSkills) {
+                if (typeof skill !== 'object' || skill === null)
+                    continue;
+                const skillObj = skill;
+                const name = typeof skillObj.name === 'string' ? skillObj.name : '';
+                if (!name)
+                    continue;
+                skills.push({ name, pluginName, marketplaceName, installPath });
+            }
+        }
+        return JSON.stringify({ skills, count: skills.length });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message });
+    }
+}
+async function handleGetPluginCommand(input) {
+    const installPath = input.installPath;
+    const filename = input.filename;
+    try {
+        const filePath = path.join(installPath, 'commands', filename);
+        const content = await fs.readFile(filePath, 'utf-8');
+        return JSON.stringify({ name: filename.replace(/\.md$/, ''), content });
+    }
+    catch {
+        return JSON.stringify({ error: `Plugin command not found: ${filename}` });
+    }
+}
+async function handleGetPluginSkill(input) {
+    const installPath = input.installPath;
+    const skillName = input.skillName;
+    try {
+        const filePath = path.join(installPath, 'skills', skillName, 'SKILL.md');
+        const content = await fs.readFile(filePath, 'utf-8');
+        return JSON.stringify({ name: skillName, content });
+    }
+    catch {
+        return JSON.stringify({ error: `Plugin skill not found: ${skillName}` });
+    }
+}
 async function handleReadLocalPath(input) {
     // [Mi4] Type guard — reject non-string path early
     if (typeof input.path !== 'string' || input.path.trim() === '') {
@@ -2090,10 +2402,12 @@ async function handleGetCurrentDatetime(_input) {
     });
 }
 async function handleUpdateSkill(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     const content = input.content;
     try {
-        const skillPath = path.join(CLAUDE_SKILLS_DIR, name, 'SKILL.md');
+        const skillPath = path.join(paths.skillsDir, name, 'SKILL.md');
         // Check skill exists
         try {
             await fs.access(skillPath);
@@ -2109,12 +2423,14 @@ async function handleUpdateSkill(input) {
     }
 }
 async function handleAddMcpServer(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     const command = input.command;
     const args = input.args || [];
     const env = input.env || undefined;
     try {
-        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
         const config = JSON.parse(content);
         if (!config.mcpServers)
             config.mcpServers = {};
@@ -2125,7 +2441,7 @@ async function handleAddMcpServer(input) {
         if (env)
             entry.env = env;
         config.mcpServers[name] = entry;
-        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+        await fs.writeFile(paths.claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
         return JSON.stringify({ success: true, message: `Added MCP server: ${name}` });
     }
     catch (err) {
@@ -2133,15 +2449,17 @@ async function handleAddMcpServer(input) {
     }
 }
 async function handleRemoveMcpServer(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     try {
-        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
         const config = JSON.parse(content);
         if (!config.mcpServers || !config.mcpServers[name]) {
             return JSON.stringify({ error: `MCP server not found: ${name}` });
         }
         delete config.mcpServers[name];
-        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+        await fs.writeFile(paths.claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
         return JSON.stringify({ success: true, message: `Removed MCP server: ${name}` });
     }
     catch (err) {
@@ -2149,9 +2467,11 @@ async function handleRemoveMcpServer(input) {
     }
 }
 async function handleUpdateMcpServer(input) {
+    const projectPath = input.project_path;
+    const paths = resolveProjectPaths(projectPath);
     const name = input.name;
     try {
-        const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8').catch(() => '{}');
+        const content = await fs.readFile(paths.claudeJsonPath, 'utf-8').catch(() => '{}');
         const config = JSON.parse(content);
         if (!config.mcpServers || !config.mcpServers[name]) {
             return JSON.stringify({ error: `MCP server not found: ${name}` });
@@ -2164,7 +2484,7 @@ async function handleUpdateMcpServer(input) {
         if (input.env !== undefined)
             server.env = input.env;
         config.mcpServers[name] = server;
-        await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2), 'utf-8');
+        await fs.writeFile(paths.claudeJsonPath, JSON.stringify(config, null, 2), 'utf-8');
         return JSON.stringify({ success: true, message: `Updated MCP server: ${name}` });
     }
     catch (err) {
@@ -2180,6 +2500,7 @@ async function handleWriteLocalPath(input) {
     }
     const rawPath = input.path;
     const content = input.content;
+    const projectPath = typeof input.project_path === 'string' ? input.project_path : undefined;
     // Reject content larger than 1MB
     if (Buffer.byteLength(content, 'utf-8') > 1_048_576) {
         return JSON.stringify({ error: 'Content too large: maximum size is 1MB' });
@@ -2195,7 +2516,7 @@ async function handleWriteLocalPath(input) {
     else {
         targetPath = rawPath;
     }
-    // Security check: verify parent directory is under HOME_DIR
+    // Security check: verify parent directory is under HOME_DIR or project_path
     const parentDir = path.dirname(targetPath);
     let resolvedParent;
     try {
@@ -2209,8 +2530,21 @@ async function handleWriteLocalPath(input) {
     const normalizedHome = path.normalize(HOME_DIR);
     const isUnderHome = resolvedParent === normalizedHome ||
         resolvedParent.startsWith(normalizedHome + path.sep);
-    if (!isUnderHome) {
-        return JSON.stringify({ error: 'Access denied: path must be within the home directory' });
+    let isUnderProject = false;
+    if (projectPath) {
+        try {
+            const resolvedProject = path.resolve(projectPath);
+            const realProject = await fs.realpath(resolvedProject);
+            isUnderProject =
+                resolvedParent === realProject ||
+                    resolvedParent.startsWith(realProject + path.sep);
+        }
+        catch {
+            // Project path doesn't exist or can't be resolved — ignore
+        }
+    }
+    if (!isUnderHome && !isUnderProject) {
+        return JSON.stringify({ error: 'Access denied: path must be within the home directory or the project directory' });
     }
     try {
         const resolvedTarget = path.join(resolvedParent, path.basename(targetPath));
@@ -2280,6 +2614,10 @@ export async function executeToolHandler(name, input) {
         case 'uninstall_plugin': return handleUninstallPlugin(input);
         case 'add_marketplace': return handleAddMarketplace(input);
         case 'remove_marketplace': return handleRemoveMarketplace(input);
+        case 'list_plugin_commands': return handleListPluginCommands(input);
+        case 'list_plugin_skills': return handleListPluginSkills(input);
+        case 'get_plugin_command': return handleGetPluginCommand(input);
+        case 'get_plugin_skill': return handleGetPluginSkill(input);
         case 'read_local_path': return handleReadLocalPath(input);
         case 'get_current_datetime': return handleGetCurrentDatetime(input);
         case 'update_skill': return handleUpdateSkill(input);

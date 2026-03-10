@@ -38,6 +38,11 @@ interface AIChatMessageForHistory {
         input: Record<string, unknown>;
         result?: string;
     }>;
+    attachments?: Array<{
+        name: string;
+        mediaType: string;
+        data: string;
+    }>;
 }
 interface AIChatHistoryFile {
     messages: AIChatMessageForHistory[];
