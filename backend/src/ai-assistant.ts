@@ -737,7 +737,7 @@ If the user asks about current events, real-time information, or anything requir
     try {
       const userCommands = await getUserConfirmCommands();
       res.json({
-        defaultCommands: DEFAULT_CONFIRM_COMMANDS,
+        defaultCommands: getDefaultConfirmCommandsForPlatform(),
         userCommands,
       });
     } catch (err) {
@@ -2834,62 +2834,152 @@ async function handleWriteLocalPath(input: ToolInput): Promise<string> {
 // Terminal command execution
 // ============================================================
 
-// Default list of dangerous command prefixes that require user confirmation before execution.
-// Commands NOT in this list (or the user-defined list) will auto-execute.
-const DEFAULT_CONFIRM_COMMANDS: string[] = [
+// Platform tags for built-in confirmation commands.
+// 'all' = cross-platform, 'unix' = macOS + Linux, 'win32' = Windows,
+// 'darwin' = macOS only, 'linux' = Linux only.
+type ConfirmCommandPlatform = 'all' | 'unix' | 'win32' | 'darwin' | 'linux';
+interface ConfirmCommandEntry { cmd: string; platform: ConfirmCommandPlatform; }
+
+const DEFAULT_CONFIRM_COMMANDS: ConfirmCommandEntry[] = [
   // Destructive file operations
-  'rm', 'rmdir', 'del', 'rd',
-  'mv', 'move',
-  'shred', 'wipe',
+  { cmd: 'rm', platform: 'unix' },
+  { cmd: 'rmdir', platform: 'unix' },
+  { cmd: 'del', platform: 'win32' },
+  { cmd: 'rd', platform: 'win32' },
+  { cmd: 'mv', platform: 'unix' },
+  { cmd: 'move', platform: 'win32' },
+  { cmd: 'shred', platform: 'unix' },
+  { cmd: 'wipe', platform: 'unix' },
   // Elevated / system-level
-  'sudo', 'su',
-  'runas',
-  'doas',
+  { cmd: 'sudo', platform: 'unix' },
+  { cmd: 'su', platform: 'unix' },
+  { cmd: 'runas', platform: 'win32' },
+  { cmd: 'doas', platform: 'unix' },
   // System control
-  'shutdown', 'reboot', 'poweroff', 'halt', 'init',
-  'systemctl stop', 'systemctl disable', 'systemctl restart',
+  { cmd: 'shutdown', platform: 'all' },
+  { cmd: 'reboot', platform: 'unix' },
+  { cmd: 'poweroff', platform: 'unix' },
+  { cmd: 'halt', platform: 'unix' },
+  { cmd: 'init', platform: 'unix' },
+  { cmd: 'systemctl stop', platform: 'linux' },
+  { cmd: 'systemctl disable', platform: 'linux' },
+  { cmd: 'systemctl restart', platform: 'linux' },
   // Disk / format
-  'mkfs', 'fdisk', 'dd', 'parted', 'diskutil eraseDisk', 'diskutil partitionDisk',
-  'format',  // Windows format
+  { cmd: 'mkfs', platform: 'unix' },
+  { cmd: 'fdisk', platform: 'unix' },
+  { cmd: 'dd', platform: 'unix' },
+  { cmd: 'parted', platform: 'unix' },
+  { cmd: 'diskutil eraseDisk', platform: 'darwin' },
+  { cmd: 'diskutil partitionDisk', platform: 'darwin' },
+  { cmd: 'format', platform: 'win32' },
   // Process control
-  'kill', 'killall', 'pkill',
-  'taskkill',  // Windows
-  'Stop-Process',  // PowerShell
+  { cmd: 'kill', platform: 'unix' },
+  { cmd: 'killall', platform: 'unix' },
+  { cmd: 'pkill', platform: 'unix' },
+  { cmd: 'taskkill', platform: 'win32' },
+  { cmd: 'Stop-Process', platform: 'win32' },
   // Package install / modify (may change system state)
-  'npm install', 'npm i', 'npm uninstall', 'npm update', 'npm ci',
-  'yarn add', 'yarn remove', 'yarn install',
-  'pnpm add', 'pnpm remove', 'pnpm install',
-  'pip install', 'pip uninstall',
-  'apt install', 'apt remove', 'apt purge', 'apt-get install', 'apt-get remove',
-  'brew install', 'brew uninstall', 'brew remove',
-  'cargo install', 'cargo uninstall',
-  'choco install', 'choco uninstall',  // Windows Chocolatey
-  'winget install', 'winget uninstall',  // Windows winget
-  'Install-Module', 'Uninstall-Module',  // PowerShell
+  { cmd: 'npm install', platform: 'all' },
+  { cmd: 'npm i', platform: 'all' },
+  { cmd: 'npm uninstall', platform: 'all' },
+  { cmd: 'npm update', platform: 'all' },
+  { cmd: 'npm ci', platform: 'all' },
+  { cmd: 'yarn add', platform: 'all' },
+  { cmd: 'yarn remove', platform: 'all' },
+  { cmd: 'yarn install', platform: 'all' },
+  { cmd: 'pnpm add', platform: 'all' },
+  { cmd: 'pnpm remove', platform: 'all' },
+  { cmd: 'pnpm install', platform: 'all' },
+  { cmd: 'pip install', platform: 'all' },
+  { cmd: 'pip uninstall', platform: 'all' },
+  { cmd: 'apt install', platform: 'linux' },
+  { cmd: 'apt remove', platform: 'linux' },
+  { cmd: 'apt purge', platform: 'linux' },
+  { cmd: 'apt-get install', platform: 'linux' },
+  { cmd: 'apt-get remove', platform: 'linux' },
+  { cmd: 'brew install', platform: 'darwin' },
+  { cmd: 'brew uninstall', platform: 'darwin' },
+  { cmd: 'brew remove', platform: 'darwin' },
+  { cmd: 'cargo install', platform: 'all' },
+  { cmd: 'cargo uninstall', platform: 'all' },
+  { cmd: 'choco install', platform: 'win32' },
+  { cmd: 'choco uninstall', platform: 'win32' },
+  { cmd: 'winget install', platform: 'win32' },
+  { cmd: 'winget uninstall', platform: 'win32' },
+  { cmd: 'Install-Module', platform: 'win32' },
+  { cmd: 'Uninstall-Module', platform: 'win32' },
   // Git write operations
-  'git push', 'git push --force', 'git reset --hard', 'git clean',
-  'git rebase', 'git merge', 'git checkout -b',
+  { cmd: 'git push', platform: 'all' },
+  { cmd: 'git push --force', platform: 'all' },
+  { cmd: 'git reset --hard', platform: 'all' },
+  { cmd: 'git clean', platform: 'all' },
+  { cmd: 'git rebase', platform: 'all' },
+  { cmd: 'git merge', platform: 'all' },
+  { cmd: 'git checkout -b', platform: 'all' },
   // Docker / container
-  'docker rm', 'docker rmi', 'docker stop', 'docker kill',
-  'docker system prune', 'docker volume rm', 'docker network rm',
+  { cmd: 'docker rm', platform: 'all' },
+  { cmd: 'docker rmi', platform: 'all' },
+  { cmd: 'docker stop', platform: 'all' },
+  { cmd: 'docker kill', platform: 'all' },
+  { cmd: 'docker system prune', platform: 'all' },
+  { cmd: 'docker volume rm', platform: 'all' },
+  { cmd: 'docker network rm', platform: 'all' },
   // Dangerous network
-  'iptables', 'ufw', 'netsh',  // Windows netsh
+  { cmd: 'iptables', platform: 'linux' },
+  { cmd: 'ufw', platform: 'linux' },
+  { cmd: 'netsh', platform: 'win32' },
   // Registry (Windows)
-  'reg delete', 'reg add',
-  'Remove-Item', 'Remove-ItemProperty',  // PowerShell
+  { cmd: 'reg delete', platform: 'win32' },
+  { cmd: 'reg add', platform: 'win32' },
+  { cmd: 'Remove-Item', platform: 'win32' },
+  { cmd: 'Remove-ItemProperty', platform: 'win32' },
   // Permissions
-  'chmod', 'chown', 'chgrp',
-  'icacls', 'takeown',  // Windows
+  { cmd: 'chmod', platform: 'unix' },
+  { cmd: 'chown', platform: 'unix' },
+  { cmd: 'chgrp', platform: 'unix' },
+  { cmd: 'icacls', platform: 'win32' },
+  { cmd: 'takeown', platform: 'win32' },
   // Environment modification
-  'export', 'unset', 'setx',  // Windows setx
-  '[Environment]::SetEnvironmentVariable',  // PowerShell
+  { cmd: 'export', platform: 'unix' },
+  { cmd: 'unset', platform: 'unix' },
+  { cmd: 'setx', platform: 'win32' },
+  { cmd: '[Environment]::SetEnvironmentVariable', platform: 'win32' },
   // Service management (Windows)
-  'sc delete', 'sc stop',
-  'Stop-Service', 'Remove-Service',  // PowerShell
+  { cmd: 'sc delete', platform: 'win32' },
+  { cmd: 'sc stop', platform: 'win32' },
+  { cmd: 'Stop-Service', platform: 'win32' },
+  { cmd: 'Remove-Service', platform: 'win32' },
   // Database
-  'dropdb', 'drop database', 'DROP DATABASE',
-  'mongo --eval', 'redis-cli FLUSHALL', 'redis-cli FLUSHDB',
+  { cmd: 'dropdb', platform: 'all' },
+  { cmd: 'drop database', platform: 'all' },
+  { cmd: 'DROP DATABASE', platform: 'all' },
+  { cmd: 'mongo --eval', platform: 'all' },
+  { cmd: 'redis-cli FLUSHALL', platform: 'all' },
+  { cmd: 'redis-cli FLUSHDB', platform: 'all' },
 ];
+
+/**
+ * Return the default confirmation commands filtered by the current OS platform.
+ * 'all' commands are always included. 'unix' includes both macOS and Linux.
+ * 'darwin', 'linux', 'win32' match only their specific platform.
+ */
+function getDefaultConfirmCommandsForPlatform(): string[] {
+  const plat = process.platform; // 'win32' | 'darwin' | 'linux' | ...
+  const isWin = plat === 'win32';
+  const isMac = plat === 'darwin';
+  const isLinux = plat === 'linux';
+
+  return DEFAULT_CONFIRM_COMMANDS
+    .filter(entry => {
+      if (entry.platform === 'all') return true;
+      if (entry.platform === 'unix') return !isWin; // unix = macOS + Linux
+      if (entry.platform === 'win32') return isWin;
+      if (entry.platform === 'darwin') return isMac;
+      if (entry.platform === 'linux') return isLinux;
+      return false;
+    })
+    .map(entry => entry.cmd);
+}
 
 /**
  * Read user-defined confirmation command list from settings.json.
@@ -2927,7 +3017,7 @@ async function saveUserConfirmCommands(commands: string[]): Promise<void> {
 async function requiresConfirmation(command: string): Promise<boolean> {
   const trimmed = command.trim();
   const userCommands = await getUserConfirmCommands();
-  const combined = [...DEFAULT_CONFIRM_COMMANDS, ...userCommands];
+  const combined = [...getDefaultConfirmCommandsForPlatform(), ...userCommands];
   return combined.some(prefix => {
     // Case-insensitive prefix matching for cross-platform support
     const lowerTrimmed = trimmed.toLowerCase();
