@@ -341,6 +341,12 @@ export function SkillsMarketplace({
                           const details = pluginDetails[plugin.name];
                           const hasContent = details.commands.length > 0 || details.skills.length > 0 || details.agents.length > 0 || details.lspServers.length > 0;
 
+                          if (!hasContent && details.sourceType === 'remote') {
+                            return (
+                              <p className="text-xs text-zinc-500 italic">Remote plugin — install to view details</p>
+                            );
+                          }
+
                           if (!hasContent) {
                             return (
                               <p className="text-xs text-zinc-600 italic">No commands, skills, agents, or LSP servers found</p>

@@ -1831,7 +1831,13 @@ app.get('/api/plugins/marketplace-plugin-details', async (req: Request, res: Res
       }
     }
 
-    res.json({ commands, skills, agents, lspServers });
+    // Determine source type for frontend messaging
+    const sourceType: 'local' | 'remote' | 'skills-array' =
+      (pluginEntry.skills && pluginEntry.skills.length > 0) ? 'skills-array'
+      : (typeof pluginEntry.source === 'string') ? 'local'
+      : 'remote';
+
+    res.json({ commands, skills, agents, lspServers, sourceType });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
   }

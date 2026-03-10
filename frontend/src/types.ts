@@ -206,6 +206,7 @@ export interface MarketplacePluginDetails {
   skills: Array<{ name: string; filename: string }>;
   agents: Array<{ name: string; filename: string; model?: string }>;
   lspServers: Array<{ name: string; command: string; extensions: string[] }>;
+  sourceType?: 'local' | 'remote' | 'skills-array';
 }
 
 export interface AIToolCall {
