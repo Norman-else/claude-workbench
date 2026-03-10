@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ArrowLeft, Code, Copy, Edit2, FileText, Play, Plus, RotateCw, Save, Server, Square, Store, Trash2, X } from 'lucide-react';
+import { ArrowLeft, Code, Copy, Edit2, FileText, LayoutGrid, List, Play, Plus, RotateCw, Save, Search, Server, Square, Store, Trash2, X } from 'lucide-react';
 import { saveClaudeConfig, restartMcpServer, startMcpServer, stopMcpServer } from '../../api';
 import { ServerLogs } from '../ServerLogs';
 import { McpMarketplace } from '../McpMarketplace';
@@ -40,6 +40,8 @@ export function McpTab({
   const [showMarketplace, setShowMarketplace] = useState(false);
   const [importJsonContent, setImportJsonContent] = useState('');
   const [newServerForm, setNewServerForm] = useState({ name: '', command: '', args: '', env: '' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayLayout, setDisplayLayout] = useState<'grid' | 'list'>('grid');
 
   const openServerDetail = (serverName: string) => {
     setSelectedServer(serverName);
@@ -247,225 +249,356 @@ export function McpTab({
       <div className="p-8">
         {mcpViewMode === 'list' ? (
           <div>
-            <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+            <div className="flex items-center justify-between mb-6 titlebar-no-drag">
               <div>
-                <h2 className="text-3xl font-bold  text-white mb-2">
+                <h2 className="text-3xl font-bold text-white mb-1">
                   MCP Servers
                 </h2>
-                <p className="text-gray-400">Manage your Model Context Protocol servers</p>
+                <p className="text-gray-400 text-sm">Manage your Model Context Protocol servers</p>
               </div>
-              <div className="flex space-x-4 titlebar-no-drag">
+              <div className="flex items-center space-x-3 titlebar-no-drag">
+                <div className="relative">
+                  <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                  <input
+                    type="text"
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    placeholder="Search servers..."
+                    className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                  />
+                </div>
+                <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                  <button
+                    onClick={() => setDisplayLayout('grid')}
+                    className={`p-2 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setDisplayLayout('list')}
+                    className={`p-2 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
                 <button
                   onClick={() => setShowMarketplace(true)}
-                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                 >
-                  <Store className="w-5 h-5 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
-                  <span className="text-white font-medium">Browse Marketplace</span>
+                  <Store className="w-4 h-4 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
+                  <span className="text-white text-sm font-medium">Browse Marketplace</span>
                 </button>
                 <button
                   onClick={() => setShowAddServerModal(true)}
-                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                 >
-                  <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
-                  <span className="text-white font-medium">Add Server</span>
+                  <Plus className="w-4 h-4 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
+                  <span className="text-white text-sm font-medium">Add Server</span>
                 </button>
                 <button
                   onClick={() => setShowImportJsonModal(true)}
-                  className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group  titlebar-no-drag"
+                  className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                 >
-                  <Code className="w-5 h-5 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
-                  <span className="text-white font-medium">Import JSON</span>
+                  <Code className="w-4 h-4 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
+                  <span className="text-white text-sm font-medium">Import JSON</span>
                 </button>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {Object.entries(claudeConfig.mcpServers || {}).map(([name, server]) => {
-                const status = mcpStatuses[name];
-                const isRunning = status?.running || false;
-                const isLoading = isLoadingStatus[name] || false;
+            {(() => {
+              const allServers = Object.entries(claudeConfig.mcpServers || {});
+              const filtered = allServers.filter(([name, server]) => {
+                if (!searchQuery) return true;
+                const q = searchQuery.toLowerCase();
+                return name.toLowerCase().includes(q) || (server.command?.toLowerCase().includes(q)) || (server.args?.join(' ').toLowerCase().includes(q));
+              });
 
+              if (filtered.length === 0 && allServers.length > 0) {
                 return (
-                  <div
-                    key={name}
-                    onClick={() => openServerDetail(name)}
-                    className="glass border border-zinc-800 rounded-2xl p-6 group  relative h-[320px] flex flex-col card-hover cursor-pointer">
-                    <div className="mb-4 flex items-center space-x-2">
-                      <div
-                        className={`w-2 h-2 rounded-full ${
-                          isRunning
-                            ? 'bg-green-400 animate-pulse'
-                            : status?.status === 'stopping'
-                              ? 'bg-yellow-400 animate-pulse'
-                              : status?.status === 'error'
-                                ? 'bg-red-400 animate-pulse'
-                                : 'bg-gray-500'
-                        }`}
-                      ></div>
-                      <span
-                        className={`text-xs font-medium ${
-                          isRunning
-                            ? 'text-green-400'
-                            : status?.status === 'stopping'
-                              ? 'text-yellow-400'
-                              : status?.status === 'error'
-                                ? 'text-red-400'
-                                : 'text-gray-500'
-                        }`}
-                      >
-                        {isRunning
-                          ? 'Running'
-                          : status?.status === 'stopping'
-                            ? 'Stopping'
-                            : status?.status === 'error'
-                              ? 'Error'
-                              : 'Stopped'}
-                      </span>
-                      {status?.pid && <span className="text-[10px] text-gray-500 ml-1">PID: {status.pid}</span>}
-                    </div>
-
-                    <div className="flex items-start mb-4">
-                      <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
-                        <Server className="w-6 h-6 text-zinc-100" />
-                      </div>
-                    </div>
-
-                    <h3 className="text-xl font-bold text-white mb-2 transition-all">
-                      {name}
-                    </h3>
-
-                    <div className="space-y-2 text-sm mb-4 flex-1">
-                      <div className="flex items-center space-x-2">
-                        <Code className="w-4 h-4 text-gray-500" />
-                        <span className="text-gray-400 font-mono text-xs truncate">{server.command}</span>
-                      </div>
-                      {server.args && server.args.length > 0 && (
-                        <div className="flex items-center space-x-1 ml-6">
-                          <div className="px-2 py-1 bg-zinc-800/50 rounded text-xs text-zinc-100">
-                            {server.args.length} arg{server.args.length > 1 ? 's' : ''}
-                          </div>
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                      {isRunning ? (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setLogsServerName(name);
-                              setShowLogsModal(true);
-                            }}
-                            className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  tooltip text-xs"
-                            data-tooltip="View logs"
-                          >
-                            <FileText className="w-4 h-4 text-zinc-300" />
-                            <span className="text-zinc-300 hidden sm:inline">Logs</span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              restartServer(name);
-                            }}
-                            disabled={isLoading}
-                            className="flex-1 glass hover:border-yellow-700/50 border border-yellow-900/50 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  tooltip text-xs disabled:opacity-50"
-                            data-tooltip="Restart server"
-                          >
-                            <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
-                            <span className="text-yellow-400 hidden sm:inline">Restart</span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              stopServer(name);
-                            }}
-                            disabled={isLoading}
-                            className="flex-1 glass hover:border-red-700/50 border border-red-900/50 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  tooltip text-xs disabled:opacity-50"
-                            data-tooltip="Stop server"
-                          >
-                            <Square className="w-4 h-4 text-red-400" />
-                            <span className="text-red-400 hidden sm:inline">Stop</span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const serverJson = JSON.stringify({ [name]: server }, null, 2);
-                              navigator.clipboard.writeText(serverJson);
-                              showNotification('MCP configuration copied to clipboard!');
-                            }}
-                            className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
-                            data-tooltip="Copy JSON"
-                          >
-                            <Copy className="w-4 h-4 text-zinc-300" />
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              startServer(name);
-                            }}
-                            disabled={isLoading}
-                            className="flex-1 bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-800 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all  text-xs"
-                          >
-                            <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
-                            <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              const serverJson = JSON.stringify({ [name]: server }, null, 2);
-                              navigator.clipboard.writeText(serverJson);
-                              showNotification('MCP configuration copied to clipboard!');
-                            }}
-                            className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
-                            data-tooltip="Copy JSON"
-                          >
-                            <Copy className="w-4 h-4 text-zinc-300" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openServerDetail(name);
-                            }}
-                            className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
-                            data-tooltip="Edit server"
-                          >
-                            <Edit2 className="w-4 h-4 text-zinc-100" />
-                          </button>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              requestDelete(name);
-                            }}
-                            className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
-                            data-tooltip="Delete server"
-                          >
-                            <Trash2 className="w-4 h-4 text-red-400" />
-                          </button>
-                        </>
-                      )}
-                    </div>
+                  <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                    <Search className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                    <p className="text-zinc-400">No servers matching &ldquo;{searchQuery}&rdquo;</p>
                   </div>
                 );
-              })}
+              }
 
-              {Object.keys(claudeConfig.mcpServers || {}).length === 0 && (
-                <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
-                  <Server className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                  <p className="text-gray-400 mb-4">No MCP servers configured yet</p>
-                  <button
-                    onClick={() => setShowAddServerModal(true)}
-                    className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-                  >
-                    <Plus className="w-5 h-5 text-zinc-100" />
-                    <span className="text-white font-medium">Add Your First Server</span>
-                  </button>
+              if (filtered.length === 0) {
+                return (
+                  <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                    <Server className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                    <p className="text-gray-400 mb-4">No MCP servers configured yet</p>
+                    <button
+                      onClick={() => setShowAddServerModal(true)}
+                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                    >
+                      <Plus className="w-5 h-5 text-zinc-100" />
+                      <span className="text-white font-medium">Add Your First Server</span>
+                    </button>
+                  </div>
+                );
+              }
+
+              if (displayLayout === 'list') {
+                return (
+                  <div className="space-y-2">
+                    {filtered.map(([name, server]) => {
+                      const status = mcpStatuses[name];
+                      const isRunning = status?.running || false;
+                      const isLoading = isLoadingStatus[name] || false;
+
+                      return (
+                        <div
+                          key={name}
+                          onClick={() => openServerDetail(name)}
+                          className="glass border border-zinc-800 rounded-xl px-4 py-3 card-hover cursor-pointer group flex items-center gap-4 transition-all"
+                        >
+                          <div className="flex items-center gap-2 shrink-0">
+                            <div
+                              className={`w-2 h-2 rounded-full ${
+                                isRunning
+                                  ? 'bg-green-400 animate-pulse'
+                                  : status?.status === 'stopping'
+                                    ? 'bg-yellow-400 animate-pulse'
+                                    : status?.status === 'error'
+                                      ? 'bg-red-400 animate-pulse'
+                                      : 'bg-gray-500'
+                              }`}
+                            />
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Server className="w-4 h-4 text-zinc-100" />
+                            </div>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <h3 className="text-sm font-semibold text-white truncate">{name}</h3>
+                            <p className="text-xs text-zinc-500 truncate font-mono">{server.command || ''}{server.args && server.args.length > 0 ? ` ${server.args.join(' ')}` : ''}</p>
+                          </div>
+                          <span
+                            className={`text-xs font-medium shrink-0 ${
+                              isRunning
+                                ? 'text-green-400'
+                                : status?.status === 'stopping'
+                                  ? 'text-yellow-400'
+                                  : status?.status === 'error'
+                                    ? 'text-red-400'
+                                    : 'text-gray-500'
+                            }`}
+                          >
+                            {isRunning ? 'Running' : status?.status === 'stopping' ? 'Stopping' : status?.status === 'error' ? 'Error' : 'Stopped'}
+                          </span>
+                          {status?.pid && <span className="text-[10px] text-gray-500 shrink-0">PID: {status.pid}</span>}
+                          <div className="flex items-center gap-1 shrink-0" onClick={(e) => e.stopPropagation()}>
+                            {isRunning ? (
+                              <>
+                                <button onClick={() => { setLogsServerName(name); setShowLogsModal(true); }} className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip" data-tooltip="View logs">
+                                  <FileText className="w-3.5 h-3.5 text-zinc-300" />
+                                </button>
+                                <button onClick={() => restartServer(name)} disabled={isLoading} className="p-1.5 glass hover:border-yellow-700/50 border border-yellow-900/50 rounded-lg transition-all tooltip disabled:opacity-50" data-tooltip="Restart">
+                                  <RotateCw className={`w-3.5 h-3.5 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
+                                </button>
+                                <button onClick={() => stopServer(name)} disabled={isLoading} className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip disabled:opacity-50" data-tooltip="Stop">
+                                  <Square className="w-3.5 h-3.5 text-red-400" />
+                                </button>
+                              </>
+                            ) : (
+                              <>
+                                <button onClick={() => startServer(name)} disabled={isLoading} className="p-1.5 bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-800 rounded-lg transition-all tooltip" data-tooltip="Start">
+                                  <Play className={`w-3.5 h-3.5 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
+                                </button>
+                              </>
+                            )}
+                            <button onClick={() => { const serverJson = JSON.stringify({ [name]: server }, null, 2); navigator.clipboard.writeText(serverJson); showNotification('MCP configuration copied to clipboard!'); }} className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip" data-tooltip="Copy JSON">
+                              <Copy className="w-3.5 h-3.5 text-zinc-300" />
+                            </button>
+                            <button onClick={() => openServerDetail(name)} className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip" data-tooltip="Edit">
+                              <Edit2 className="w-3.5 h-3.5 text-zinc-100" />
+                            </button>
+                            <button onClick={() => requestDelete(name)} className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip" data-tooltip="Delete">
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              }
+
+              return (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                  {filtered.map(([name, server]) => {
+                    const status = mcpStatuses[name];
+                    const isRunning = status?.running || false;
+                    const isLoading = isLoadingStatus[name] || false;
+
+                    return (
+                      <div
+                        key={name}
+                        onClick={() => openServerDetail(name)}
+                        className="glass border border-zinc-800 rounded-2xl p-6 group relative flex flex-col card-hover cursor-pointer">
+                        <div className="mb-4 flex items-center space-x-2">
+                          <div
+                            className={`w-2 h-2 rounded-full ${
+                              isRunning
+                                ? 'bg-green-400 animate-pulse'
+                                : status?.status === 'stopping'
+                                  ? 'bg-yellow-400 animate-pulse'
+                                  : status?.status === 'error'
+                                    ? 'bg-red-400 animate-pulse'
+                                    : 'bg-gray-500'
+                            }`}
+                          ></div>
+                          <span
+                            className={`text-xs font-medium ${
+                              isRunning
+                                ? 'text-green-400'
+                                : status?.status === 'stopping'
+                                  ? 'text-yellow-400'
+                                  : status?.status === 'error'
+                                    ? 'text-red-400'
+                                    : 'text-gray-500'
+                            }`}
+                          >
+                            {isRunning
+                              ? 'Running'
+                              : status?.status === 'stopping'
+                                ? 'Stopping'
+                                : status?.status === 'error'
+                                  ? 'Error'
+                                  : 'Stopped'}
+                          </span>
+                          {status?.pid && <span className="text-[10px] text-gray-500 ml-1">PID: {status.pid}</span>}
+                        </div>
+
+                        <div className="flex items-start mb-4">
+                          <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                            <Server className="w-6 h-6 text-zinc-100" />
+                          </div>
+                        </div>
+
+                        <h3 className="text-xl font-bold text-white mb-2 transition-all">
+                          {name}
+                        </h3>
+
+                        <div className="space-y-2 text-sm mb-4 flex-1">
+                          <div className="flex items-center space-x-2">
+                            <Code className="w-4 h-4 text-gray-500" />
+                            <span className="text-gray-400 font-mono text-xs truncate">{server.command || ''}</span>
+                          </div>
+                          {server.args && server.args.length > 0 && (
+                            <div className="flex items-center space-x-1 ml-6">
+                              <div className="px-2 py-1 bg-zinc-800/50 rounded text-xs text-zinc-100">
+                                {server.args.length} arg{server.args.length > 1 ? 's' : ''}
+                              </div>
+                            </div>
+                          )}
+                        </div>
+
+                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
+                          {isRunning ? (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setLogsServerName(name);
+                                  setShowLogsModal(true);
+                                }}
+                                className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all tooltip text-xs"
+                                data-tooltip="View logs"
+                              >
+                                <FileText className="w-4 h-4 text-zinc-300" />
+                                <span className="text-zinc-300 hidden sm:inline">Logs</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  restartServer(name);
+                                }}
+                                disabled={isLoading}
+                                className="flex-1 glass hover:border-yellow-700/50 border border-yellow-900/50 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all tooltip text-xs disabled:opacity-50"
+                                data-tooltip="Restart server"
+                              >
+                                <RotateCw className={`w-4 h-4 text-yellow-400 ${isLoading ? 'animate-spin' : ''}`} />
+                                <span className="text-yellow-400 hidden sm:inline">Restart</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  stopServer(name);
+                                }}
+                                disabled={isLoading}
+                                className="flex-1 glass hover:border-red-700/50 border border-red-900/50 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all tooltip text-xs disabled:opacity-50"
+                                data-tooltip="Stop server"
+                              >
+                                <Square className="w-4 h-4 text-red-400" />
+                                <span className="text-red-400 hidden sm:inline">Stop</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const serverJson = JSON.stringify({ [name]: server }, null, 2);
+                                  navigator.clipboard.writeText(serverJson);
+                                  showNotification('MCP configuration copied to clipboard!');
+                                }}
+                                className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
+                                data-tooltip="Copy JSON"
+                              >
+                                <Copy className="w-4 h-4 text-zinc-300" />
+                              </button>
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  startServer(name);
+                                }}
+                                disabled={isLoading}
+                                className="flex-1 bg-zinc-800/50 hover:bg-zinc-700/50 border border-zinc-800 px-3 py-2 rounded-xl flex items-center justify-center space-x-1 transition-all text-xs"
+                              >
+                                <Play className={`w-4 h-4 text-green-400 ${isLoading ? 'animate-pulse' : ''}`} />
+                                <span className="text-green-400 font-medium">{isLoading ? 'Starting...' : 'Start'}</span>
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const serverJson = JSON.stringify({ [name]: server }, null, 2);
+                                  navigator.clipboard.writeText(serverJson);
+                                  showNotification('MCP configuration copied to clipboard!');
+                                }}
+                                className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
+                                data-tooltip="Copy JSON"
+                              >
+                                <Copy className="w-4 h-4 text-zinc-300" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  openServerDetail(name);
+                                }}
+                                className="p-2 glass hover:border-zinc-600 border border-zinc-800 rounded-xl transition-all tooltip"
+                                data-tooltip="Edit server"
+                              >
+                                <Edit2 className="w-4 h-4 text-zinc-100" />
+                              </button>
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  requestDelete(name);
+                                }}
+                                className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
+                                data-tooltip="Delete server"
+                              >
+                                <Trash2 className="w-4 h-4 text-red-400" />
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
-              )}
-            </div>
+              );
+            })()}
           </div>
         ) : (
           <div>
