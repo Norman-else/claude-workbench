@@ -156,41 +156,37 @@ Show concrete examples of using this Skill.
                     <h2 className="text-3xl font-bold text-white mb-2">Personal Skills</h2>
                     <p className="text-gray-400">Create and manage your Agent Skills</p>
                   </div>
-                  <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search skills..."
+                        className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                      <button
+                        onClick={() => setDisplayLayout('grid')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDisplayLayout('list')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
                     <button
                       onClick={() => setShowAddSkillModal(true)}
-                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
+                      className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                     >
-                      <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
-                      <span className="text-white font-medium">Add Skill</span>
-                    </button>
-                  </div>
-                </div>
-
-                {/* Search + View Toggle Bar */}
-                <div className="flex items-center gap-3 mb-6 titlebar-no-drag">
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search skills..."
-                      className="w-full glass border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none transition-all"
-                    />
-                  </div>
-                  <div className="flex items-center glass border border-zinc-800 rounded-xl p-1">
-                    <button
-                      onClick={() => setDisplayLayout('grid')}
-                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDisplayLayout('list')}
-                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      <List className="w-4 h-4" />
+                      <Plus className="w-4 h-4 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
+                      <span className="text-white text-sm font-medium">Add Skill</span>
                     </button>
                   </div>
                 </div>
@@ -397,33 +393,31 @@ Show concrete examples of using this Skill."
                     <h2 className="text-3xl font-bold text-white mb-2">Plugin Skills</h2>
                     <p className="text-gray-400">Skills provided by installed plugins</p>
                   </div>
-                </div>
-
-                {/* Search + View Toggle Bar */}
-                <div className="flex items-center gap-3 mb-6 titlebar-no-drag">
-                  <div className="relative flex-1 max-w-md">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
-                    <input
-                      type="text"
-                      value={searchQuery}
-                      onChange={(e) => setSearchQuery(e.target.value)}
-                      placeholder="Search plugin skills..."
-                      className="w-full glass border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none transition-all"
-                    />
-                  </div>
-                  <div className="flex items-center glass border border-zinc-800 rounded-xl p-1">
-                    <button
-                      onClick={() => setDisplayLayout('grid')}
-                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      <LayoutGrid className="w-4 h-4" />
-                    </button>
-                    <button
-                      onClick={() => setDisplayLayout('list')}
-                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
-                    >
-                      <List className="w-4 h-4" />
-                    </button>
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search plugin skills..."
+                        className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                      <button
+                        onClick={() => setDisplayLayout('grid')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDisplayLayout('list')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
