@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe, Clock, Layers, Server, Terminal, Zap, ShoppingBag, Settings, HardDrive, Package } from 'lucide-react';
+import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe, Clock, Layers, Server, Terminal, Zap, ShoppingBag, Settings, HardDrive, Package, ArrowLeft } from 'lucide-react';
 import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment, SavedProject } from '../types';
 import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects, getTerminalConfirmCommands, saveTerminalConfirmCommands } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
@@ -887,6 +887,13 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           )}
           {!noProfile && showSettings && (
             <div className="ai-settings-panel space-y-4">
+              <button
+                onClick={() => setShowSettings(false)}
+                className="inline-flex items-center gap-1.5 text-xs font-medium text-blue-400 hover:text-blue-300 transition-colors group"
+              >
+                <ArrowLeft className="w-3.5 h-3.5 group-hover:-translate-x-0.5 transition-transform" />
+                <span>Back to chat</span>
+              </button>
               {/* Section header */}
               <div className="flex items-center gap-2">
                 <Terminal className="w-4 h-4 text-white/50" />
@@ -1065,7 +1072,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           {!showSettings && <div ref={messagesEndRef} />}
         </div>
 
-        {/* Terminal command confirmation */}
+        {!showSettings && (<>
         {pendingConfirmation && (
           <div className="ai-command-confirm px-4 py-3 border-t border-white/[0.08] bg-amber-900/10">
             <div className="flex items-center gap-2 mb-2">
@@ -1413,6 +1420,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           </div>
           <p className="text-[11px] text-white/20 mt-1.5 text-center select-none">Enter 发送 · Shift+Enter 换行 · / 选择工具 · /model 切换模型</p>
         </div>
+        </>)}
       </div>
 
       {/* Delete conversation confirmation modal */}

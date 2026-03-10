@@ -1746,6 +1746,12 @@ html[data-theme="light"] .ai-command-confirm .text-white\/70 {
 html[data-theme="light"] .ai-command-confirm .bg-emerald-600 {
   color: #ffffff !important;
 }
+html[data-theme="light"] .ai-command-confirm .border-white\/15 {
+  border-color: rgba(0, 0, 0, 0.15) !important;
+}
+html[data-theme="light"] .ai-command-confirm .bg-white\/8 {
+  background-color: rgba(0, 0, 0, 0.05) !important;
+}
 
 /* ======================================================
    AI Settings Panel — Light Mode
