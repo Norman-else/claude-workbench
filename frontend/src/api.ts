@@ -16,6 +16,7 @@ import type {
   AIModelOption,
   AIToolInfo,
   AIConversation,
+  SavedProject,
 } from './types';
 async function parseError(response: Response): Promise<string> {
   try {
@@ -43,12 +44,68 @@ async function requestVoid(url: string, init?: RequestInit): Promise<void> {
   }
 }
 
-export async function getClaudeConfig(): Promise<ClaudeConfig> {
-  return requestJson<ClaudeConfig>('/api/claude-config');
+function withProjectPath(url: string, projectPath?: string): string {
+  if (!projectPath) return url;
+  const separator = url.includes('?') ? '&' : '?';
+  return `${url}${separator}projectPath=${encodeURIComponent(projectPath)}`;
 }
 
-export async function saveClaudeConfig(config: ClaudeConfig): Promise<void> {
-  await requestVoid('/api/claude-config', {
+// Project management
+export async function getProjects(): Promise<SavedProject[]> {
+  const data = await requestJson<{ projects: SavedProject[] }>('/api/projects');
+  return data.projects || [];
+}
+
+export async function addProject(projectPath: string): Promise<SavedProject> {
+  const data = await requestJson<{ project: SavedProject }>('/api/projects', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: projectPath }),
+  });
+  return data.project;
+}
+
+export async function removeProject(projectPath: string): Promise<void> {
+  await requestVoid(`/api/projects/${btoa(projectPath)}`, { method: 'DELETE' });
+}
+
+export async function validateProjectPath(projectPath: string): Promise<{ exists: boolean; hasClaude: boolean }> {
+  return requestJson<{ exists: boolean; hasClaude: boolean }>(`/api/projects/validate?path=${encodeURIComponent(projectPath)}`);
+}
+
+// Directory browsing
+export interface FileEntry {
+  name: string;
+  isDirectory: boolean;
+  path: string;
+}
+
+export interface DefaultPaths {
+  homeDir: string;
+  homeDirSymbol: string;
+  platform: 'windows' | 'unix';
+  quickPaths: Record<string, string>;
+  drives?: string[];
+}
+
+export async function listFiles(directory: string): Promise<{ files: FileEntry[]; directory: string }> {
+  return requestJson<{ files: FileEntry[]; directory: string }>('/api/list-files', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ directory }),
+  });
+}
+
+export async function getDefaultPaths(): Promise<DefaultPaths> {
+  return requestJson<DefaultPaths>('/api/default-paths');
+}
+
+export async function getClaudeConfig(projectPath?: string): Promise<ClaudeConfig> {
+  return requestJson<ClaudeConfig>(withProjectPath('/api/claude-config', projectPath));
+}
+
+export async function saveClaudeConfig(config: ClaudeConfig, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath('/api/claude-config', projectPath), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(config),
@@ -98,52 +155,52 @@ export async function reorderEnvProfiles(orderedIds: string[]): Promise<void> {
   });
 }
 
-export async function getCommands(): Promise<CommandFile[]> {
-  return requestJson<CommandFile[]>('/api/commands');
+export async function getCommands(projectPath?: string): Promise<CommandFile[]> {
+  return requestJson<CommandFile[]>(withProjectPath('/api/commands', projectPath));
 }
 
-export async function saveCommand(cmd: CommandFile): Promise<void> {
-  await requestVoid('/api/commands', {
+export async function saveCommand(cmd: CommandFile, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath('/api/commands', projectPath), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(cmd),
   });
 }
 
-export async function deleteCommand(name: string): Promise<void> {
-  await requestVoid(`/api/commands/${name}`, { method: 'DELETE' });
+export async function deleteCommand(name: string, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath(`/api/commands/${name}`, projectPath), { method: 'DELETE' });
 }
 
-export async function getSkills(): Promise<Skill[]> {
-  return requestJson<Skill[]>('/api/skills');
+export async function getSkills(projectPath?: string): Promise<Skill[]> {
+  return requestJson<Skill[]>(withProjectPath('/api/skills', projectPath));
 }
 
-export async function saveSkill(skill: Pick<Skill, 'name' | 'content'>): Promise<void> {
-  await requestVoid('/api/skills', {
+export async function saveSkill(skill: Pick<Skill, 'name' | 'content'>, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath('/api/skills', projectPath), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(skill),
   });
 }
 
-export async function deleteSkill(name: string): Promise<void> {
-  await requestVoid(`/api/skills/${name}`, { method: 'DELETE' });
+export async function deleteSkill(name: string, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath(`/api/skills/${name}`, projectPath), { method: 'DELETE' });
 }
 
-export async function getAgents(): Promise<Agent[]> {
-  return requestJson<Agent[]>('/api/agents');
+export async function getAgents(projectPath?: string): Promise<Agent[]> {
+  return requestJson<Agent[]>(withProjectPath('/api/agents', projectPath));
 }
 
-export async function saveAgent(agent: Pick<Agent, 'name' | 'content'>): Promise<void> {
-  await requestVoid('/api/agents', {
+export async function saveAgent(agent: Pick<Agent, 'name' | 'content'>, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath('/api/agents', projectPath), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(agent),
   });
 }
 
-export async function deleteAgent(name: string): Promise<void> {
-  await requestVoid(`/api/agents/${name}`, { method: 'DELETE' });
+export async function deleteAgent(name: string, projectPath?: string): Promise<void> {
+  await requestVoid(withProjectPath(`/api/agents/${name}`, projectPath), { method: 'DELETE' });
 }
 
 export function getPluginAgentContent(installPath: string, filename: string): Promise<{ content: string }> {
@@ -283,8 +340,12 @@ export async function getConversations(): Promise<AIConversation[]> {
   return data.conversations;
 }
 
-export async function createConversation(): Promise<AIConversation> {
-  return requestJson<AIConversation>('/api/ai/conversations', { method: 'POST' });
+export async function createConversation(projectPath?: string): Promise<AIConversation> {
+  return requestJson<AIConversation>('/api/ai/conversations', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(projectPath ? { projectPath } : {}),
+  });
 }
 
 export async function getConversation(id: string): Promise<{ id: string; name: string; messages: AIChatMessage[]; createdAt: string; updatedAt: string }> {
@@ -303,18 +364,27 @@ export async function renameConversation(id: string, name: string): Promise<AICo
   });
 }
 
+export async function updateConversationProject(id: string, projectPath: string | null): Promise<AIConversation> {
+  return requestJson<AIConversation>('/api/ai/conversations/' + id, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ projectPath }),
+  });
+}
+
 export function streamConversationChat(
   conversationId: string,
   message: string,
   model: string,
   signal?: AbortSignal,
   forceTool?: string,
-  attachments?: Array<{ name: string; mediaType: string; data: string }>
+  attachments?: Array<{ name: string; mediaType: string; data: string }>,
+  projectPath?: string
 ): Promise<Response> {
   return fetch('/api/ai/conversations/' + conversationId + '/chat', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, model, ...(forceTool ? { forceTool } : {}), ...(attachments && attachments.length > 0 ? { attachments } : {}) }),
+    body: JSON.stringify({ message, model, ...(forceTool ? { forceTool } : {}), ...(attachments && attachments.length > 0 ? { attachments } : {}), ...(projectPath ? { projectPath } : {}) }),
     signal,
   });
 }

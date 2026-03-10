@@ -260,4 +260,13 @@ export interface AIConversation {
   name: string;
   createdAt: string;
   updatedAt: string;
+  projectPath?: string;
 }
+
+export interface SavedProject {
+  path: string;
+  name: string;
+  addedAt: string;
+}
+
+export type ConfigScope = 'global' | 'project';
