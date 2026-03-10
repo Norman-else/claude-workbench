@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { ArrowLeft, Command, Edit2, Eye, Package, Plus, Save, Trash2 } from 'lucide-react';
+import { ArrowLeft, Command, Edit2, Eye, LayoutGrid, List, Package, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { saveCommand, getInstalledPluginDetails, getPluginCommandContent } from '../../api';
 import type { CommandFile, InstalledPluginDetails, InstalledPluginsFile, ViewMode } from '../../types';
 
@@ -17,6 +17,8 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
   const [showAddCommandModal, setShowAddCommandModal] = useState(false);
   const [newCommandForm, setNewCommandForm] = useState<{ name: string; content: string }>({ name: '', content: '' });
   const [commandsView, setCommandsView] = useState<'my' | 'plugin'>('my');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayLayout, setDisplayLayout] = useState<'grid' | 'list'>('grid');
   const [pluginDetails, setPluginDetails] = useState<InstalledPluginDetails[]>([]);
   const [viewingPluginCommand, setViewingPluginCommand] = useState<{
     pluginKey: string;
@@ -106,87 +108,158 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
           <>
             {commandViewMode === 'list' ? (
               <div>
-                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                <div className="flex items-center justify-between mb-6 titlebar-no-drag">
                   <div>
-                    <h2 className="text-3xl font-bold  text-white mb-2">
+                    <h2 className="text-3xl font-bold text-white mb-1">
                       Custom Commands
                     </h2>
-                    <p className="text-gray-400">Manage your custom command scripts</p>
+                    <p className="text-gray-400 text-sm">Manage your custom command scripts</p>
                   </div>
-                  <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search commands..."
+                        className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                      <button
+                        onClick={() => setDisplayLayout('grid')}
+                        className={`p-2 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDisplayLayout('list')}
+                        className={`p-2 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
                     <button
                       onClick={() => setShowAddCommandModal(true)}
-                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
+                      className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                     >
-                      <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
-                      <span className="text-white font-medium">Add Command</span>
+                      <Plus className="w-4 h-4 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
+                      <span className="text-white text-sm font-medium">Add Command</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {commands.map((cmd) => (
-                    <div
-                      key={cmd.name}
-                      className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
-                      onClick={() => openCommandDetail(cmd.name)}
-                    >
-                      <div className="flex items-center space-x-2 mb-4">
-                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                        <span className="text-xs font-medium text-zinc-300">Command</span>
-                      </div>
+                {(() => {
+                  const filtered = commands.filter((cmd) => {
+                    if (!searchQuery) return true;
+                    const q = searchQuery.toLowerCase();
+                    return cmd.name.toLowerCase().includes(q) || cmd.content.toLowerCase().includes(q);
+                  });
 
-                      <div className="flex items-start mb-4">
-                        <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
-                          <Command className="w-6 h-6 text-zinc-100" />
+                  if (filtered.length === 0 && commands.length > 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Search className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                        <p className="text-zinc-400">No commands matching &ldquo;{searchQuery}&rdquo;</p>
+                      </div>
+                    );
+                  }
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Command className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 mb-4">No custom commands yet</p>
+                        <button
+                          onClick={() => setShowAddCommandModal(true)}
+                          className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                        >
+                          <Plus className="w-5 h-5 text-zinc-100" />
+                          <span className="text-white font-medium">Create Your First Command</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (displayLayout === 'list') {
+                    return (
+                      <div className="space-y-2">
+                        {filtered.map((cmd) => (
+                          <div
+                            key={cmd.name}
+                            className="glass border border-zinc-800 rounded-xl px-4 py-3 card-hover cursor-pointer group flex items-center gap-4 transition-all"
+                            onClick={() => openCommandDetail(cmd.name)}
+                          >
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all shrink-0">
+                              <Command className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-semibold text-white truncate">{cmd.name.replace(/\.md$/, '')}</h3>
+                              <p className="text-xs text-zinc-500 truncate font-mono">{cmd.content.substring(0, 80)}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openCommandDetail(cmd.name); }}
+                                className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip"
+                                data-tooltip="Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-zinc-300" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); requestDelete(cmd.name); }}
+                                className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip"
+                                data-tooltip="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filtered.map((cmd) => (
+                        <div
+                          key={cmd.name}
+                          className="glass border border-zinc-800 rounded-2xl p-5 card-hover cursor-pointer group relative h-[180px] flex flex-col"
+                          onClick={() => openCommandDetail(cmd.name)}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></div>
+                              <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Command</span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Command className="w-4 h-4 text-zinc-300" />
+                            </div>
+                          </div>
+                          <h3 className="text-base font-bold text-white mb-1.5 truncate">{cmd.name.replace(/\.md$/, '')}</h3>
+                          <p className="text-gray-500 line-clamp-2 font-mono text-[11px] leading-relaxed flex-1">{cmd.content.substring(0, 100)}</p>
+                          <div className="flex items-center gap-2 pt-3 border-t border-zinc-800/60 mt-auto">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openCommandDetail(cmd.name); }}
+                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition-all"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-zinc-300" />
+                              <span className="text-[11px] text-zinc-300 font-medium">Edit</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); requestDelete(cmd.name); }}
+                              className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip"
+                              data-tooltip="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-
-                      <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{cmd.name.replace(/\.md$/, '')}</h3>
-
-                      <div className="space-y-2 text-sm mb-4 flex-1">
-                        <p className="text-gray-400 line-clamp-3 font-mono text-xs">{cmd.content.substring(0, 100)}...</p>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openCommandDetail(cmd.name);
-                          }}
-                          className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                        >
-                          <Edit2 className="w-4 h-4 text-zinc-100" />
-                          <span className="text-xs text-white font-medium">Edit</span>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            requestDelete(cmd.name);
-                          }}
-                          className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
-                          data-tooltip="Delete command"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-
-                  {commands.length === 0 && (
-                    <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
-                      <Command className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400 mb-4">No custom commands yet</p>
-                      <button
-                        onClick={() => setShowAddCommandModal(true)}
-                        className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-                      >
-                        <Plus className="w-5 h-5 text-zinc-100" />
-                        <span className="text-white font-medium">Create Your First Command</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             ) : (
               <div>
@@ -248,61 +321,134 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
           <>
             {viewingPluginCommand === null ? (
               <div>
-                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                <div className="flex items-center justify-between mb-6 titlebar-no-drag">
                   <div>
-                    <h2 className="text-3xl font-bold  text-white mb-2">
+                    <h2 className="text-3xl font-bold text-white mb-1">
                       Plugin Commands
                     </h2>
-                    <p className="text-gray-400">Commands from installed plugins</p>
+                    <p className="text-gray-400 text-sm">Commands from installed plugins</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search plugin commands..."
+                        className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                      <button
+                        onClick={() => setDisplayLayout('grid')}
+                        className={`p-2 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDisplayLayout('list')}
+                        className={`p-2 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {pluginDetails.flatMap((detail) =>
-                    detail.commands.map((cmd) => (
-                      <div
-                        key={`${detail.key}-${cmd.filename}`}
-                        className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
-                        onClick={() => handleViewPluginCommand(detail, cmd)}
-                      >
-                        <div className="flex items-center space-x-2 mb-4">
-                          <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                          <span className="text-xs font-medium text-zinc-300">Plugin</span>
-                        </div>
+                {(() => {
+                  const allPluginCmds = pluginDetails.flatMap((detail) =>
+                    detail.commands.map((cmd) => ({ detail, cmd }))
+                  );
+                  const filtered = allPluginCmds.filter(({ detail, cmd }) => {
+                    if (!searchQuery) return true;
+                    const q = searchQuery.toLowerCase();
+                    return cmd.name.toLowerCase().includes(q) || detail.pluginName.toLowerCase().includes(q);
+                  });
 
-                        <div className="flex items-start mb-4">
-                          <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
-                            <Package className="w-6 h-6 text-zinc-100" />
+                  if (filtered.length === 0 && allPluginCmds.length > 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Search className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                        <p className="text-zinc-400">No plugin commands matching &ldquo;{searchQuery}&rdquo;</p>
+                      </div>
+                    );
+                  }
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 mb-4">No plugin commands installed</p>
+                      </div>
+                    );
+                  }
+
+                  if (displayLayout === 'list') {
+                    return (
+                      <div className="space-y-2">
+                        {filtered.map(({ detail, cmd }) => (
+                          <div
+                            key={`${detail.key}-${cmd.filename}`}
+                            className="glass border border-zinc-800 rounded-xl px-4 py-3 card-hover cursor-pointer group flex items-center gap-4 transition-all"
+                            onClick={() => handleViewPluginCommand(detail, cmd)}
+                          >
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all shrink-0">
+                              <Package className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <h3 className="text-sm font-semibold text-white truncate">{cmd.name}</h3>
+                              <p className="text-xs text-zinc-500 truncate">{detail.pluginName}@{detail.marketplaceName}</p>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); handleViewPluginCommand(detail, cmd); }}
+                                className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip"
+                                data-tooltip="View"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-zinc-300" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                      {filtered.map(({ detail, cmd }) => (
+                        <div
+                          key={`${detail.key}-${cmd.filename}`}
+                          className="glass border border-zinc-800 rounded-2xl p-5 card-hover cursor-pointer group relative h-[180px] flex flex-col"
+                          onClick={() => handleViewPluginCommand(detail, cmd)}
+                        >
+                          <div className="flex items-center justify-between mb-3">
+                            <div className="flex items-center space-x-2">
+                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>
+                              <span className="text-[10px] font-medium text-zinc-400 uppercase tracking-wider">Plugin</span>
+                            </div>
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Package className="w-4 h-4 text-zinc-300" />
+                            </div>
+                          </div>
+                          <h3 className="text-base font-bold text-white mb-1 truncate">{cmd.name}</h3>
+                          <span className="text-[11px] text-zinc-500 mb-1.5">{detail.pluginName}@{detail.marketplaceName}</span>
+                          <p className="text-gray-500 line-clamp-1 font-mono text-[11px] flex-1">{detail.pluginName}</p>
+                          <div className="flex items-center gap-2 pt-3 border-t border-zinc-800/60 mt-auto">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); handleViewPluginCommand(detail, cmd); }}
+                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition-all"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-zinc-300" />
+                              <span className="text-[11px] text-zinc-300 font-medium">View</span>
+                            </button>
                           </div>
                         </div>
-
-                        <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{cmd.name}</h3>
-                        <span className="text-xs text-zinc-500 mb-2">{detail.pluginName}@{detail.marketplaceName}</span>
-
-                        <div className="space-y-2 text-sm mb-4 flex-1">
-                          <p className="text-gray-400 line-clamp-3 font-mono text-xs">{detail.pluginName}</p>
-                        </div>
-
-                        <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                          <button
-                            onClick={(e) => { e.stopPropagation(); handleViewPluginCommand(detail, cmd); }}
-                            className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                          >
-                            <Eye className="w-4 h-4 text-zinc-100" />
-                            <span className="text-xs text-white font-medium">View</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))
-                  )}
-
-                  {pluginDetails.every((d) => d.commands.length === 0) && (
-                    <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
-                      <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400 mb-4">No plugin commands installed</p>
+                      ))}
                     </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             ) : (
               <div>

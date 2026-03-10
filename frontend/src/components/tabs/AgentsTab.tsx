@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Edit2, Eye, Package, Plus, Save, Trash2, Users } from 'lucide-react';
+import { ArrowLeft, Edit2, Eye, LayoutGrid, List, Package, Plus, Save, Search, Trash2, Users } from 'lucide-react';
 import { saveAgent, getInstalledPluginDetails, getPluginAgentContent } from '../../api';
 import type { Agent, ViewMode, InstalledPluginsFile, InstalledPluginDetails, PluginContentFile } from '../../types';
 
@@ -21,6 +21,8 @@ export function AgentsTab({ agents, showNotification, loadConfig, requestDelete,
   const [selectedPluginAgent, setSelectedPluginAgent] = useState<{ installPath: string; filename: string; name: string; pluginName: string; marketplaceName: string } | null>(null);
   const [pluginAgentContent, setPluginAgentContent] = useState('');
   const [pluginViewMode, setPluginViewMode] = useState<'list' | 'detail'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayLayout, setDisplayLayout] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
@@ -135,92 +137,162 @@ List any limitations or rules the agent should follow.
           <>
             {viewMode === 'list' ? (
               <div>
-                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                <div className="flex items-center justify-between mb-6 titlebar-no-drag">
                   <div>
-                    <h2 className="text-3xl font-bold  text-white mb-2">
-                      User Agents
-                    </h2>
+                    <h2 className="text-3xl font-bold text-white mb-2">User Agents</h2>
                     <p className="text-gray-400">Create and manage your Claude Code agents</p>
                   </div>
-                  <div>
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search agents..."
+                        className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                      <button
+                        onClick={() => setDisplayLayout('grid')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDisplayLayout('list')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
                     <button
                       onClick={() => setShowAddModal(true)}
-                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
+                      className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                     >
-                      <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
-                      <span className="text-white font-medium">Add Agent</span>
+                      <Plus className="w-4 h-4 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
+                      <span className="text-sm text-white font-medium">Add Agent</span>
                     </button>
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {agents.map((agent) => (
-                    <div
-                      key={agent.name}
-                      className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
-                      onClick={() => openAgentDetail(agent)}
-                    >
-                      <div className="flex items-center space-x-2 mb-4">
-                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                        <span className="text-xs font-medium text-zinc-300">Agent</span>
-                        {agent.model && (
-                          <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-500/10 border border-purple-500/20 text-purple-400">
-                            {agent.model}
-                          </span>
-                        )}
-                      </div>
+                {(() => {
+                  const q = searchQuery.toLowerCase();
+                  const filtered = q ? agents.filter(a => a.name.toLowerCase().includes(q) || (a.description || '').toLowerCase().includes(q) || a.content.toLowerCase().includes(q) || (a.model || '').toLowerCase().includes(q)) : agents;
 
-                      <div className="flex items-start mb-4">
-                        <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
-                          <Users className="w-6 h-6 text-zinc-100" />
+                  if (filtered.length === 0 && agents.length > 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Search className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                        <p className="text-gray-400">No agents match "{searchQuery}"</p>
+                      </div>
+                    );
+                  }
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 mb-4">No agents yet</p>
+                        <button
+                          onClick={() => setShowAddModal(true)}
+                          className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                        >
+                          <Plus className="w-5 h-5 text-zinc-100" />
+                          <span className="text-white font-medium">Create Your First Agent</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (displayLayout === 'list') {
+                    return (
+                      <div className="space-y-2">
+                        {filtered.map((agent) => (
+                          <div
+                            key={agent.name}
+                            className="glass border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-4 card-hover cursor-pointer group transition-all"
+                            onClick={() => openAgentDetail(agent)}
+                          >
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all shrink-0">
+                              <Users className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse shrink-0" />
+                            <h3 className="text-sm font-semibold text-white whitespace-nowrap">{agent.name}</h3>
+                            {agent.model && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-purple-500/10 border border-purple-500/20 text-purple-400 shrink-0">
+                                {agent.model}
+                              </span>
+                            )}
+                            <p className="text-xs text-zinc-500 truncate flex-1 min-w-0">{agent.description || agent.content.substring(0, 120)}</p>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openAgentDetail(agent); }}
+                                className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip"
+                                data-tooltip="Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-zinc-300" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); requestDelete(agent.name); }}
+                                className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip"
+                                data-tooltip="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {filtered.map((agent) => (
+                        <div
+                          key={agent.name}
+                          className="glass border border-zinc-800 rounded-2xl p-4 card-hover cursor-pointer group relative h-[180px] flex flex-col"
+                          onClick={() => openAgentDetail(agent)}
+                        >
+                          <div className="flex items-center space-x-2 mb-3">
+                            <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
+                            <span className="text-[11px] font-medium text-zinc-400">Agent</span>
+                            {agent.model && (
+                              <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                                {agent.model}
+                              </span>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Users className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <h3 className="text-base font-bold text-white truncate">{agent.name}</h3>
+                          </div>
+                          <p className="text-xs text-zinc-500 line-clamp-2 flex-1">{agent.description || agent.content.substring(0, 100) + '...'}</p>
+                          <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-800 mt-auto">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openAgentDetail(agent); }}
+                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition-all"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-zinc-100" />
+                              <span className="text-xs text-white font-medium">Edit</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); requestDelete(agent.name); }}
+                              className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip"
+                              data-tooltip="Delete agent"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </div>
                         </div>
-                      </div>
-
-                      <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{agent.name}</h3>
-
-                      <div className="space-y-2 text-sm mb-4 flex-1">
-                        <p className="text-gray-400 line-clamp-3 text-xs">{agent.description || agent.content.substring(0, 100) + '...'}</p>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openAgentDetail(agent);
-                          }}
-                          className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                        >
-                          <Edit2 className="w-4 h-4 text-zinc-100" />
-                          <span className="text-xs text-white font-medium">Edit</span>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            requestDelete(agent.name);
-                          }}
-                          className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
-                          data-tooltip="Delete agent"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
+                      ))}
                     </div>
-                  ))}
-
-                  {agents.length === 0 && (
-                    <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
-                      <Users className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400 mb-4">No agents yet</p>
-                      <button
-                        onClick={() => setShowAddModal(true)}
-                        className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-                      >
-                        <Plus className="w-5 h-5 text-zinc-100" />
-                        <span className="text-white font-medium">Create Your First Agent</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
+                  );
+                })()}
               </div>
             ) : (
               <div>
@@ -307,10 +379,36 @@ List any limitations or rules the agent should follow."
           <>
             {pluginViewMode === 'list' ? (
               <div>
-                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                <div className="flex items-center justify-between mb-6 titlebar-no-drag">
                   <div>
                     <h2 className="text-3xl font-bold text-white mb-2">Plugin Agents</h2>
                     <p className="text-gray-400">Agents provided by installed plugins</p>
+                  </div>
+                  <div className="flex items-center space-x-3">
+                    <div className="relative">
+                      <Search className="w-4 h-4 text-zinc-500 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={searchQuery}
+                        onChange={(e) => setSearchQuery(e.target.value)}
+                        placeholder="Search plugins..."
+                        className="glass border border-zinc-800 rounded-xl pl-9 pr-4 py-2 text-sm text-white placeholder-zinc-500 focus:border-zinc-600 focus:outline-none w-56 transition-all"
+                      />
+                    </div>
+                    <div className="flex items-center glass border border-zinc-800 rounded-xl p-0.5">
+                      <button
+                        onClick={() => setDisplayLayout('grid')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <LayoutGrid className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setDisplayLayout('list')}
+                        className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                      >
+                        <List className="w-4 h-4" />
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -322,7 +420,19 @@ List any limitations or rules the agent should follow."
                     }
                   }
 
-                  if (pluginAgents.length === 0) {
+                  const q = searchQuery.toLowerCase();
+                  const filtered = q ? pluginAgents.filter(({ detail, agent }) => agent.name.toLowerCase().includes(q) || detail.pluginName.toLowerCase().includes(q) || (agent.model || '').toLowerCase().includes(q) || detail.marketplaceName.toLowerCase().includes(q)) : pluginAgents;
+
+                  if (filtered.length === 0 && pluginAgents.length > 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Search className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                        <p className="text-gray-400">No plugin agents match "{searchQuery}"</p>
+                      </div>
+                    );
+                  }
+
+                  if (filtered.length === 0) {
                     return (
                       <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
                         <Package className="w-16 h-16 text-gray-600 mx-auto mb-4" />
@@ -331,43 +441,70 @@ List any limitations or rules the agent should follow."
                     );
                   }
 
+                  if (displayLayout === 'list') {
+                    return (
+                      <div className="space-y-2">
+                        {filtered.map(({ detail, agent }) => (
+                          <div
+                            key={`${detail.key}-${agent.filename}`}
+                            className="glass border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-4 card-hover cursor-pointer group transition-all"
+                            onClick={() => openPluginAgentDetail(detail, agent)}
+                          >
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all shrink-0">
+                              <Package className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse shrink-0" />
+                            <h3 className="text-sm font-semibold text-white whitespace-nowrap">{agent.name}</h3>
+                            {agent.model && (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-purple-500/10 border border-purple-500/20 text-purple-400 shrink-0">
+                                {agent.model}
+                              </span>
+                            )}
+                            <p className="text-xs text-zinc-500 truncate flex-1 min-w-0">{detail.marketplaceName}/{detail.pluginName}</p>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openPluginAgentDetail(detail, agent); }}
+                              className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip shrink-0"
+                              data-tooltip="View"
+                            >
+                              <Eye className="w-3.5 h-3.5 text-zinc-300" />
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {pluginAgents.map(({ detail, agent }) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {filtered.map(({ detail, agent }) => (
                         <div
                           key={`${detail.key}-${agent.filename}`}
-                          className="glass border border-zinc-800 rounded-2xl p-6 h-[320px] flex flex-col"
+                          className="glass border border-zinc-800 rounded-2xl p-4 h-[180px] flex flex-col card-hover cursor-pointer group transition-all"
+                          onClick={() => openPluginAgentDetail(detail, agent)}
                         >
-                          <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></div>
-                            <span className="text-xs font-medium text-zinc-300">Plugin</span>
+                          <div className="flex items-center space-x-2 mb-3">
+                            <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse" />
+                            <span className="text-[11px] font-medium text-zinc-400">Plugin</span>
                             {agent.model && (
-                              <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-xs bg-purple-500/10 border border-purple-500/20 text-purple-400">
+                              <span className="ml-auto inline-flex items-center px-2 py-0.5 rounded-full text-[11px] bg-purple-500/10 border border-purple-500/20 text-purple-400">
                                 {agent.model}
                               </span>
                             )}
                           </div>
-
-                          <div className="flex items-start mb-4">
-                            <div className="p-3 rounded-xl bg-zinc-800/50">
-                              <Package className="w-6 h-6 text-zinc-100" />
+                          <div className="flex items-center gap-2.5 mb-2">
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Package className="w-4 h-4 text-zinc-100" />
                             </div>
+                            <h3 className="text-base font-bold text-white truncate">{agent.name}</h3>
                           </div>
-
-                          <h3 className="text-xl font-bold text-white mb-2">{agent.name}</h3>
-                          <p className="text-xs text-zinc-500 mb-2">{detail.marketplaceName}/{detail.pluginName}</p>
-
+                          <p className="text-xs text-zinc-500 truncate">{detail.marketplaceName}/{detail.pluginName}</p>
                           <div className="flex-1" />
-
-                          <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
+                          <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-800 mt-auto">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPluginAgentDetail(detail, agent);
-                              }}
-                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                              onClick={(e) => { e.stopPropagation(); openPluginAgentDetail(detail, agent); }}
+                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition-all"
                             >
-                              <Eye className="w-4 h-4 text-zinc-100" />
+                              <Eye className="w-3.5 h-3.5 text-zinc-100" />
                               <span className="text-xs text-white font-medium">View</span>
                             </button>
                           </div>

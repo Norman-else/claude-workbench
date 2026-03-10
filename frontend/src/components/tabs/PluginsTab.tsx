@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Eye, Loader2, Package, Plus, Store, Trash2, Zap, Terminal, Users } from 'lucide-react';
+import { ArrowLeft, Eye, LayoutGrid, List, Loader2, Package, Plus, Search, Store, Trash2, Zap, Terminal, Users } from 'lucide-react';
 import { addMarketplace, installPlugin, uninstallPlugin, updateMarketplace, removeMarketplace, getInstalledPluginDetails } from '../../api';
 import type { MarketplaceInfo, InstalledPluginsFile, InstalledPluginDetails } from '../../types';
 import { SkillsMarketplace } from '../SkillsMarketplace';
@@ -20,6 +20,8 @@ export function PluginsTab({ marketplaces, installedPlugins, showNotification, l
   const [uninstallingPlugins, setUninstallingPlugins] = useState<Set<string>>(new Set());
   const [pluginDetails, setPluginDetails] = useState<InstalledPluginDetails[]>([]);
   const [pluginsView, setPluginsView] = useState<'list' | 'detail'>('list');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayLayout, setDisplayLayout] = useState<'grid' | 'list'>('grid');
 
   useEffect(() => {
     getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
@@ -214,12 +216,43 @@ export function PluginsTab({ marketplaces, installedPlugins, showNotification, l
               </div>
               <button
                 onClick={() => setShowMarketplaceDrawer(true)}
-                className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
+                className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag shrink-0"
               >
                 <Store className="w-5 h-5 text-zinc-100" />
                 <span className="text-white font-medium">Browse Marketplace</span>
               </button>
             </div>
+
+            {Object.keys(installedPlugins.plugins).length > 0 && (
+              <div className="flex items-center gap-3 mb-6">
+                <div className="relative flex-1">
+                  <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                  <input
+                    type="text"
+                    placeholder="Search installed plugins..."
+                    value={searchQuery}
+                    onChange={(e) => setSearchQuery(e.target.value)}
+                    className="w-full glass border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-white placeholder-zinc-500 focus:border-zinc-600 focus:outline-none text-sm transition-colors"
+                  />
+                </div>
+                <div className="flex items-center glass border border-zinc-800 rounded-xl overflow-hidden">
+                  <button
+                    onClick={() => setDisplayLayout('grid')}
+                    className={`p-2 transition-colors ${displayLayout === 'grid' ? 'bg-zinc-700/60 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    title="Grid view"
+                  >
+                    <LayoutGrid className="w-4 h-4" />
+                  </button>
+                  <button
+                    onClick={() => setDisplayLayout('list')}
+                    className={`p-2 transition-colors ${displayLayout === 'list' ? 'bg-zinc-700/60 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    title="List view"
+                  >
+                    <List className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
 
             {Object.keys(installedPlugins.plugins).length === 0 ? (
               <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
@@ -233,62 +266,136 @@ export function PluginsTab({ marketplaces, installedPlugins, showNotification, l
                   <span className="text-white font-medium">Browse Marketplace</span>
                 </button>
               </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {Object.entries(installedPlugins.plugins).map(([key]) => {
-                  const [pluginName, marketplaceName] = key.split('@');
-                  const mp = marketplaces.find(m => m.name === marketplaceName);
-                  const info = mp?.manifest.plugins?.find(p => p.name === pluginName);
-                  return (
-                    <div key={key} className="glass border border-zinc-800 rounded-2xl p-6 h-[320px] flex flex-col">
-                      <div className="flex items-center space-x-2 mb-4">
-                        <div className="w-2 h-2 rounded-full bg-green-400 animate-pulse"></div>
-                        <span className="text-xs font-medium text-zinc-300">Installed</span>
-                      </div>
-                      <div className="flex items-start mb-4">
-                        <div className="p-3 rounded-xl bg-zinc-800/50">
-                          <Package className="w-6 h-6 text-zinc-100" />
+            ) : (() => {
+              const q = searchQuery.toLowerCase().trim();
+              const entries = Object.entries(installedPlugins.plugins).filter(([key]) => {
+                if (!q) return true;
+                const [pluginName, marketplaceName] = key.split('@');
+                const mp = marketplaces.find(m => m.name === marketplaceName);
+                const info = mp?.manifest.plugins?.find(p => p.name === pluginName);
+                return (
+                  pluginName.toLowerCase().includes(q) ||
+                  marketplaceName.toLowerCase().includes(q) ||
+                  (info?.description?.toLowerCase().includes(q) ?? false)
+                );
+              });
+
+              if (entries.length === 0) {
+                return (
+                  <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                    <Search className="w-12 h-12 text-zinc-600 mx-auto mb-3" />
+                    <p className="text-zinc-400">No plugins match &ldquo;{searchQuery}&rdquo;</p>
+                  </div>
+                );
+              }
+
+              return displayLayout === 'grid' ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {entries.map(([key]) => {
+                    const [pluginName, marketplaceName] = key.split('@');
+                    const mp = marketplaces.find(m => m.name === marketplaceName);
+                    const info = mp?.manifest.plugins?.find(p => p.name === pluginName);
+                    return (
+                      <div key={key} className="glass border border-zinc-800 rounded-2xl p-4 flex flex-col" style={{ minHeight: '180px' }}>
+                        <div className="flex items-center gap-3 mb-3">
+                          <div className="p-2 rounded-lg bg-zinc-800/50 shrink-0">
+                            <Package className="w-5 h-5 text-zinc-100" />
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-center gap-2">
+                              <h3 className="text-base font-bold text-white truncate">{pluginName}</h3>
+                              <div className="w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse shrink-0" />
+                            </div>
+                            <p className="text-xs text-zinc-500 truncate">{marketplaceName}</p>
+                          </div>
+                        </div>
+                        {info?.description ? (
+                          <p className="text-xs text-gray-400 line-clamp-2 flex-1 mb-3">{info.description}</p>
+                        ) : (
+                          <div className="flex-1 mb-3" />
+                        )}
+                        <div className="flex items-center justify-between gap-2 pt-3 border-t border-zinc-800 mt-auto">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedPlugin({ key, pluginName, marketplaceName });
+                              setPluginsView('detail');
+                            }}
+                            className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-zinc-100" />
+                            <span className="text-xs text-white font-medium">View</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCardUninstall(key, marketplaceName, pluginName);
+                            }}
+                            disabled={uninstallingPlugins.has(key)}
+                            className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {uninstallingPlugins.has(key) ? (
+                              <Loader2 className="w-3.5 h-3.5 text-red-400 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            )}
+                          </button>
                         </div>
                       </div>
-                      <h3 className="text-xl font-bold text-white mb-1">{pluginName}</h3>
-                      <p className="text-xs text-zinc-500 mb-2">{marketplaceName}</p>
-                      {info?.description ? (
-                        <p className="text-xs text-gray-400 line-clamp-3 flex-1">{info.description}</p>
-                      ) : (
-                        <div className="flex-1" />
-                      )}
-                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedPlugin({ key, pluginName, marketplaceName });
-                            setPluginsView('detail');
-                          }}
-                          className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                        >
-                          <Eye className="w-4 h-4 text-zinc-100" />
-                          <span className="text-xs text-white font-medium">View</span>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleCardUninstall(key, marketplaceName, pluginName);
-                          }}
-                          disabled={uninstallingPlugins.has(key)}
-                          className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                          {uninstallingPlugins.has(key) ? (
-                            <Loader2 className="w-4 h-4 text-red-400 animate-spin" />
-                          ) : (
-                            <Trash2 className="w-4 h-4 text-red-400" />
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  {entries.map(([key]) => {
+                    const [pluginName, marketplaceName] = key.split('@');
+                    const mp = marketplaces.find(m => m.name === marketplaceName);
+                    const info = mp?.manifest.plugins?.find(p => p.name === pluginName);
+                    return (
+                      <div key={key} className="glass border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-4">
+                        <div className="p-2 rounded-lg bg-zinc-800/50 shrink-0">
+                          <Package className="w-4 h-4 text-zinc-100" />
+                        </div>
+                        <div className="min-w-0 flex-1 flex items-center gap-3">
+                          <h3 className="text-sm font-semibold text-white whitespace-nowrap">{pluginName}</h3>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-zinc-800 text-zinc-400 border border-zinc-700 whitespace-nowrap shrink-0">{marketplaceName}</span>
+                          {info?.description && (
+                            <p className="text-xs text-zinc-500 truncate min-w-0">{info.description}</p>
                           )}
-                        </button>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedPlugin({ key, pluginName, marketplaceName });
+                              setPluginsView('detail');
+                            }}
+                            className="glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center space-x-1.5 transition-all"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-zinc-100" />
+                            <span className="text-xs text-white font-medium">View</span>
+                          </button>
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleCardUninstall(key, marketplaceName, pluginName);
+                            }}
+                            disabled={uninstallingPlugins.has(key)}
+                            className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                          >
+                            {uninstallingPlugins.has(key) ? (
+                              <Loader2 className="w-3.5 h-3.5 text-red-400 animate-spin" />
+                            ) : (
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            )}
+                          </button>
+                        </div>
                       </div>
-                    </div>
-                  );
-                })}
-              </div>
-            )}
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
         )}
       </div>

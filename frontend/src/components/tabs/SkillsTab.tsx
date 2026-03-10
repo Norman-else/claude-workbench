@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ArrowLeft, Edit2, Eye, Package, Plus, Save, Trash2, Zap } from 'lucide-react';
+import { ArrowLeft, Edit2, Eye, LayoutGrid, List, Package, Plus, Save, Search, Trash2, Zap } from 'lucide-react';
 import { saveSkill, getInstalledPluginDetails, getPluginSkillContent } from '../../api';
 import type { InstalledPluginDetails, InstalledPluginsFile, PluginContentFile, Skill, ViewMode } from '../../types';
 
@@ -17,6 +17,8 @@ export function SkillsTab({ skills, showNotification, loadConfig, requestDelete,
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
   const [showAddSkillModal, setShowAddSkillModal] = useState(false);
   const [newSkillForm, setNewSkillForm] = useState<{ name: string; content: string }>({ name: '', content: '' });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [displayLayout, setDisplayLayout] = useState<'grid' | 'list'>('grid');
 
   // Plugin skills state
   const [pluginDetails, setPluginDetails] = useState<InstalledPluginDetails[]>([]);
@@ -140,17 +142,15 @@ Show concrete examples of using this Skill.
           <>
             {skillViewMode === 'list' ? (
               <div>
-                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                <div className="flex items-center justify-between mb-6 titlebar-no-drag">
                   <div>
-                    <h2 className="text-3xl font-bold  text-white mb-2">
-                      Personal Skills
-                    </h2>
+                    <h2 className="text-3xl font-bold text-white mb-2">Personal Skills</h2>
                     <p className="text-gray-400">Create and manage your Agent Skills</p>
                   </div>
                   <div>
                     <button
                       onClick={() => setShowAddSkillModal(true)}
-                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group   titlebar-no-drag"
+                      className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
                     >
                       <Plus className="w-5 h-5 text-zinc-100 group-hover:rotate-90 transition-transform duration-300" />
                       <span className="text-white font-medium">Add Skill</span>
@@ -158,69 +158,147 @@ Show concrete examples of using this Skill.
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {skills.map((skill) => (
-                    <div
-                      key={skill.name}
-                      className="glass border border-zinc-800 rounded-2xl p-6 card-hover cursor-pointer group  relative h-[320px] flex flex-col"
-                      onClick={() => openSkillDetail(skill)}
+                {/* Search + View Toggle Bar */}
+                <div className="flex items-center gap-3 mb-6 titlebar-no-drag">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search skills..."
+                      className="w-full glass border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div className="flex items-center glass border border-zinc-800 rounded-xl p-1">
+                    <button
+                      onClick={() => setDisplayLayout('grid')}
+                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
                     >
-                      <div className="flex items-center space-x-2 mb-4">
-                        <div className="w-2 h-2 rounded-full bg-blue-400 animate-pulse"></div>
-                        <span className="text-xs font-medium text-zinc-300">Skill</span>
-                      </div>
-
-                      <div className="flex items-start mb-4">
-                        <div className="p-3 rounded-xl bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all ">
-                          <Zap className="w-6 h-6 text-zinc-100" />
-                        </div>
-                      </div>
-
-                      <h3 className="text-xl font-bold text-white mb-2 transition-all cursor-pointer">{skill.name}</h3>
-
-                      <div className="space-y-2 text-sm mb-4 flex-1">
-                        <p className="text-gray-400 line-clamp-3 text-xs">{skill.description || skill.content.substring(0, 100) + '...'}</p>
-                      </div>
-
-                      <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openSkillDetail(skill);
-                          }}
-                          className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
-                        >
-                          <Edit2 className="w-4 h-4 text-zinc-100" />
-                          <span className="text-xs text-white font-medium">Edit</span>
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            requestDelete(skill.name);
-                          }}
-                          className="p-2 glass hover:border-red-700/50 border border-red-900/50 rounded-xl transition-all tooltip"
-                          data-tooltip="Delete skill"
-                        >
-                          <Trash2 className="w-4 h-4 text-red-400" />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {skills.length === 0 && (
-                    <div className="col-span-full glass border border-zinc-800 rounded-2xl p-12 text-center">
-                      <Zap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <p className="text-gray-400 mb-4">No skills yet</p>
-                      <button
-                        onClick={() => setShowAddSkillModal(true)}
-                        className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
-                      >
-                        <Plus className="w-5 h-5 text-zinc-100" />
-                        <span className="text-white font-medium">Create Your First Skill</span>
-                      </button>
-                    </div>
-                  )}
+                      <LayoutGrid className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDisplayLayout('list')}
+                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
+                  </div>
                 </div>
+
+                {(() => {
+                  const q = searchQuery.toLowerCase();
+                  const filtered = skills.filter((s) =>
+                    !q || s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q) || s.content.toLowerCase().includes(q)
+                  );
+
+                  if (skills.length === 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Zap className="w-16 h-16 text-gray-600 mx-auto mb-4" />
+                        <p className="text-gray-400 mb-4">No skills yet</p>
+                        <button
+                          onClick={() => setShowAddSkillModal(true)}
+                          className="glass hover:border-zinc-600 border border-zinc-800 px-6 py-3 rounded-xl inline-flex items-center space-x-2"
+                        >
+                          <Plus className="w-5 h-5 text-zinc-100" />
+                          <span className="text-white font-medium">Create Your First Skill</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Search className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                        <p className="text-gray-400">No skills match &ldquo;{searchQuery}&rdquo;</p>
+                      </div>
+                    );
+                  }
+
+                  if (displayLayout === 'list') {
+                    return (
+                      <div className="flex flex-col gap-2">
+                        {filtered.map((skill) => (
+                          <div
+                            key={skill.name}
+                            className="glass border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-4 card-hover cursor-pointer group"
+                            onClick={() => openSkillDetail(skill)}
+                          >
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all shrink-0">
+                              <Zap className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-semibold text-white truncate">{skill.name}</h3>
+                              <p className="text-xs text-zinc-500 truncate">{skill.description || skill.content.substring(0, 80)}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openSkillDetail(skill); }}
+                                className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip"
+                                data-tooltip="Edit"
+                              >
+                                <Edit2 className="w-3.5 h-3.5 text-zinc-300" />
+                              </button>
+                              <button
+                                onClick={(e) => { e.stopPropagation(); requestDelete(skill.name); }}
+                                className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip"
+                                data-tooltip="Delete"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {filtered.map((skill) => (
+                        <div
+                          key={skill.name}
+                          className="glass border border-zinc-800 rounded-2xl p-4 card-hover cursor-pointer group relative h-[180px] flex flex-col"
+                          onClick={() => openSkillDetail(skill)}
+                        >
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Zap className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-bold text-white truncate">{skill.name}</h3>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-blue-400 animate-pulse"></div>
+                                <span className="text-[10px] font-medium text-zinc-400">Skill</span>
+                              </div>
+                            </div>
+                          </div>
+
+                          <p className="text-xs text-gray-400 line-clamp-2 mb-3 flex-1">{skill.description || skill.content.substring(0, 100) + '...'}</p>
+
+                          <div className="flex items-center gap-2 pt-3 border-t border-zinc-800 mt-auto">
+                            <button
+                              onClick={(e) => { e.stopPropagation(); openSkillDetail(skill); }}
+                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition-all"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-zinc-100" />
+                              <span className="text-xs text-white font-medium">Edit</span>
+                            </button>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); requestDelete(skill.name); }}
+                              className="p-1.5 glass hover:border-red-700/50 border border-red-900/50 rounded-lg transition-all tooltip"
+                              data-tooltip="Delete skill"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-red-400" />
+                            </button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
               </div>
             ) : (
               <div>
@@ -305,10 +383,38 @@ Show concrete examples of using this Skill."
           <>
             {pluginViewMode === 'list' ? (
               <div>
-                <div className="flex items-center justify-between mb-8 titlebar-no-drag">
+                <div className="flex items-center justify-between mb-6 titlebar-no-drag">
                   <div>
                     <h2 className="text-3xl font-bold text-white mb-2">Plugin Skills</h2>
                     <p className="text-gray-400">Skills provided by installed plugins</p>
+                  </div>
+                </div>
+
+                {/* Search + View Toggle Bar */}
+                <div className="flex items-center gap-3 mb-6 titlebar-no-drag">
+                  <div className="relative flex-1 max-w-md">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-zinc-500" />
+                    <input
+                      type="text"
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      placeholder="Search plugin skills..."
+                      className="w-full glass border border-zinc-800 rounded-xl pl-10 pr-4 py-2 text-white text-sm placeholder-zinc-500 focus:border-zinc-600 focus:outline-none transition-all"
+                    />
+                  </div>
+                  <div className="flex items-center glass border border-zinc-800 rounded-xl p-1">
+                    <button
+                      onClick={() => setDisplayLayout('grid')}
+                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'grid' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      <LayoutGrid className="w-4 h-4" />
+                    </button>
+                    <button
+                      onClick={() => setDisplayLayout('list')}
+                      className={`p-1.5 rounded-lg transition-all ${displayLayout === 'list' ? 'bg-zinc-700 text-white' : 'text-zinc-500 hover:text-zinc-300'}`}
+                    >
+                      <List className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
 
@@ -320,6 +426,11 @@ Show concrete examples of using this Skill."
                     }
                   }
 
+                  const q = searchQuery.toLowerCase();
+                  const filtered = pluginSkills.filter(({ detail, skill }) =>
+                    !q || skill.name.toLowerCase().includes(q) || detail.pluginName.toLowerCase().includes(q) || detail.marketplaceName.toLowerCase().includes(q)
+                  );
+
                   if (pluginSkills.length === 0) {
                     return (
                       <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
@@ -329,38 +440,75 @@ Show concrete examples of using this Skill."
                     );
                   }
 
+                  if (filtered.length === 0) {
+                    return (
+                      <div className="glass border border-zinc-800 rounded-2xl p-12 text-center">
+                        <Search className="w-12 h-12 text-gray-600 mx-auto mb-3" />
+                        <p className="text-gray-400">No plugin skills match &ldquo;{searchQuery}&rdquo;</p>
+                      </div>
+                    );
+                  }
+
+                  if (displayLayout === 'list') {
+                    return (
+                      <div className="flex flex-col gap-2">
+                        {filtered.map(({ detail, skill }) => (
+                          <div
+                            key={`${detail.key}-${skill.name}`}
+                            className="glass border border-zinc-800 rounded-xl px-4 py-3 flex items-center gap-4 card-hover cursor-pointer group"
+                            onClick={() => openPluginSkillDetail(detail, skill)}
+                          >
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all shrink-0">
+                              <Zap className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-semibold text-white truncate">{skill.name}</h3>
+                              <p className="text-xs text-zinc-500 truncate">{detail.marketplaceName}/{detail.pluginName}</p>
+                            </div>
+                            <div className="flex items-center gap-2 shrink-0">
+                              <button
+                                onClick={(e) => { e.stopPropagation(); openPluginSkillDetail(detail, skill); }}
+                                className="p-1.5 glass hover:border-zinc-600 border border-zinc-800 rounded-lg transition-all tooltip"
+                                data-tooltip="View"
+                              >
+                                <Eye className="w-3.5 h-3.5 text-zinc-300" />
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    );
+                  }
+
                   return (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                      {pluginSkills.map(({ detail, skill }) => (
+                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {filtered.map(({ detail, skill }) => (
                         <div
                           key={`${detail.key}-${skill.name}`}
-                          className="glass border border-zinc-800 rounded-2xl p-6 h-[320px] flex flex-col"
+                          className="glass border border-zinc-800 rounded-2xl p-4 card-hover cursor-pointer group h-[180px] flex flex-col"
+                          onClick={() => openPluginSkillDetail(detail, skill)}
                         >
-                          <div className="flex items-center space-x-2 mb-4">
-                            <div className="w-2 h-2 rounded-full bg-purple-400 animate-pulse"></div>
-                            <span className="text-xs font-medium text-zinc-300">Plugin</span>
-                          </div>
-
-                          <div className="flex items-start mb-4">
-                            <div className="p-3 rounded-xl bg-zinc-800/50">
-                              <Zap className="w-6 h-6 text-zinc-100" />
+                          <div className="flex items-center gap-3 mb-3">
+                            <div className="p-2 rounded-lg bg-zinc-800/50 group-hover:bg-zinc-700/50 transition-all">
+                              <Zap className="w-4 h-4 text-zinc-100" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <h3 className="text-sm font-bold text-white truncate">{skill.name}</h3>
+                              <div className="flex items-center gap-1.5 mt-0.5">
+                                <div className="w-1.5 h-1.5 rounded-full bg-purple-400 animate-pulse"></div>
+                                <span className="text-[10px] font-medium text-zinc-400">Plugin</span>
+                              </div>
                             </div>
                           </div>
 
-                          <h3 className="text-xl font-bold text-white mb-2">{skill.name}</h3>
-                          <p className="text-xs text-zinc-500 mb-2">{detail.marketplaceName}/{detail.pluginName}</p>
+                          <p className="text-xs text-zinc-500 line-clamp-2 mb-3 flex-1">{detail.marketplaceName}/{detail.pluginName}</p>
 
-                          <div className="flex-1" />
-
-                          <div className="flex items-center justify-between gap-2 pt-4 border-t border-zinc-800 mt-auto">
+                          <div className="flex items-center gap-2 pt-3 border-t border-zinc-800 mt-auto">
                             <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openPluginSkillDetail(detail, skill);
-                              }}
-                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-4 py-2 rounded-xl flex items-center justify-center space-x-2 transition-all"
+                              onClick={(e) => { e.stopPropagation(); openPluginSkillDetail(detail, skill); }}
+                              className="flex-1 glass hover:border-zinc-600 border border-zinc-800 px-3 py-1.5 rounded-lg flex items-center justify-center space-x-1.5 transition-all"
                             >
-                              <Eye className="w-4 h-4 text-zinc-100" />
+                              <Eye className="w-3.5 h-3.5 text-zinc-100" />
                               <span className="text-xs text-white font-medium">View</span>
                             </button>
                           </div>
