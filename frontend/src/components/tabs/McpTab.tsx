@@ -15,6 +15,8 @@ interface McpTabProps {
   showNotification: (message: string, type?: 'success' | 'error') => void;
   loadConfig: (showProgress?: boolean) => Promise<void>;
   requestDelete: (itemName: string) => void;
+  projectPath?: string;
+  scope?: 'global' | 'project';
 }
 
 export function McpTab({
@@ -26,6 +28,8 @@ export function McpTab({
   setIsLoadingStatus,
   showNotification,
   requestDelete,
+  projectPath,
+  scope,
 }: McpTabProps) {
   const [mcpViewMode, setMcpViewMode] = useState<ViewMode>('list');
   const [selectedServer, setSelectedServer] = useState<string | null>(null);
@@ -99,7 +103,7 @@ export function McpTab({
     closeServerDetail();
 
     try {
-      await saveClaudeConfig(newConfig);
+      await saveClaudeConfig(newConfig, projectPath);
       showNotification('Server updated successfully!');
     } catch {
       showNotification('Failed to save server update', 'error');
@@ -144,7 +148,7 @@ export function McpTab({
     setNewServerForm({ name: '', command: '', args: '', env: '' });
 
     try {
-      await saveClaudeConfig(newConfig);
+      await saveClaudeConfig(newConfig, projectPath);
       showNotification('Server added successfully!');
     } catch {
       showNotification('Failed to save new server', 'error');
@@ -237,7 +241,7 @@ export function McpTab({
       setShowImportJsonModal(false);
       setImportJsonContent('');
 
-      await saveClaudeConfig(newConfig);
+      await saveClaudeConfig(newConfig, projectPath);
       showNotification(`Successfully imported ${Object.keys(validatedServers).length} server(s)!`);
     } catch (error) {
       showNotification(`Invalid JSON format: ${error instanceof Error ? error.message : 'Unable to parse JSON'}`, 'error');
@@ -281,6 +285,7 @@ export function McpTab({
                     <List className="w-4 h-4" />
                   </button>
                 </div>
+                {scope !== 'project' && (
                 <button
                   onClick={() => setShowMarketplace(true)}
                   className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"
@@ -288,6 +293,7 @@ export function McpTab({
                   <Store className="w-4 h-4 text-zinc-300 group-hover:scale-110 transition-transform duration-300" />
                   <span className="text-white text-sm font-medium">Browse Marketplace</span>
                 </button>
+                )}
                 <button
                   onClick={() => setShowAddServerModal(true)}
                   className="glass hover:border-zinc-600 border border-zinc-800 px-5 py-2 rounded-xl flex items-center space-x-2 transition-all hover:shadow-lg hover:shadow-black/20 group titlebar-no-drag"

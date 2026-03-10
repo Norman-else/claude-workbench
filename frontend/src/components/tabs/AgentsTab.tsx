@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Edit2, Eye, LayoutGrid, List, Package, Plus, Save, Search, Trash2, Users } from 'lucide-react';
 import { saveAgent, getInstalledPluginDetails, getPluginAgentContent } from '../../api';
-import type { Agent, ViewMode, InstalledPluginsFile, InstalledPluginDetails, PluginContentFile } from '../../types';
+import type { Agent, ViewMode, InstalledPluginsFile, InstalledPluginDetails, PluginContentFile, ConfigScope } from '../../types';
 
 interface AgentsTabProps {
   agents: Agent[];
@@ -9,9 +9,11 @@ interface AgentsTabProps {
   loadConfig: (showProgress?: boolean) => Promise<void>;
   requestDelete: (name: string) => void;
   installedPlugins?: InstalledPluginsFile;
+  projectPath?: string;
+  scope?: ConfigScope;
 }
 
-export function AgentsTab({ agents, showNotification, loadConfig, requestDelete, installedPlugins = { version: 1, plugins: {} } }: AgentsTabProps) {
+export function AgentsTab({ agents, showNotification, loadConfig, requestDelete, installedPlugins = { version: 1, plugins: {} }, projectPath, scope }: AgentsTabProps) {
   const [agentsView, setAgentsView] = useState<'user' | 'plugin'>('user');
   const [viewMode, setViewMode] = useState<ViewMode>('list');
   const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
@@ -28,6 +30,11 @@ export function AgentsTab({ agents, showNotification, loadConfig, requestDelete,
     getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
   }, [installedPlugins]);
 
+  // Reset to non-plugin view when in project scope
+  useEffect(() => {
+    if (scope === 'project') { setAgentsView('user'); setSelectedPluginAgent(null); setPluginViewMode('list'); }
+  }, [scope]);
+
   const openAgentDetail = (agent: Agent) => {
     setEditingAgent(agent);
     setViewMode('detail');
@@ -43,7 +50,7 @@ export function AgentsTab({ agents, showNotification, loadConfig, requestDelete,
     }
 
     try {
-      await saveAgent({ name: editingAgent.name, content: editingAgent.content });
+      await saveAgent({ name: editingAgent.name, content: editingAgent.content }, projectPath);
       showNotification('Agent saved successfully!');
       await loadConfig();
       setViewMode('list');
@@ -66,7 +73,7 @@ export function AgentsTab({ agents, showNotification, loadConfig, requestDelete,
     }
 
     try {
-      await saveAgent({ name: newAgentForm.name, content: newAgentForm.content });
+      await saveAgent({ name: newAgentForm.name, content: newAgentForm.content }, projectPath);
       showNotification('Agent created successfully!');
       await loadConfig();
       setShowAddModal(false);
@@ -118,6 +125,7 @@ List any limitations or rules the agent should follow.
     <>
       <div className="p-8">
         {/* Tab switcher */}
+        {scope !== 'project' && (
         <div className="flex items-center space-x-1 glass border border-zinc-800 rounded-xl p-1 mb-6 titlebar-no-drag w-fit">
           <button
             onClick={() => { setAgentsView('user'); setSelectedPluginAgent(null); setPluginViewMode('list'); }}
@@ -132,6 +140,7 @@ List any limitations or rules the agent should follow.
             Plugin Agents
           </button>
         </div>
+        )}
 
         {agentsView === 'user' ? (
           <>

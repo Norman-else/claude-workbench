@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, Edit2, Eye, LayoutGrid, List, Package, Plus, Save, Search, Trash2, Zap } from 'lucide-react';
 import { saveSkill, getInstalledPluginDetails, getPluginSkillContent } from '../../api';
-import type { InstalledPluginDetails, InstalledPluginsFile, PluginContentFile, Skill, ViewMode } from '../../types';
+import type { InstalledPluginDetails, InstalledPluginsFile, PluginContentFile, Skill, ViewMode, ConfigScope } from '../../types';
 
 interface SkillsTabProps {
   skills: Skill[];
@@ -9,9 +9,11 @@ interface SkillsTabProps {
   loadConfig: (showProgress?: boolean) => Promise<void>;
   requestDelete: (name: string) => void;
   installedPlugins?: InstalledPluginsFile;
+  projectPath?: string;
+  scope?: ConfigScope;
 }
 
-export function SkillsTab({ skills, showNotification, loadConfig, requestDelete, installedPlugins }: SkillsTabProps) {
+export function SkillsTab({ skills, showNotification, loadConfig, requestDelete, installedPlugins, projectPath, scope }: SkillsTabProps) {
   const [skillsView, setSkillsView] = useState<'personal' | 'plugin'>('personal');
   const [skillViewMode, setSkillViewMode] = useState<ViewMode>('list');
   const [editingSkill, setEditingSkill] = useState<Skill | null>(null);
@@ -36,6 +38,11 @@ export function SkillsTab({ skills, showNotification, loadConfig, requestDelete,
     getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
   }, [installedPlugins]);
 
+  // Reset to non-plugin view when in project scope
+  useEffect(() => {
+    if (scope === 'project') { setSkillsView('personal'); setSelectedPluginSkill(null); setPluginViewMode('list'); }
+  }, [scope]);
+
   const openSkillDetail = (skill: Skill) => {
     setEditingSkill(skill);
     setSkillViewMode('detail');
@@ -51,7 +58,7 @@ export function SkillsTab({ skills, showNotification, loadConfig, requestDelete,
     }
 
     try {
-      await saveSkill({ name: editingSkill.name, content: editingSkill.content });
+      await saveSkill({ name: editingSkill.name, content: editingSkill.content }, projectPath);
       showNotification('Skill saved successfully!');
       await loadConfig();
       setSkillViewMode('list');
@@ -74,7 +81,7 @@ export function SkillsTab({ skills, showNotification, loadConfig, requestDelete,
     }
 
     try {
-      await saveSkill({ name: newSkillForm.name, content: newSkillForm.content });
+      await saveSkill({ name: newSkillForm.name, content: newSkillForm.content }, projectPath);
       showNotification('Skill created successfully!');
       await loadConfig();
       setShowAddSkillModal(false);
@@ -123,6 +130,7 @@ Show concrete examples of using this Skill.
     <>
       <div className="p-8">
         {/* Tab switcher */}
+        {scope !== 'project' && (
         <div className="flex items-center space-x-1 glass border border-zinc-800 rounded-xl p-1 mb-6 titlebar-no-drag w-fit">
           <button
             onClick={() => { setSkillsView('personal'); setSelectedPluginSkill(null); setPluginViewMode('list'); }}
@@ -137,6 +145,7 @@ Show concrete examples of using this Skill.
             Plugin Skills
           </button>
         </div>
+        )}
 
         {skillsView === 'personal' ? (
           <>

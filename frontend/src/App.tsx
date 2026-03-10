@@ -2,6 +2,8 @@ import { useEffect, useCallback, useRef, useState } from 'react';
 import { Check, ChevronDown, Command, Package, RefreshCw, Server, Settings, Sparkles, Terminal, Trash2, Users, X, Zap } from 'lucide-react';
 import { ThemeToggle } from './ThemeToggle';
 import { useElectron } from './useElectron';
+import { useProject } from './ProjectContext';
+import ProjectSelector from './components/ProjectSelector';
 import {
   deleteCommand,
   deleteEnvProfile,
@@ -28,6 +30,7 @@ import { VersionBadge } from './components/VersionBadge';
 
 function App() {
   const electron = useElectron();
+  const { projectPath, scope } = useProject();
   const [appVersion, setAppVersion] = useState<string>('');
 
   useEffect(() => {
@@ -152,7 +155,7 @@ function App() {
 
       if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'loading' }));
       try {
-        const config = await getClaudeConfig();
+        const config = await getClaudeConfig(projectPath);
         setClaudeConfig(config);
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, mcpConfig: 'done' }));
       } catch {
@@ -161,7 +164,7 @@ function App() {
 
       if (showProgress) setRefreshProgress((prev) => ({ ...prev, commands: 'loading' }));
       try {
-        const cmdData = await getCommands();
+        const cmdData = await getCommands(projectPath);
         setCommands(cmdData);
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, commands: 'done' }));
       } catch {
@@ -170,7 +173,7 @@ function App() {
 
       if (showProgress) setRefreshProgress((prev) => ({ ...prev, skills: 'loading' }));
       try {
-        const skillData = await getSkills();
+        const skillData = await getSkills(projectPath);
         setSkills(skillData);
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, skills: 'done' }));
       } catch {
@@ -179,7 +182,7 @@ function App() {
 
       if (showProgress) setRefreshProgress((prev) => ({ ...prev, agents: 'loading' }));
       try {
-        const agentData = await getAgents();
+        const agentData = await getAgents(projectPath);
         setAgents(agentData);
         if (showProgress) setRefreshProgress((prev) => ({ ...prev, agents: 'done' }));
       } catch {
@@ -222,8 +225,24 @@ function App() {
   };
 
   useEffect(() => {
+    // Don't load config when in project scope without a selected project
+    if (scope === 'project' && !projectPath) {
+      // Clear project-scoped data to avoid showing stale global data
+      setClaudeConfig({});
+      setCommands([]);
+      setSkills([]);
+      setAgents([]);
+      return;
+    }
     loadConfig();
-  }, []);
+  }, [projectPath, scope]);
+
+  // When switching to project scope, auto-switch away from global-only tabs
+  useEffect(() => {
+    if (scope === 'project' && (activeTab === 'env' || activeTab === 'plugins')) {
+      setActiveTab('mcp');
+    }
+  }, [scope]);
 
   useEffect(() => {
     const pollStatuses = async () => {
@@ -254,22 +273,22 @@ function App() {
         delete newServers[itemToDelete];
         const newConfig = { ...claudeConfig, mcpServers: newServers };
         setClaudeConfig(newConfig);
-        await saveClaudeConfig(newConfig);
+        await saveClaudeConfig(newConfig, projectPath);
         showNotification('Server deleted successfully!');
       } else if (activeTab === 'env') {
         await deleteEnvProfile(itemToDelete);
         showNotification('Profile deleted successfully!');
         await loadConfig();
       } else if (activeTab === 'commands') {
-        await deleteCommand(itemToDelete);
+        await deleteCommand(itemToDelete, projectPath);
         showNotification('Command deleted successfully!');
         await loadConfig();
       } else if (activeTab === 'skills') {
-        await deleteSkill(itemToDelete);
+        await deleteSkill(itemToDelete, projectPath);
         showNotification('Skill deleted successfully!');
         await loadConfig();
       } else if (activeTab === 'agents') {
-        await deleteAgent(itemToDelete);
+        await deleteAgent(itemToDelete, projectPath);
         showNotification('Agent deleted successfully!');
         await loadConfig();
       }
@@ -327,13 +346,13 @@ function App() {
         <nav className="w-72 glass-dark border-r border-zinc-800 flex flex-col p-6 relative z-10 titlebar-no-drag">
           {electron.isElectron && <div className="titlebar-drag absolute top-0 left-0 right-0 h-20 z-50 pointer-events-auto" />}
 
-          <div className="mb-6 mt-8  relative z-10 titlebar-no-drag">
+          <div className="mb-4 mt-8 relative z-10 titlebar-no-drag">
             <div className="flex items-center space-x-3">
               <div className="w-12 h-12 rounded-xl bg-zinc-800 border border-zinc-700 flex items-center justify-center ">
                 <Zap className="w-7 h-7 text-white" />
               </div>
               <div>
-                <h1 className="text-2xl font-bold  text-white">
+                <h1 className="text-2xl font-bold text-white">
                   Claude Code
                 </h1>
                 <p className="text-xs text-gray-400">Workbench</p>
@@ -341,6 +360,9 @@ function App() {
             </div>
             <VersionBadge appVersion={appVersion} isElectron={electron.isElectron} />
           </div>
+
+          <div className="border-t border-zinc-800 mb-4" />
+          <ProjectSelector />
 
           <div className="flex-1 flex flex-col">
             {/* Group: Configuration */}
@@ -353,6 +375,7 @@ function App() {
                 <ChevronDown className={`w-3 h-3 text-zinc-600 group-hover/header:text-zinc-400 transition-all ${collapsedGroups.config ? '-rotate-90' : ''}`} />
               </button>
               <div className={`space-y-1 overflow-hidden transition-all duration-200 ${collapsedGroups.config ? 'max-h-0 opacity-0' : 'max-h-40 opacity-100'}`}>
+                {scope !== 'project' && (
                 <button
                   onClick={() => setActiveTab('env')}
                   className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
@@ -371,6 +394,7 @@ function App() {
                   <span className="font-medium text-sm text-white">Environment</span>
                   {activeTab === 'env' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
                 </button>
+                )}
 
                 <button
                   onClick={() => setActiveTab('mcp')}
@@ -460,6 +484,7 @@ function App() {
                   {activeTab === 'agents' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
                 </button>
 
+                {scope !== 'project' && (
                 <button
                   onClick={() => setActiveTab('plugins')}
                   className={`w-full flex items-center space-x-2.5 px-3 py-2.5 rounded-xl transition-all group  ${
@@ -478,6 +503,7 @@ function App() {
                   <span className="font-medium text-sm text-white">Plugins</span>
                   {activeTab === 'plugins' && <div className="ml-auto w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse"></div>}
                 </button>
+                )}
               </div>
             </div>
           </div>
@@ -536,6 +562,8 @@ function App() {
               showNotification={showNotification}
               loadConfig={loadConfig}
               requestDelete={requestDelete}
+              projectPath={projectPath}
+              scope={scope}
             />
           )}
 
@@ -556,6 +584,8 @@ function App() {
               loadConfig={loadConfig}
               requestDelete={requestDelete}
               installedPlugins={installedPlugins}
+              projectPath={projectPath}
+              scope={scope}
             />
           )}
 
@@ -566,6 +596,8 @@ function App() {
               loadConfig={loadConfig}
               requestDelete={requestDelete}
               installedPlugins={installedPlugins}
+              projectPath={projectPath}
+              scope={scope}
             />
           )}
 
@@ -576,6 +608,8 @@ function App() {
               loadConfig={loadConfig}
               requestDelete={requestDelete}
               installedPlugins={installedPlugins}
+              projectPath={projectPath}
+              scope={scope}
             />
           )}
 

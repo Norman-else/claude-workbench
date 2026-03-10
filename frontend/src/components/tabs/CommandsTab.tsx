@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ArrowLeft, Command, Edit2, Eye, LayoutGrid, List, Package, Plus, Save, Search, Trash2 } from 'lucide-react';
 import { saveCommand, getInstalledPluginDetails, getPluginCommandContent } from '../../api';
-import type { CommandFile, InstalledPluginDetails, InstalledPluginsFile, ViewMode } from '../../types';
+import type { CommandFile, InstalledPluginDetails, InstalledPluginsFile, ViewMode, ConfigScope } from '../../types';
 
 interface CommandsTabProps {
   commands: CommandFile[];
@@ -9,9 +9,11 @@ interface CommandsTabProps {
   loadConfig: (showProgress?: boolean) => Promise<void>;
   requestDelete: (name: string) => void;
   installedPlugins?: InstalledPluginsFile;
+  projectPath?: string;
+  scope?: ConfigScope;
 }
 
-export function CommandsTab({ commands, showNotification, loadConfig, requestDelete, installedPlugins }: CommandsTabProps) {
+export function CommandsTab({ commands, showNotification, loadConfig, requestDelete, installedPlugins, projectPath, scope }: CommandsTabProps) {
   const [commandViewMode, setCommandViewMode] = useState<ViewMode>('list');
   const [editingCommand, setEditingCommand] = useState<CommandFile | null>(null);
   const [showAddCommandModal, setShowAddCommandModal] = useState(false);
@@ -32,6 +34,11 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
     getInstalledPluginDetails().then(setPluginDetails).catch(() => {});
   }, [installedPlugins]);
 
+  // Reset to non-plugin view when in project scope
+  useEffect(() => {
+    if (scope === 'project') setCommandsView('my');
+  }, [scope]);
+
   const openCommandDetail = (commandName: string) => {
     const cmd = commands.find((c) => c.name === commandName);
     if (cmd) {
@@ -43,7 +50,7 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
   const saveCommandDetail = async () => {
     if (!editingCommand) return;
     try {
-      await saveCommand(editingCommand);
+      await saveCommand(editingCommand, projectPath);
       showNotification('Command updated successfully!');
       await loadConfig();
       setCommandViewMode('list');
@@ -60,7 +67,7 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
     }
 
     try {
-      await saveCommand(newCommandForm);
+      await saveCommand(newCommandForm, projectPath);
       showNotification('Command added successfully!');
       await loadConfig();
       setShowAddCommandModal(false);
@@ -89,6 +96,7 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
     <>
       <div className="p-8">
         {/* Tab switcher */}
+        {scope !== 'project' && (
         <div className="flex items-center space-x-1 glass border border-zinc-800 rounded-xl p-1 mb-6 titlebar-no-drag w-fit">
           <button
             onClick={() => setCommandsView('my')}
@@ -103,6 +111,7 @@ export function CommandsTab({ commands, showNotification, loadConfig, requestDel
             Plugin Commands
           </button>
         </div>
+        )}
 
         {commandsView === 'my' ? (
           <>
