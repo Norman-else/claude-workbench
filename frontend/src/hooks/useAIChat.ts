@@ -1,15 +1,18 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import type { AIChatMessage, AIChatStreamEvent, AIToolCall, AIAttachment } from '../types';
-import { streamConversationChat, getConversation, deleteConversation } from '../api';
+import type { AIChatMessage, AIChatStreamEvent, AIToolCall, AIAttachment, CommandConfirmation } from '../types';
+import { streamConversationChat, getConversation, deleteConversation, confirmTerminalCommand } from '../api';
 
 interface UseAIChatReturn {
   messages: AIChatMessage[];
   isLoading: boolean;
   error: string | null;
+  pendingConfirmation: CommandConfirmation | null;
   sendMessage: (message: string, model: string, forceTool?: string, attachments?: AIAttachment[], projectPath?: string) => Promise<void>;
   stopGeneration: () => void;
   clearHistory: () => Promise<void>;
   loadHistory: () => Promise<void>;
+  confirmCommand: () => void;
+  rejectCommand: () => void;
 }
 
 export function useAIChat(
@@ -19,6 +22,7 @@ export function useAIChat(
   const [messages, setMessages] = useState<AIChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [pendingConfirmation, setPendingConfirmation] = useState<CommandConfirmation | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
 
   // Auto-load messages when conversationId changes
@@ -144,6 +148,9 @@ export function useAIChat(
             if (options?.onToolCall) {
               options.onToolCall(tc.name);
             }
+          } else if (event.type === 'command_confirm' && event.commandConfirm) {
+            // Show confirmation UI and wait for user response
+            setPendingConfirmation(event.commandConfirm);
           } else if (event.type === 'error') {
             throw new Error(event.error || 'Stream error');
           } else if (event.type === 'done') {
@@ -198,6 +205,17 @@ export function useAIChat(
     }
   }, []);
 
+  const confirmCommand = useCallback(() => {
+    if (!conversationId || !pendingConfirmation) return;
+    confirmTerminalCommand(conversationId, pendingConfirmation.requestId, true).catch(() => {});
+    setPendingConfirmation(null);
+  }, [conversationId, pendingConfirmation]);
+
+  const rejectCommand = useCallback(() => {
+    if (!conversationId || !pendingConfirmation) return;
+    confirmTerminalCommand(conversationId, pendingConfirmation.requestId, false).catch(() => {});
+    setPendingConfirmation(null);
+  }, [conversationId, pendingConfirmation]);
 
   const clearHistory = useCallback(async () => {
     if (!conversationId) return;
@@ -219,5 +237,5 @@ export function useAIChat(
     }
   }, [conversationId]);
 
-  return { messages, isLoading, error, sendMessage, stopGeneration, clearHistory, loadHistory };
+  return { messages, isLoading, error, pendingConfirmation, sendMessage, stopGeneration, clearHistory, loadHistory, confirmCommand, rejectCommand };
 }

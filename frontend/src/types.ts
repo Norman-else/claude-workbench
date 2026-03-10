@@ -232,9 +232,10 @@ export interface AIChatMessage {
 }
 
 export interface AIChatStreamEvent {
-  type: 'text_delta' | 'tool_call' | 'error' | 'done';
+  type: 'text_delta' | 'tool_call' | 'command_confirm' | 'error' | 'done';
   text?: string;
   tool?: { name: string; input?: Record<string, unknown>; result?: string };
+  commandConfirm?: { requestId: string; command: string; workingDirectory: string };
   error?: string;
 }
 
@@ -270,3 +271,9 @@ export interface SavedProject {
 }
 
 export type ConfigScope = 'global' | 'project';
+
+export interface CommandConfirmation {
+  requestId: string;
+  command: string;
+  workingDirectory: string;
+}

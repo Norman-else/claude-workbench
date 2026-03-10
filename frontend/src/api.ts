@@ -397,3 +397,11 @@ export async function generateConversationName(conversationId: string, model: st
   });
   return data.name;
 }
+
+export async function confirmTerminalCommand(conversationId: string, requestId: string, approved: boolean): Promise<void> {
+  await requestVoid(`/api/ai/conversations/${conversationId}/confirm-command`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ requestId, approved }),
+  });
+}
