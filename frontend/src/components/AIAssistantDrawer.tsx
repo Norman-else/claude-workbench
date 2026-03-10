@@ -18,6 +18,7 @@ const TOOL_CATEGORIES: Record<string, string[]> = {
   Marketplace: ['list_marketplaces', 'add_marketplace', 'remove_marketplace', 'list_installed_plugins', 'install_plugin', 'uninstall_plugin'],
   App: ['get_app_config'],
   'File System': ['read_local_path', 'write_local_path'],
+  Terminal: ['execute_terminal_command'],
 };
 
 function getToolCategory(toolName: string): string {
@@ -53,6 +54,7 @@ const CATEGORY_META: Record<string, { icon: typeof Clock; accent: string }> = {
   Marketplace: { icon: ShoppingBag, accent: '#f472b6' },
   App: { icon: Settings, accent: '#94a3b8' },
   'File System': { icon: HardDrive, accent: '#2dd4bf' },
+  Terminal: { icon: Terminal, accent: '#10b981' },
   Other: { icon: Package, accent: '#71717a' },
 };
 
@@ -112,7 +114,7 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
   const projectDropdownRef = useRef<HTMLDivElement>(null);
   const currentProjectPath = aiSelectedProject?.path ?? undefined;
-  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, sendMessage, stopGeneration } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete, projectPath: currentProjectPath });
+  const { messages: chatMessages, isLoading: chatIsLoading, error: chatError, pendingConfirmation, sendMessage, stopGeneration, confirmCommand, rejectCommand } = useAIChat(activeConversationId, { onToolCall, onStreamComplete: handleStreamComplete, projectPath: currentProjectPath });
 
   const handleProjectSwitch = useCallback(async (project: SavedProject | null) => {
     const prevPath = aiSelectedProject?.path ?? null;
@@ -928,6 +930,36 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
           ))}
           <div ref={messagesEndRef} />
         </div>
+
+        {/* Terminal command confirmation */}
+        {pendingConfirmation && (
+          <div className="ai-command-confirm px-4 py-3 border-t border-white/[0.08] bg-amber-900/10">
+            <div className="flex items-center gap-2 mb-2">
+              <Terminal className="w-4 h-4 text-amber-400 shrink-0" />
+              <span className="text-xs font-medium text-amber-300">Command requires approval</span>
+            </div>
+            <div className="rounded-lg bg-black/20 border border-white/[0.08] px-3 py-2 mb-1.5">
+              <code className="text-xs text-white/90 font-mono break-all">{pendingConfirmation.command}</code>
+            </div>
+            <div className="text-[10px] text-white/30 mb-2.5 truncate" title={pendingConfirmation.workingDirectory}>
+              cwd: {pendingConfirmation.workingDirectory}
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={confirmCommand}
+                className="flex-1 rounded-lg py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-500 text-white transition-colors"
+              >
+                Run
+              </button>
+              <button
+                onClick={rejectCommand}
+                className="flex-1 rounded-lg py-1.5 text-xs font-medium border border-white/15 bg-white/8 text-white/70 hover:bg-white/12 transition-colors"
+              >
+                Reject
+              </button>
+            </div>
+          </div>
+        )}
 
         {/* Input area */}
         {chatError && chatError !== dismissedError && (

@@ -1717,3 +1717,32 @@ html[data-theme="light"] .dir-browser-list::-webkit-scrollbar-thumb {
   -ms-overflow-style: none;
   scrollbar-width: none;
 }
+
+/* ======================================================
+   AI Terminal Command Confirmation — Light Mode
+   ====================================================== */
+html[data-theme="light"] .ai-command-confirm {
+  background-color: rgba(245, 158, 11, 0.06) !important;
+  border-color: rgba(0, 0, 0, 0.08) !important;
+}
+html[data-theme="light"] .ai-command-confirm .text-amber-400 {
+  color: #d97706 !important;
+}
+html[data-theme="light"] .ai-command-confirm .text-amber-300 {
+  color: #b45309 !important;
+}
+html[data-theme="light"] .ai-command-confirm .bg-black\/20 {
+  background: rgba(0, 0, 0, 0.05) !important;
+}
+html[data-theme="light"] .ai-command-confirm .text-white\/90 {
+  color: #18181b !important;
+}
+html[data-theme="light"] .ai-command-confirm .text-white\/30 {
+  color: rgba(0, 0, 0, 0.35) !important;
+}
+html[data-theme="light"] .ai-command-confirm .text-white\/70 {
+  color: rgba(0, 0, 0, 0.6) !important;
+}
+html[data-theme="light"] .ai-command-confirm .bg-emerald-600 {
+  color: #ffffff !important;
+}
