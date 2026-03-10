@@ -564,7 +564,7 @@ If the user asks about current events, real-time information, or anything requir
                             const command = typeof toolInput.command === 'string' ? toolInput.command : '';
                             const cwd = resolveCommandCwd(toolInput);
                             const timeoutMs = typeof toolInput.timeout_ms === 'number' ? Math.min(Math.max(1000, toolInput.timeout_ms), 120_000) : 30_000;
-                            if (isWhitelistedCommand(command)) {
+                            if (await isWhitelistedCommand(command)) {
                                 // Auto-execute whitelisted commands
                                 result = await handleExecuteTerminalCommand(command, cwd, timeoutMs);
                             }
@@ -691,6 +691,38 @@ If the user asks about current events, real-time information, or anything requir
         pendingCommandConfirmations.delete(requestId);
         pending.resolve(approved === true);
         res.json({ success: true, approved: approved === true });
+    });
+    // GET /api/ai/terminal-whitelist — Return default + user-defined whitelist
+    app.get('/api/ai/terminal-whitelist', async (_req, res) => {
+        try {
+            const userWhitelist = await getUserTerminalWhitelist();
+            res.json({
+                defaultWhitelist: DEFAULT_TERMINAL_COMMAND_WHITELIST,
+                userWhitelist,
+            });
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
+    });
+    // PUT /api/ai/terminal-whitelist — Save user-defined whitelist
+    app.put('/api/ai/terminal-whitelist', async (req, res) => {
+        try {
+            const { userWhitelist } = req.body;
+            if (!Array.isArray(userWhitelist)) {
+                res.status(400).json({ error: 'userWhitelist must be an array of strings' });
+                return;
+            }
+            const cleaned = userWhitelist
+                .filter((item) => typeof item === 'string')
+                .map(s => s.trim())
+                .filter(s => s.length > 0);
+            await saveUserTerminalWhitelist(cleaned);
+            res.json({ success: true, userWhitelist: cleaned });
+        }
+        catch (err) {
+            res.status(500).json({ error: err.message });
+        }
     });
     // POST /api/ai/chat (deprecated — delegates to default conversation via loadHistory/saveHistory)
     app.post('/api/ai/chat', async (req, res) => {
@@ -2632,9 +2664,9 @@ async function handleWriteLocalPath(input) {
 // ============================================================
 // Terminal command execution
 // ============================================================
-// Whitelist of command prefixes that are safe to auto-execute without user confirmation.
+// Default whitelist of command prefixes that are safe to auto-execute without user confirmation.
 // These are read-only / informational commands that don't modify system state.
-const TERMINAL_COMMAND_WHITELIST = [
+const DEFAULT_TERMINAL_COMMAND_WHITELIST = [
     // File system inspection (read-only)
     'ls', 'dir', 'pwd', 'find', 'which', 'whereis', 'file', 'stat', 'du', 'df',
     'wc', 'head', 'tail', 'cat', 'less', 'more', 'tree',
@@ -2659,18 +2691,48 @@ const TERMINAL_COMMAND_WHITELIST = [
     'curl -I', 'curl --head', 'ping -c', 'dig', 'nslookup', 'host',
 ];
 /**
- * Check if a command matches the auto-execute whitelist.
+ * Read user-defined whitelist from settings.json.
+ * Returns an empty array if not configured.
+ */
+async function getUserTerminalWhitelist() {
+    try {
+        const raw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+        const settings = JSON.parse(raw);
+        const list = settings.terminalCommandWhitelist;
+        if (Array.isArray(list)) {
+            return list.filter((item) => typeof item === 'string' && item.trim().length > 0);
+        }
+    }
+    catch { /* ignore — file missing or malformed */ }
+    return [];
+}
+/**
+ * Save user-defined whitelist to settings.json (merges with existing settings).
+ */
+async function saveUserTerminalWhitelist(whitelist) {
+    let settings = {};
+    try {
+        const raw = await fs.readFile(CLAUDE_SETTINGS_PATH, 'utf-8');
+        settings = JSON.parse(raw);
+    }
+    catch { /* start fresh */ }
+    settings.terminalCommandWhitelist = whitelist;
+    await fs.writeFile(CLAUDE_SETTINGS_PATH, JSON.stringify(settings, null, 2), 'utf-8');
+}
+/**
+ * Check if a command matches the auto-execute whitelist (default + user-defined).
  * The command is trimmed and compared against whitelist prefixes.
  */
-function isWhitelistedCommand(command) {
+async function isWhitelistedCommand(command) {
     const trimmed = command.trim();
-    return TERMINAL_COMMAND_WHITELIST.some(prefix => {
+    const userWhitelist = await getUserTerminalWhitelist();
+    const combined = [...DEFAULT_TERMINAL_COMMAND_WHITELIST, ...userWhitelist];
+    return combined.some(prefix => {
         // Exact match or prefix match followed by space/end
         if (trimmed === prefix)
             return true;
         if (trimmed.startsWith(prefix + ' '))
             return true;
-        // Handle piped commands: only check the first command in the pipeline
         return false;
     });
 }

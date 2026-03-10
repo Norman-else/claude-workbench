@@ -17,6 +17,7 @@ import type {
   AIToolInfo,
   AIConversation,
   SavedProject,
+  TerminalWhitelistResponse,
 } from './types';
 async function parseError(response: Response): Promise<string> {
   try {
@@ -403,5 +404,17 @@ export async function confirmTerminalCommand(conversationId: string, requestId: 
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ requestId, approved }),
+  });
+}
+
+export async function getTerminalWhitelist(): Promise<TerminalWhitelistResponse> {
+  return requestJson<TerminalWhitelistResponse>('/api/ai/terminal-whitelist');
+}
+
+export async function saveTerminalWhitelist(userWhitelist: string[]): Promise<void> {
+  await requestVoid('/api/ai/terminal-whitelist', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userWhitelist }),
   });
 }
