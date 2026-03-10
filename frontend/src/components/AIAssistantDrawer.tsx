@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
-import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe } from 'lucide-react';
+import { Sparkles, X, Send, User, Bot, Trash2, Check, Wrench, Maximize2, Minimize2, Cpu, Plus, MessageSquare, ChevronDown, Paperclip, FolderOpen, Globe, Clock, Layers, Server, Terminal, Zap, ShoppingBag, Settings, HardDrive, Package } from 'lucide-react';
 import type { AIModelOption, AIToolInfo, AIConversation, AIAttachment, SavedProject } from '../types';
 import { getAvailableModels, getAITools, getConversations, createConversation, deleteConversation, generateConversationName, getProjects } from '../api';
 import { useAIChat } from '../hooks/useAIChat';
@@ -43,6 +43,18 @@ function groupToolsByCategory(toolList: AIToolInfo[]): Record<string, AIToolInfo
   if (groups['Other']) sorted['Other'] = groups['Other'];
   return sorted;
 }
+
+const CATEGORY_META: Record<string, { icon: typeof Clock; accent: string }> = {
+  System: { icon: Clock, accent: '#60a5fa' },
+  Environment: { icon: Layers, accent: '#34d399' },
+  'MCP Servers': { icon: Server, accent: '#a78bfa' },
+  Commands: { icon: Terminal, accent: '#fb923c' },
+  Skills: { icon: Zap, accent: '#facc15' },
+  Marketplace: { icon: ShoppingBag, accent: '#f472b6' },
+  App: { icon: Settings, accent: '#94a3b8' },
+  'File System': { icon: HardDrive, accent: '#2dd4bf' },
+  Other: { icon: Package, accent: '#71717a' },
+};
 
 function formatRelativeTime(dateStr: string): string {
   const now = Date.now();
@@ -1026,44 +1038,52 @@ export function AIAssistantDrawer({ isOpen, onClose, onToolCall }: AIAssistantDr
 
           {/* Tool palette popup */}
           {toolPaletteOpen && tools.length > 0 && !slashMenuOpen && (
-            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl border border-white/[0.12] shadow-2xl overflow-hidden animate-fade-in z-50">
-              <div className="px-3 py-2 border-b border-white/[0.08] flex items-center gap-2">
-                <Wrench className="w-3.5 h-3.5 text-blue-400" />
-                <span className="text-xs font-medium text-white/70">Force a tool</span>
+            <div className="ai-tool-palette absolute bottom-full left-4 right-4 mb-2 rounded-xl shadow-2xl overflow-hidden animate-fade-in z-50">
+              <div className="tp-header">
+                <Wrench className="tp-header-icon" />
+                <span className="tp-header-title">Force a tool</span>
+                <span className="tp-badge">{tools.length}</span>
                 <button
                   onClick={() => setToolPaletteOpen(false)}
-                  className="ml-auto text-white/30 hover:text-white/60 transition-colors"
+                  className="tp-close-btn"
                   aria-label="Close tool palette"
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
-              <div className="max-h-[240px] overflow-y-auto overscroll-contain" style={{ scrollbarWidth: 'thin', scrollbarColor: 'rgba(255,255,255,0.15) transparent' }}>
-                {Object.entries(groupToolsByCategory(tools)).map(([category, categoryTools]) => (
-                  <div key={category}>
-                    <div className="px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider text-white/30 bg-white/[0.03] sticky top-0">
-                      {category}
+              <div className="tp-scroll-area">
+                {Object.entries(groupToolsByCategory(tools)).map(([category, categoryTools]) => {
+                  const meta = CATEGORY_META[category] || CATEGORY_META.Other;
+                  const CategoryIcon = meta.icon;
+                  return (
+                    <div key={category} className="tp-category-group">
+                      <div className="tp-category-header" style={{ borderLeftColor: meta.accent }}>
+                        <CategoryIcon className="tp-category-icon" style={{ color: meta.accent }} />
+                        <span className="tp-category-name">{category}</span>
+                        <span className="tp-badge tp-badge-sm">{categoryTools.length}</span>
+                      </div>
+                      {categoryTools.map((tool) => (
+                        <button
+                          key={tool.name}
+                          type="button"
+                          onMouseDown={(e) => e.stopPropagation()}
+                          onClick={() => {
+                            setInput('/' + tool.name + ' ');
+                            setToolPaletteOpen(false);
+                            textareaRef.current?.focus();
+                          }}
+                          className="tp-tool-item"
+                        >
+                          <span className="tp-tool-indicator" style={{ backgroundColor: meta.accent }} />
+                          <span className="tp-tool-name">{tool.name}</span>
+                          {tool.description && (
+                            <span className="tp-tool-desc">{tool.description}</span>
+                          )}
+                        </button>
+                      ))}
                     </div>
-                    {categoryTools.map((tool) => (
-                      <button
-                        key={tool.name}
-                        type="button"
-                        onMouseDown={(e) => e.stopPropagation()}
-                        onClick={() => {
-                          setInput('/' + tool.name + ' ');
-                          setToolPaletteOpen(false);
-                          textareaRef.current?.focus();
-                        }}
-                        className="w-full flex items-start gap-2.5 px-3 py-2 text-left hover:bg-white/[0.06] transition-colors duration-100 group"
-                      >
-                        <span className="font-mono text-xs text-blue-400/80 group-hover:text-blue-300 shrink-0 pt-0.5">{tool.name}</span>
-                        {tool.description && (
-                          <span className="text-[11px] text-white/35 group-hover:text-white/50 leading-tight line-clamp-1">{tool.description}</span>
-                        )}
-                      </button>
-                    ))}
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
