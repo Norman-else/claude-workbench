@@ -19,6 +19,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showNotification: (options: { title: string; body: string }) => 
     ipcRenderer.invoke('show-notification', options),
 
+  // Directory picker
+  selectDirectory: () => ipcRenderer.invoke('select-directory'),
+
   // App version
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 
@@ -41,6 +44,7 @@ export interface ElectronAPI {
   toggleAutoLaunch: () => Promise<boolean>;
   getAutoLaunch: () => Promise<boolean>;
   setAutoLaunch: (enable: boolean) => Promise<boolean>;
+  selectDirectory: () => Promise<string | null>;
   showNotification: (options: { title: string; body: string }) => Promise<boolean>;
   getAppVersion: () => Promise<string>;
   checkForUpdates: () => Promise<void>;

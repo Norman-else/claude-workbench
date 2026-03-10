@@ -16,6 +16,7 @@ export interface ElectronAPI {
   toggleAutoLaunch: () => Promise<boolean>;
   getAutoLaunch: () => Promise<boolean>;
   setAutoLaunch: (enable: boolean) => Promise<boolean>;
+  selectDirectory: () => Promise<string | null>;
   showNotification: (options: { title: string; body: string }) => Promise<boolean>;
   getAppVersion: () => Promise<string>;
   checkForUpdates: () => Promise<void>;

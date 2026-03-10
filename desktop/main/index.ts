@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, Notification } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Notification } from 'electron';
 import { createWindow, showWindow } from './window.js';
 import { createTray, updateTrayMenu } from './tray.js';
 import { isAutoLaunchEnabled, setAutoLaunch, toggleAutoLaunch } from './autoLaunch.js';
@@ -139,6 +139,16 @@ ipcMain.handle('show-notification', (_event, options: { title: string; body: str
 
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+ipcMain.handle('select-directory', async () => {
+  const win = BrowserWindow.getFocusedWindow();
+  const result = await dialog.showOpenDialog(win || BrowserWindow.getAllWindows()[0], {
+    properties: ['openDirectory'],
+    title: 'Select Project Directory',
+  });
+  if (result.canceled || result.filePaths.length === 0) return null;
+  return result.filePaths[0];
 });
 
 // Update tray menu when window visibility changes
