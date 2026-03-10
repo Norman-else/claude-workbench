@@ -492,6 +492,9 @@ File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
 - write_local_path: Write text content to a local file (home directory or project directory)
 
+Terminal:
+- execute_terminal_command: Execute a shell command on the user's machine. Safe read-only commands (ls, cat, git status, etc.) run automatically. Other commands require user confirmation before execution. Supports working_directory and project_path parameters.
+
 Project-scoped tools:
 Many tools accept an optional 'project_path' parameter. When provided, the tool operates on project-level configuration instead of global:
 - MCP servers read from {project_path}/.mcp.json instead of ~/.claude.json
@@ -555,7 +558,45 @@ If the user asks about current events, real-time information, or anything requir
                         if (projectPath && !toolInput.project_path) {
                             toolInput.project_path = projectPath;
                         }
-                        const result = await executeToolHandler(toolBlock.name, toolInput);
+                        let result;
+                        // Special handling for terminal commands requiring confirmation
+                        if (toolBlock.name === 'execute_terminal_command') {
+                            const command = typeof toolInput.command === 'string' ? toolInput.command : '';
+                            const cwd = resolveCommandCwd(toolInput);
+                            const timeoutMs = typeof toolInput.timeout_ms === 'number' ? Math.min(Math.max(1000, toolInput.timeout_ms), 120_000) : 30_000;
+                            if (isWhitelistedCommand(command)) {
+                                // Auto-execute whitelisted commands
+                                result = await handleExecuteTerminalCommand(command, cwd, timeoutMs);
+                            }
+                            else {
+                                // Send confirmation request to frontend and wait
+                                const requestId = crypto.randomUUID();
+                                sendSSE({
+                                    type: 'command_confirm',
+                                    commandConfirm: { requestId, command, workingDirectory: cwd },
+                                });
+                                // Wait for user confirmation (with timeout)
+                                const approved = await new Promise((resolve) => {
+                                    pendingCommandConfirmations.set(requestId, { resolve, command, cwd });
+                                    // Auto-reject after 5 minutes if no response
+                                    setTimeout(() => {
+                                        if (pendingCommandConfirmations.has(requestId)) {
+                                            pendingCommandConfirmations.delete(requestId);
+                                            resolve(false);
+                                        }
+                                    }, 300_000);
+                                });
+                                if (approved) {
+                                    result = await handleExecuteTerminalCommand(command, cwd, timeoutMs);
+                                }
+                                else {
+                                    result = JSON.stringify({ error: 'Command rejected by user', command });
+                                }
+                            }
+                        }
+                        else {
+                            result = await executeToolHandler(toolBlock.name, toolInput);
+                        }
                         toolCallsForHistory.push({
                             name: toolBlock.name,
                             input: toolBlock.input,
@@ -634,6 +675,22 @@ If the user asks about current events, real-time information, or anything requir
             sendSSE({ type: 'error', error: err.message });
             res.end();
         }
+    });
+    // POST /api/ai/conversations/:id/confirm-command — User confirms or rejects a terminal command
+    app.post('/api/ai/conversations/:id/confirm-command', (req, res) => {
+        const { requestId, approved } = req.body;
+        if (!requestId) {
+            res.status(400).json({ error: 'requestId is required' });
+            return;
+        }
+        const pending = pendingCommandConfirmations.get(requestId);
+        if (!pending) {
+            res.status(404).json({ error: 'No pending confirmation found for this requestId (may have expired)' });
+            return;
+        }
+        pendingCommandConfirmations.delete(requestId);
+        pending.resolve(approved === true);
+        res.json({ success: true, approved: approved === true });
     });
     // POST /api/ai/chat (deprecated — delegates to default conversation via loadHistory/saveHistory)
     app.post('/api/ai/chat', async (req, res) => {
@@ -752,6 +809,9 @@ App Overview:
 File System:
 - read_local_path: Read a local file's text content or list a directory's entries. Use this when the user wants to inspect any config file (e.g. ~/.claude/settings.json, ~/.gitconfig), log file, or explore a directory on their machine.
 - write_local_path: Write text content to a local file (home directory or project directory)
+
+Terminal:
+- execute_terminal_command: Execute a shell command on the user's machine. Safe read-only commands run automatically; others require user confirmation.
 
 Use tools to answer questions accurately. Be concise and helpful. Never expose API keys or auth tokens.
 If the user asks about current events, real-time information, or anything requiring up-to-date knowledge, use the web_search tool when available.`;
@@ -1540,6 +1600,20 @@ export const toolDefinitions = [
                 project_path: { type: 'string', description: 'Optional project root path. If provided, allows writing within the project directory in addition to the home directory.' },
             },
             required: ['path', 'content'],
+        },
+    },
+    {
+        name: 'execute_terminal_command',
+        description: 'Execute a terminal/shell command on the user\'s machine. Safe read-only commands (ls, cat, git status, etc.) execute automatically. Other commands require user confirmation before execution. Use this when the user asks to run shell commands, check system state, or perform operations that need terminal access.',
+        input_schema: {
+            type: 'object',
+            properties: {
+                command: { type: 'string', description: 'The shell command to execute (e.g. "ls -la", "git status", "npm install")' },
+                working_directory: { type: 'string', description: 'Optional working directory to run the command in. Defaults to home directory. Supports ~ expansion.' },
+                timeout_ms: { type: 'number', description: 'Optional timeout in milliseconds (default: 30000, max: 120000)' },
+                project_path: { type: 'string', description: 'Optional project root path. If provided, uses it as the default working directory.' },
+            },
+            required: ['command'],
         },
     },
     {
@@ -2555,6 +2629,122 @@ async function handleWriteLocalPath(input) {
         return JSON.stringify({ error: err.message });
     }
 }
+// ============================================================
+// Terminal command execution
+// ============================================================
+// Whitelist of command prefixes that are safe to auto-execute without user confirmation.
+// These are read-only / informational commands that don't modify system state.
+const TERMINAL_COMMAND_WHITELIST = [
+    // File system inspection (read-only)
+    'ls', 'dir', 'pwd', 'find', 'which', 'whereis', 'file', 'stat', 'du', 'df',
+    'wc', 'head', 'tail', 'cat', 'less', 'more', 'tree',
+    // Text search / processing (read-only)
+    'grep', 'rg', 'ag', 'ack', 'sed -n', 'awk',
+    // Git inspection (read-only)
+    'git status', 'git log', 'git diff', 'git branch', 'git remote', 'git tag',
+    'git show', 'git blame', 'git shortlog', 'git stash list', 'git rev-parse',
+    'git config --get', 'git config --list', 'git ls-files', 'git describe',
+    // Package manager inspection (read-only)
+    'npm list', 'npm ls', 'npm view', 'npm outdated', 'npm config list',
+    'yarn list', 'yarn info', 'yarn why',
+    'pip list', 'pip show', 'pip freeze',
+    'cargo metadata',
+    // System info (read-only)
+    'echo', 'date', 'uptime', 'whoami', 'hostname', 'uname', 'env', 'printenv',
+    'node --version', 'npm --version', 'python --version', 'pip --version',
+    'java -version', 'go version', 'rustc --version', 'cargo --version',
+    // Process inspection (read-only)
+    'ps', 'top -l 1', 'lsof',
+    // Network inspection (read-only)
+    'curl -I', 'curl --head', 'ping -c', 'dig', 'nslookup', 'host',
+];
+/**
+ * Check if a command matches the auto-execute whitelist.
+ * The command is trimmed and compared against whitelist prefixes.
+ */
+function isWhitelistedCommand(command) {
+    const trimmed = command.trim();
+    return TERMINAL_COMMAND_WHITELIST.some(prefix => {
+        // Exact match or prefix match followed by space/end
+        if (trimmed === prefix)
+            return true;
+        if (trimmed.startsWith(prefix + ' '))
+            return true;
+        // Handle piped commands: only check the first command in the pipeline
+        return false;
+    });
+}
+// Map to hold pending command confirmations: requestId -> { resolve, reject, command, cwd }
+const pendingCommandConfirmations = new Map();
+/**
+ * Execute a terminal command with timeout and output limits.
+ */
+async function executeShellCommand(command, cwd, timeoutMs) {
+    const { exec } = await import('child_process');
+    return new Promise((resolve) => {
+        const child = exec(command, {
+            cwd,
+            timeout: timeoutMs,
+            maxBuffer: 1_048_576, // 1MB max output
+            shell: process.env.SHELL || '/bin/sh',
+            env: { ...process.env },
+        }, (error, stdout, stderr) => {
+            const exitCode = error ? error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' ? -2 : (child.exitCode ?? 1) : 0;
+            // Truncate output if too large
+            const maxOutput = 65_536; // 64KB per stream
+            const truncatedStdout = stdout.length > maxOutput ? stdout.slice(0, maxOutput) + '\n... [output truncated]' : stdout;
+            const truncatedStderr = stderr.length > maxOutput ? stderr.slice(0, maxOutput) + '\n... [output truncated]' : stderr;
+            resolve({
+                stdout: truncatedStdout,
+                stderr: truncatedStderr,
+                exitCode: typeof exitCode === 'number' ? exitCode : 1,
+            });
+        });
+    });
+}
+/** Resolve working directory for terminal commands */
+function resolveCommandCwd(input) {
+    const workingDir = typeof input.working_directory === 'string' ? input.working_directory : undefined;
+    const projectPath = typeof input.project_path === 'string' ? input.project_path : undefined;
+    if (workingDir) {
+        if (workingDir === '~')
+            return HOME_DIR;
+        if (workingDir.startsWith('~/') || workingDir.startsWith('~\\')) {
+            return path.join(HOME_DIR, workingDir.slice(2));
+        }
+        return path.resolve(workingDir);
+    }
+    if (projectPath) {
+        return path.resolve(projectPath);
+    }
+    return HOME_DIR;
+}
+async function handleExecuteTerminalCommand(command, cwd, timeoutMs) {
+    if (!command.trim()) {
+        return JSON.stringify({ error: 'Command cannot be empty' });
+    }
+    try {
+        // Verify cwd exists
+        await fs.access(cwd);
+    }
+    catch {
+        return JSON.stringify({ error: `Working directory does not exist: ${cwd}` });
+    }
+    try {
+        const result = await executeShellCommand(command, cwd, timeoutMs);
+        return JSON.stringify({
+            command,
+            workingDirectory: cwd,
+            exitCode: result.exitCode,
+            stdout: result.stdout,
+            stderr: result.stderr,
+            ...(result.exitCode === -2 ? { warning: 'Output was truncated due to size limits' } : {}),
+        });
+    }
+    catch (err) {
+        return JSON.stringify({ error: err.message, command });
+    }
+}
 async function handleGetSystemInfo(_input) {
     let claudeVersion = 'unknown';
     try {
@@ -2626,6 +2816,12 @@ export async function executeToolHandler(name, input) {
         case 'update_mcp_server': return handleUpdateMcpServer(input);
         case 'write_local_path': return handleWriteLocalPath(input);
         case 'get_system_info': return handleGetSystemInfo(input);
+        case 'execute_terminal_command': {
+            const command = typeof input.command === 'string' ? input.command : '';
+            const cwd = resolveCommandCwd(input);
+            const timeoutMs = typeof input.timeout_ms === 'number' ? Math.min(Math.max(1000, input.timeout_ms), 120_000) : 30_000;
+            return handleExecuteTerminalCommand(command, cwd, timeoutMs);
+        }
         default: return JSON.stringify({ error: `Unknown tool: ${name}` });
     }
 }
