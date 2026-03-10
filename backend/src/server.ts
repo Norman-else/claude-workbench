@@ -97,6 +97,7 @@ const CACHE_DIR = path.join(PLUGINS_DIR, 'cache');
 const KNOWN_MARKETPLACES_PATH = path.join(PLUGINS_DIR, 'known_marketplaces.json');
 const INSTALLED_PLUGINS_PATH = path.join(PLUGINS_DIR, 'installed_plugins.json');
 const PORT = 3001;
+const WORKBENCH_PROJECTS_PATH = path.join(HOME_DIR, '.claude', 'workbench-projects.json');
 
 // ============================================================
 // Git Helpers
@@ -448,13 +449,39 @@ function validateAgentName(name: string): boolean {
 }
 
 // ============================================================
+// Project-level config helper
+// ============================================================
+
+function resolveConfigPaths(projectPath?: string) {
+  if (!projectPath) {
+    return {
+      commandsDir: CLAUDE_COMMANDS_DIR,
+      skillsDir: CLAUDE_SKILLS_DIR,
+      agentsDir: CLAUDE_AGENTS_DIR,
+      mcpConfigPath: CLAUDE_JSON_PATH,
+    };
+  }
+  // Validate path safety
+  const resolved = path.resolve(projectPath);
+  if (resolved.includes('..')) throw new Error('Invalid project path');
+  return {
+    commandsDir: path.join(resolved, '.claude', 'commands'),
+    skillsDir: path.join(resolved, '.claude', 'skills'),
+    agentsDir: path.join(resolved, '.claude', 'agents'),
+    mcpConfigPath: path.join(resolved, '.mcp.json'),
+  };
+}
+
+// ============================================================
 // Routes: Claude config
 // ============================================================
 
-app.get('/api/claude-config', async (_req: Request, res: Response) => {
+app.get('/api/claude-config', async (req: Request, res: Response) => {
   try {
-    await ensureFileExists(CLAUDE_JSON_PATH, '{}');
-    const content = await fs.readFile(CLAUDE_JSON_PATH, 'utf-8');
+    const projectPath = req.query.projectPath as string | undefined;
+    const { mcpConfigPath } = resolveConfigPaths(projectPath);
+    await ensureFileExists(mcpConfigPath, '{}');
+    const content = await fs.readFile(mcpConfigPath, 'utf-8');
     res.json(JSON.parse(content || '{}') as ClaudeConfig);
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -463,8 +490,11 @@ app.get('/api/claude-config', async (_req: Request, res: Response) => {
 
 app.post('/api/claude-config', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { mcpConfigPath } = resolveConfigPaths(projectPath);
     const config = req.body as ClaudeConfig;
-    await fs.writeFile(CLAUDE_JSON_PATH, JSON.stringify(config, null, 2));
+    await fs.mkdir(path.dirname(mcpConfigPath), { recursive: true });
+    await fs.writeFile(mcpConfigPath, JSON.stringify(config, null, 2));
     res.json({ success: true, message: 'Configuration saved successfully' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -668,17 +698,133 @@ app.post('/api/claude-settings-content', async (req: Request, res: Response) => 
 });
 
 // ============================================================
+// Routes: Projects
+// ============================================================
+
+app.get('/api/projects', async (_req: Request, res: Response) => {
+  try {
+    let projects: Array<{ path: string; name: string; addedAt: string }> = [];
+    try {
+      const raw = await fs.readFile(WORKBENCH_PROJECTS_PATH, 'utf-8');
+      const data = JSON.parse(raw) as { projects: typeof projects };
+      projects = data.projects ?? [];
+    } catch {
+      // File doesn't exist yet
+    }
+    res.json({ projects });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.post('/api/projects', async (req: Request, res: Response) => {
+  try {
+    const { path: projectPath } = req.body as { path: string };
+    if (!projectPath) return res.status(400).json({ error: 'path is required' });
+
+    const resolved = path.resolve(projectPath);
+    if (resolved.includes('..')) return res.status(400).json({ error: 'Invalid project path' });
+
+    try {
+      const stats = await fs.stat(resolved);
+      if (!stats.isDirectory()) return res.status(400).json({ error: 'Path is not a directory' });
+    } catch {
+      return res.status(400).json({ error: `Directory not found: ${resolved}` });
+    }
+
+    let projects: Array<{ path: string; name: string; addedAt: string }> = [];
+    try {
+      const raw = await fs.readFile(WORKBENCH_PROJECTS_PATH, 'utf-8');
+      const data = JSON.parse(raw) as { projects: typeof projects };
+      projects = data.projects ?? [];
+    } catch {
+      // File doesn't exist yet
+    }
+
+    if (projects.some((p) => p.path === resolved)) {
+      return res.status(409).json({ error: 'Project already exists' });
+    }
+
+    const name = path.basename(resolved);
+    const newProject = { path: resolved, name, addedAt: new Date().toISOString() };
+    projects.push(newProject);
+
+    await fs.mkdir(path.dirname(WORKBENCH_PROJECTS_PATH), { recursive: true });
+    await fs.writeFile(WORKBENCH_PROJECTS_PATH, JSON.stringify({ projects }, null, 2), 'utf-8');
+    res.json({ success: true, project: newProject });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.delete('/api/projects/:encodedPath', async (req: Request, res: Response) => {
+  try {
+    const decodedPath = Buffer.from(req.params.encodedPath, 'base64').toString('utf-8');
+    let projects: Array<{ path: string; name: string; addedAt: string }> = [];
+    try {
+      const raw = await fs.readFile(WORKBENCH_PROJECTS_PATH, 'utf-8');
+      const data = JSON.parse(raw) as { projects: typeof projects };
+      projects = data.projects ?? [];
+    } catch {
+      return res.status(404).json({ error: 'No projects found' });
+    }
+
+    const idx = projects.findIndex((p) => p.path === decodedPath);
+    if (idx === -1) return res.status(404).json({ error: 'Project not found' });
+
+    projects.splice(idx, 1);
+    await fs.writeFile(WORKBENCH_PROJECTS_PATH, JSON.stringify({ projects }, null, 2), 'utf-8');
+    res.json({ success: true, message: 'Project removed' });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+app.get('/api/projects/validate', async (req: Request, res: Response) => {
+  try {
+    const projectPath = req.query.path as string;
+    if (!projectPath) return res.status(400).json({ error: 'path query parameter is required' });
+
+    const resolved = path.resolve(projectPath);
+    let exists = false;
+    let hasClaudeDir = false;
+
+    try {
+      const stats = await fs.stat(resolved);
+      exists = stats.isDirectory();
+    } catch {
+      // Directory doesn't exist
+    }
+
+    if (exists) {
+      try {
+        await fs.access(path.join(resolved, '.claude'));
+        hasClaudeDir = true;
+      } catch {
+        // No .claude directory
+      }
+    }
+
+    res.json({ exists, hasClaudeDir, resolvedPath: resolved });
+  } catch (err) {
+    res.status(500).json({ error: (err as Error).message });
+  }
+});
+
+// ============================================================
 // Routes: Commands
 // ============================================================
 
-app.get('/api/commands', async (_req: Request, res: Response) => {
+app.get('/api/commands', async (req: Request, res: Response) => {
   try {
-    await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
-    const files = await fs.readdir(CLAUDE_COMMANDS_DIR);
+    const projectPath = req.query.projectPath as string | undefined;
+    const { commandsDir } = resolveConfigPaths(projectPath);
+    await fs.mkdir(commandsDir, { recursive: true });
+    const files = await fs.readdir(commandsDir);
     const commands = await Promise.all(
       files.map(async (file) => ({
         name: file,
-        content: await fs.readFile(path.join(CLAUDE_COMMANDS_DIR, file), 'utf-8'),
+        content: await fs.readFile(path.join(commandsDir, file), 'utf-8'),
       }))
     );
     res.json(commands);
@@ -689,9 +835,11 @@ app.get('/api/commands', async (_req: Request, res: Response) => {
 
 app.post('/api/commands', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { commandsDir } = resolveConfigPaths(projectPath);
     const { name, content } = req.body as { name: string; content: string };
-    await fs.mkdir(CLAUDE_COMMANDS_DIR, { recursive: true });
-    await fs.writeFile(path.join(CLAUDE_COMMANDS_DIR, name), content);
+    await fs.mkdir(commandsDir, { recursive: true });
+    await fs.writeFile(path.join(commandsDir, name), content);
     res.json({ success: true, message: 'Command saved successfully' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -700,8 +848,10 @@ app.post('/api/commands', async (req: Request, res: Response) => {
 
 app.delete('/api/commands/:name', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { commandsDir } = resolveConfigPaths(projectPath);
     const { name } = req.params;
-    await fs.unlink(path.join(CLAUDE_COMMANDS_DIR, name));
+    await fs.unlink(path.join(commandsDir, name));
     res.json({ success: true, message: 'Command deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -712,17 +862,19 @@ app.delete('/api/commands/:name', async (req: Request, res: Response) => {
 // Routes: Skills
 // ============================================================
 
-app.get('/api/skills', async (_req: Request, res: Response) => {
+app.get('/api/skills', async (req: Request, res: Response) => {
   try {
-    await fs.mkdir(CLAUDE_SKILLS_DIR, { recursive: true });
-    const dirs = await fs.readdir(CLAUDE_SKILLS_DIR, { withFileTypes: true });
+    const projectPath = req.query.projectPath as string | undefined;
+    const { skillsDir } = resolveConfigPaths(projectPath);
+    await fs.mkdir(skillsDir, { recursive: true });
+    const dirs = await fs.readdir(skillsDir, { withFileTypes: true });
     const skills = (
       await Promise.all(
         dirs
           .filter((d) => d.isDirectory())
           .map(async (dir) => {
             try {
-              const skillFile = path.join(CLAUDE_SKILLS_DIR, dir.name, 'SKILL.md');
+              const skillFile = path.join(skillsDir, dir.name, 'SKILL.md');
               const content = await fs.readFile(skillFile, 'utf-8');
               const { frontmatter } = parseFrontmatter(content);
               return {
@@ -745,6 +897,8 @@ app.get('/api/skills', async (_req: Request, res: Response) => {
 
 app.post('/api/skills', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { skillsDir } = resolveConfigPaths(projectPath);
     const { name, content } = req.body as { name: string; content: string };
     if (!name || !content)
       return res.status(400).json({ error: 'Name and content are required' });
@@ -753,7 +907,7 @@ app.post('/api/skills', async (req: Request, res: Response) => {
         error: 'Invalid skill name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
       });
 
-    const skillPath = path.join(CLAUDE_SKILLS_DIR, name);
+    const skillPath = path.join(skillsDir, name);
     await fs.mkdir(skillPath, { recursive: true });
     await fs.writeFile(path.join(skillPath, 'SKILL.md'), content, 'utf-8');
     res.json({ success: true, message: 'Skill saved successfully' });
@@ -764,8 +918,10 @@ app.post('/api/skills', async (req: Request, res: Response) => {
 
 app.delete('/api/skills/:name', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { skillsDir } = resolveConfigPaths(projectPath);
     const { name } = req.params;
-    await fs.rm(path.join(CLAUDE_SKILLS_DIR, name), {
+    await fs.rm(path.join(skillsDir, name), {
       recursive: true,
       force: true,
     });
@@ -779,17 +935,19 @@ app.delete('/api/skills/:name', async (req: Request, res: Response) => {
 // Routes: Agents
 // ============================================================
 
-app.get('/api/agents', async (_req: Request, res: Response) => {
+app.get('/api/agents', async (req: Request, res: Response) => {
   try {
-    await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
-    const files = await fs.readdir(CLAUDE_AGENTS_DIR);
+    const projectPath = req.query.projectPath as string | undefined;
+    const { agentsDir } = resolveConfigPaths(projectPath);
+    await fs.mkdir(agentsDir, { recursive: true });
+    const files = await fs.readdir(agentsDir);
     const agents = (
       await Promise.all(
         files
           .filter((f) => f.endsWith('.md'))
           .map(async (file) => {
             try {
-              const content = await fs.readFile(path.join(CLAUDE_AGENTS_DIR, file), 'utf-8');
+              const content = await fs.readFile(path.join(agentsDir, file), 'utf-8');
               const { frontmatter } = parseFrontmatter(content);
               return {
                 name: file.replace(/\.md$/, ''),
@@ -811,6 +969,8 @@ app.get('/api/agents', async (_req: Request, res: Response) => {
 
 app.post('/api/agents', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { agentsDir } = resolveConfigPaths(projectPath);
     const { name, content } = req.body as { name: string; content: string };
     if (!name || !content)
       return res.status(400).json({ error: 'Name and content are required' });
@@ -819,8 +979,8 @@ app.post('/api/agents', async (req: Request, res: Response) => {
         error: 'Invalid agent name. Must use lowercase letters, numbers, and hyphens only (max 64 characters)',
       });
 
-    await fs.mkdir(CLAUDE_AGENTS_DIR, { recursive: true });
-    await fs.writeFile(path.join(CLAUDE_AGENTS_DIR, `${name}.md`), content, 'utf-8');
+    await fs.mkdir(agentsDir, { recursive: true });
+    await fs.writeFile(path.join(agentsDir, `${name}.md`), content, 'utf-8');
     res.json({ success: true, message: 'Agent saved successfully' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
@@ -829,8 +989,10 @@ app.post('/api/agents', async (req: Request, res: Response) => {
 
 app.delete('/api/agents/:name', async (req: Request, res: Response) => {
   try {
+    const projectPath = req.query.projectPath as string | undefined;
+    const { agentsDir } = resolveConfigPaths(projectPath);
     const { name } = req.params;
-    await fs.unlink(path.join(CLAUDE_AGENTS_DIR, `${name}.md`));
+    await fs.unlink(path.join(agentsDir, `${name}.md`));
     res.json({ success: true, message: 'Agent deleted successfully' });
   } catch (err) {
     res.status(500).json({ error: (err as Error).message });
